@@ -733,10 +733,10 @@ export default async function DashboardPage({
           </div>
           <div>
             <h3 className="font-black text-[var(--kravy-text-primary)] text-lg">Tables & Area</h3>
-            <p className="text-[11px] text-[var(--kravy-text-muted)] font-bold uppercase mt-1">Manage your dining floor layout</p>
+            <p className="text-[11px] text-[var(--kravy-text-muted)] font-bold uppercase mt-1">Manage your dining table layout</p>
           </div>
           <div className="mt-2 flex items-center text-rose-600 dark:text-rose-400 font-black text-xs gap-2">
-            Manage Floor <ArrowRight size={14} />
+            Manage Tables <ArrowRight size={14} />
           </div>
         </a>
       </div>

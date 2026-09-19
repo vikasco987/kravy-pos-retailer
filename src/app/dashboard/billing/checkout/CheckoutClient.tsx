@@ -716,7 +716,7 @@ export default function CheckoutClient() {
   /* ================= TABLES STATE ================= */
   const { tablesList: tables } = useTerminalContext();
   const [selectedTable, setSelectedTable] = useState<string>("POS");
-  const [orderType, setOrderType] = useState<"DINING" | "TAKEAWAY" | "DELIVERY">("DINING");
+  const [orderType, setOrderType] = useState<"DINING" | "TAKEAWAY" | "DELIVERY">("TAKEAWAY");
   const [showTableSelect, setShowTableSelect] = useState(false);
   const [manualDeliveryCharge, setManualDeliveryCharge] = useState<number>(0);
   const [deliveryChargeType, setDeliveryChargeType] = useState<'FLAT' | 'PERCENT'>('FLAT');
@@ -754,7 +754,7 @@ export default function CheckoutClient() {
     setManualPackagingCharge(0);
     setPackagingChargeType('FLAT');
     setSelectedTable("POS");
-    setOrderType("DINING");
+    setOrderType("TAKEAWAY");
     
     // Generate new bill number for next session
     const now = new Date();
@@ -1007,7 +1007,7 @@ export default function CheckoutClient() {
         setSelectedTable(table);
         if (table === "TAKEAWAY") setOrderType("TAKEAWAY");
         else if (table === "DELIVERY") setOrderType("DELIVERY");
-        else setOrderType("DINING");
+        else setOrderType("TAKEAWAY");
         setOrderNotes(bill.notes || bill.auditNote || "");
         setServiceCharge(bill.serviceCharge || 0);
         setManualDeliveryCharge(bill.deliveryCharges || 0);
@@ -1027,7 +1027,7 @@ export default function CheckoutClient() {
 
     if (tableName) {
       setSelectedTable(tableName);
-      setOrderType("DINING");
+      setOrderType("TAKEAWAY");
     }
 
     if (orderId) {
@@ -1324,19 +1324,23 @@ export default function CheckoutClient() {
   }
 
   const handleBarcodeScan = (code: string) => {
-      const item = menuItems.find(m => 
-          (m.inventoryCode && m.inventoryCode.toUpperCase() === code.toUpperCase()) || 
-          m.id.toUpperCase().endsWith(code.toUpperCase()) || 
-          (m as any).barcode?.toUpperCase() === code.toUpperCase()
-      );
+      console.log("[Barcode Scanner] Scanned raw code:", code, "Length:", code.length);
+      
+      const item = menuItems.find(m => {
+          const invMatch = m.inventoryCode && m.inventoryCode.toUpperCase() === code.toUpperCase();
+          const idMatch = m.id && m.id.toUpperCase().endsWith(code.toUpperCase());
+          const barcodeMatch = (m as any).barcode && (m as any).barcode.toUpperCase() === code.toUpperCase();
+          return invMatch || idMatch || barcodeMatch;
+      });
 
       if (!item) {
-          toast.error(`Item not found for barcode: ${code}`);
+          console.error("[Barcode Scanner] Item not found. Scanned:", code, "Available items snippet:", menuItems.slice(0, 3).map(m => ({ id: m.id, inv: m.inventoryCode, barcode: (m as any).barcode })));
+          toast.error(`Item not found for barcode: "${code}"`);
           kravy.error();
           return;
         }
 
-      addItem(item);
+      addToCart(item);
       toast.success(`Added ${item.name} via barcode scanner`);
   };
 
@@ -2825,6 +2829,7 @@ export default function CheckoutClient() {
                   userPermissions.includes("EDIT_POS");
 
   return (
+
     <div className="flex-1 h-full bg-slate-50 dark:bg-[var(--kravy-bg)] flex flex-col overflow-hidden">
 
       {/* ════════════════════════════════════════════
@@ -2981,9 +2986,12 @@ export default function CheckoutClient() {
                           return;
                         }
                         
-                        // 2. Check exact match by name, barcode, or filtered result
+                        // 2. Check exact match by name, barcode, inventoryCode, id suffix, or filtered result
                         const matchedItem = menuItems.find(
-                          (i) => i.name.toLowerCase() === query || (i as any).barcode?.toLowerCase() === query
+                          (i) => i.name.toLowerCase() === query || 
+                                 (i as any).barcode?.toLowerCase() === query ||
+                                 (i.inventoryCode && i.inventoryCode.toLowerCase() === query) ||
+                                 i.id.toLowerCase().endsWith(query)
                         ) || (filteredMenuItems.length > 0 ? filteredMenuItems[0] : null);
                         
                         if (matchedItem) {
@@ -3416,57 +3424,7 @@ export default function CheckoutClient() {
             </div>
           </div>
 
-          {/* Order Type Selection - COMPACT */}
-          <div className="px-4 md:px-5 py-2 border-b border-[var(--kravy-border)] bg-[var(--kravy-bg)]/20">
-            <div className="flex items-center gap-1 p-0.5 bg-[var(--kravy-bg)] rounded-xl border border-[var(--kravy-border)] shadow-inner">
-              {[
-                { id: 'DINING', label: 'Dining', icon: <Utensils size={13} />, activeClass: 'bg-indigo-600 shadow-indigo-500/20' },
-                { id: 'TAKEAWAY', label: 'Takeaway', icon: <ShoppingBag size={13} />, activeClass: 'bg-amber-600 shadow-amber-500/20' },
-                { id: 'DELIVERY', label: 'Delivery', icon: <Truck size={13} />, activeClass: 'bg-rose-600 shadow-rose-500/20' }
-              ].map((type) => (
-                <button
-                  key={type.id}
-                  onClick={async () => {
-                    kravy.click();
-                    setOrderType(type.id as any);
-                    if (type.id !== 'DINING') {
-                      setSelectedTable(type.id);
-                    } else if (selectedTable === 'TAKEAWAY' || selectedTable === 'DELIVERY') {
-                      setSelectedTable('POS');
-                    }
-                  }}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all
-                    ${orderType === type.id 
-                      ? `${type.activeClass} text-white shadow-md scale-[1.01]` 
-                      : `text-[var(--kravy-text-muted)] hover:bg-slate-50`}`}
-                >
-                  {type.icon}
-                  {type.label}
-                </button>
-              ))}
-            </div>
-            
-            {orderType === 'DINING' && (
-              <div className="mt-2 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-200">
-                <div className="flex items-center gap-1.5">
-                  <LayoutGrid size={11} className="text-[var(--kravy-brand)]" />
-                  <span className="text-[9px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)]">Table</span>
-                </div>
-                <select
-                  value={selectedTable === 'TAKEAWAY' || selectedTable === 'DELIVERY' ? 'POS' : selectedTable}
-                  onChange={(e) => { kravy.click(); setSelectedTable(e.target.value); }}
-                  className="bg-white border border-[var(--kravy-brand)]/20 text-[var(--kravy-brand)]
-                    px-2.5 py-1 rounded-md text-[9px] font-black outline-none focus:ring-2 focus:ring-[var(--kravy-brand)]/20
-                    transition-all cursor-pointer shadow-sm min-w-[100px]"
-                >
-                  <option value="POS">Counter</option>
-                  {tables.map((t) => (
-                    <option key={t.id} value={t.name}>{t.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
+
 
           {/* Scrollable Middle Content (Customer + Items) */}
           <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col">
@@ -3926,8 +3884,7 @@ export default function CheckoutClient() {
             )}
 
             {/* 💳 PAYMENT METHODS AND ACTIONS */}
-            {!(selectedTable !== "POS" && selectedTable !== "TAKEAWAY" && selectedTable !== "DELIVERY" && searchParams.get("returnTo")) ? (
-              <>
+
               <div 
                 className="grid gap-[6px] mb-[6px] w-full"
                 style={{ gridTemplateColumns: "repeat(auto-fit, minmax(72px, 1fr))" }}
@@ -4225,17 +4182,6 @@ export default function CheckoutClient() {
                       </button>
                     )}
 
-                    {(business.posKotEnabled !== false) && (
-                      <button
-                        onClick={handlePrintKOT}
-                        disabled={items.length === 0 || isSaving}
-                        className="flex h-[56px] min-w-0 flex-col items-center justify-center gap-[4px] rounded-[12px] p-1 border border-orange-300 text-orange-800 bg-orange-50 hover:bg-orange-100 transition-all font-black active:scale-95"
-                      >
-                        <span className="text-[17px] leading-[18px]">🧾</span>
-                        <span className="text-[9px] font-[800] leading-[11px] uppercase tracking-wider">KOT</span>
-                      </button>
-                    )}
-
                     <button
                       type="button"
                       onClick={async () => {
@@ -4392,24 +4338,9 @@ export default function CheckoutClient() {
                   shadow-lg shadow-emerald-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSaving ? <RefreshCw size={14} className="animate-spin" /> : <Printer size={14} strokeWidth={3} />} 
-                {business?.enableKOTWithBill ? "KOT & Print Bill" : "Print Bill / Receipt"}
+                Print Bill / Receipt
               </motion.button>
-              </>
-            ) : (
-              <motion.button
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={handlePrintKOT}
-                disabled={items.length === 0 || isSaving}
-                className="w-full mt-4 flex items-center justify-center gap-2 py-4 rounded-xl
-                  bg-gradient-to-r from-orange-500 via-orange-400 to-orange-500 bg-[length:200%_auto] hover:bg-right transition-all duration-500
-                  text-white font-black text-sm uppercase tracking-widest
-                  shadow-lg shadow-orange-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSaving ? <RefreshCw size={18} className="animate-spin" /> : <Printer size={18} strokeWidth={3} />} 
-                SAVE & PRINT KOT
-              </motion.button>
-            )}
+
           </div>
         </div>
       </div>
@@ -4829,7 +4760,7 @@ export default function CheckoutClient() {
                 </div>
                 <div>
                   <h3 className="text-sm font-black text-[var(--kravy-text-primary)]">Order Remarks</h3>
-                  <p className="text-[9px] font-bold text-[var(--kravy-text-muted)] uppercase tracking-wider">Kitchen Instructions</p>
+                  <p className="text-[9px] font-bold text-[var(--kravy-text-muted)] uppercase tracking-wider">Internal Store Notes</p>
                 </div>
               </div>
               <button onClick={async () => setShowNotesModal(false)} className="text-[var(--kravy-text-muted)] hover:text-rose-500 transition-colors">
@@ -4839,7 +4770,7 @@ export default function CheckoutClient() {
             <div className="p-5 space-y-4">
               <textarea
                 autoFocus
-                placeholder="E.g. Extra spicy, No onions, Fast delivery, Handle with care..."
+                placeholder="E.g. Gift wrapped, Handle with care, VIP customer..."
                 value={orderNotes}
                 onChange={(e) => setOrderNotes(e.target.value)}
                 className="w-full min-h-[120px] bg-[var(--kravy-bg-2)] border border-[var(--kravy-border)] rounded-2xl p-4

@@ -56,7 +56,6 @@ const PERMISSION_GROUPS = [
     paths: [
       { path: "/dashboard", label: "Store Dashboard" },
       { path: "/dashboard/billing/checkout", label: "Quick POS Billing" },
-      { path: "/dashboard/terminal", label: "Floor Management" },
       { path: "/dashboard/kitchen", label: "Kitchen Terminal" },
       { path: "/dashboard/tables", label: "Table Settings" },
       { path: "/dashboard/qr-orders", label: "QR Order Terminal" },

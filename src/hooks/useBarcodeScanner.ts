@@ -11,7 +11,7 @@ export function useBarcodeScanner({
   onScan,
   minLength = 4,
   maxLength = 20,
-  timeoutMs = 50, // Scanners usually type a character every 2-15ms
+  timeoutMs = 200, // Increased timeout to support slower scanners (50ms was too fast for some)
 }: UseBarcodeScannerProps) {
   const bufferRef = useRef<string>('');
   const lastKeyTimeRef = useRef<number>(0);

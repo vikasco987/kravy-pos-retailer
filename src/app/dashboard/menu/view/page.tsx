@@ -2402,7 +2402,7 @@ export default function ViewMenuPage() {
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h2 className="text-3xl font-black text-[var(--kravy-text-primary)] tracking-tight">
-                  Restaurant Menu
+                  Product Catalog
                 </h2>
                 <p className="text-[var(--kravy-text-muted)] text-sm font-medium mt-1">
                   Manage your products, prices and categories
@@ -2893,7 +2893,7 @@ export default function ViewMenuPage() {
             <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-rose-600">
                <Trash2 size={32} />
             </div>
-            <h3 className="text-2xl font-black text-[var(--kravy-text-primary)] mb-3 tracking-tight">Delete Entire Menu?</h3>
+            <h3 className="text-2xl font-black text-[var(--kravy-text-primary)] mb-3 tracking-tight">Delete Entire Catalog?</h3>
             <p className="text-[var(--kravy-text-muted)] font-medium mb-6 leading-relaxed">
               This will <span className="text-rose-600 font-black underline">permanently delete items</span>. This action cannot be undone.
             </p>
@@ -3271,7 +3271,7 @@ export default function ViewMenuPage() {
             {/* Modal Header */}
             <div className="p-6 border-b border-[var(--kravy-border)]/50 flex justify-between items-center">
               <div>
-                <h3 className="text-xl font-black text-[var(--kravy-text-primary)]">Upload New Menu (Kravy AI)</h3>
+                <h3 className="text-xl font-black text-[var(--kravy-text-primary)]">Upload New Catalog (Kravy AI)</h3>
                 <p className="text-xs text-[var(--kravy-text-muted)] font-medium mt-1">Upload a PDF, Doc, Excel, or Menu Image to automatically extract and merge new items into the existing menu.</p>
               </div>
               <button 

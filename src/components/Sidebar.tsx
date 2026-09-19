@@ -135,10 +135,9 @@ const navGroups = [
     items: [
       { icon: <Home size={18} />, label: "Store Dashboard", href: "/dashboard" },
       { icon: <ShoppingCart size={18} />, label: "Quick POS Billing", href: "/dashboard/billing/checkout" },
-      { icon: <LayoutDashboard size={18} />, label: "Floor Management", href: "/dashboard/terminal" },
-      { icon: <Activity size={18} />, label: "Kitchen Workflow", href: "/dashboard/kitchen" },
-      { icon: <LayoutGrid size={18} />, label: "Table Status", href: "/dashboard/tables" },
-      { icon: <Building size={18} />, label: "Hotel Room Stay", href: "/dashboard/rooms", badge: "Hotel", badgeColor: "#8B5CF6" },
+
+
+
       { icon: <Fuel size={18} />, label: "Fuel Billing", href: "/dashboard/fuel", badge: "Fuel", badgeColor: "#FF6B35" },
       { icon: <Receipt size={18} />, label: "Past Bills / History", href: "/dashboard/billing" },
       { icon: <Zap size={18} />, label: "Go to Billing Panel", href: "https://billing.kravy.in", external: true },
@@ -148,11 +147,11 @@ const navGroups = [
     group: "STORE CATALOG",
     items: [
       { icon: <UtensilsCrossed size={18} />, label: "Browse Products", href: "/dashboard/menu/view" },
-      { icon: <Printer size={18} />, label: "PDF Menu Studio", href: "/dashboard/menu/pdf", badge: "PDF", badgeColor: "#EC4899" },
-      { icon: <Sparkles size={18} />, label: "Quotation AI", href: "/dashboard/quotation", badge: "AI", badgeColor: "#F59E0B" },
-      { icon: <Sparkles size={18} />, label: "Interactive Editor", href: "/dashboard/menu-editor", badge: "New", badgeColor: "#8B5CF6" },
+      { icon: <Printer size={18} />, label: "PDF Catalog Studio", href: "/dashboard/menu/pdf", badge: "PDF", badgeColor: "#EC4899" },
+
+      { icon: <Sparkles size={18} />, label: "Catalog Editor", href: "/dashboard/menu-editor", badge: "New", badgeColor: "#8B5CF6" },
       { icon: <Layers size={18} />, label: "Add-on clusters", href: "/dashboard/menu/addons", badge: "Setup", badgeColor: "#10B981" },
-      { icon: <Zap size={18} />, label: "AI Menu Scraper", href: "/dashboard/ai-scraper", badge: "AI", badgeColor: "#F59E0B", roles: ["ADMIN", "SELLER", "STAFF"] },
+      { icon: <Zap size={18} />, label: "AI Product Scraper", href: "/dashboard/ai-scraper", badge: "AI", badgeColor: "#F59E0B", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <Sparkles size={18} />, label: "Auto Apply Images", href: "/dashboard/auto-apply", badge: "AI OCR", badgeColor: "#8B5CF6", roles: ["ADMIN"] },
       { icon: <PlusCircle size={18} />, label: "Add Single Item", href: "/dashboard/menu/upload" },
       { icon: <Upload size={18} />, label: "Excel Bulk Import", href: "/dashboard/store-item-upload", badge: "Import", badgeColor: "#FF6B35", roles: ["ADMIN", "SELLER", "STAFF"] },
@@ -257,7 +256,7 @@ const hiddenNavGroups = [
       { icon: <Smartphone size={18} />, label: "UPI Reports", href: "/dashboard/reports/payments/upi", roles: ["ADMIN", "SELLER"] },
       
       { icon: <HelpCircle size={18} />, label: "Documentation - GST Billing", href: "/dashboard/docs/gst-billing", roles: ["ADMIN", "SELLER", "STAFF"] },
-      { icon: <HelpCircle size={18} />, label: "Documentation - Menu Management", href: "/dashboard/docs/menu-management", roles: ["ADMIN", "SELLER", "STAFF"] },
+      { icon: <HelpCircle size={18} />, label: "Documentation - Catalog Management", href: "/dashboard/docs/menu-management", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <HelpCircle size={18} />, label: "Documentation - Staff Access", href: "/dashboard/docs/staff-access", roles: ["ADMIN"] },
       { icon: <HelpCircle size={18} />, label: "Documentation - Workflow", href: "/dashboard/docs/workflow", roles: ["ADMIN", "SELLER", "STAFF"] },
             { icon: <HelpCircle size={18} />, label: "Documentation - Auto Backup", href: "/dashboard/docs/auto-backup", roles: ["ADMIN"] },
@@ -537,7 +536,7 @@ export default function Sidebar({ profile }: { profile?: any }) {
   const [aiScraperEnabled, setAiScraperEnabled] = useState(false);
   const [excelImportEnabled, setExcelImportEnabled] = useState(false);
   const [fuelBillingEnabled, setFuelBillingEnabled] = useState(false);
-  const [hotelManagementEnabled, setHotelManagementEnabled] = useState(false);
+
   const { tablesList } = useTerminalContext();
   const activeTablesCount = tablesList ? tablesList.filter(t => t.activeCount > 0).length : null;
   const [searchQuery, setSearchQuery] = useState("");
@@ -560,7 +559,7 @@ export default function Sidebar({ profile }: { profile?: any }) {
           if (data.aiScraperEnabled) setAiScraperEnabled(true);
           if (data.excelImportEnabled) setExcelImportEnabled(true);
           setFuelBillingEnabled(!!data.enableFuelBilling);
-          setHotelManagementEnabled(!!data.enableHotelManagement);
+
 
         }
       })
@@ -884,7 +883,7 @@ export default function Sidebar({ profile }: { profile?: any }) {
             <Search size={14} style={{ position: "absolute", left: "12px", color: "var(--kravy-text-muted)" }} />
             <input
               type="text"
-              placeholder="Search menus..."
+              placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -935,10 +934,10 @@ export default function Sidebar({ profile }: { profile?: any }) {
 
             // 1. Application-wide Feature Flags (Controlled by profile settings)
             if (item.label === "GST Reports" && !taxEnabled) return false;
-            if (item.label === "AI Menu Scraper" && !aiScraperEnabled) return false;
+            if (item.label === "AI Product Scraper" && !aiScraperEnabled) return false;
             if (item.label === "Excel Bulk Import" && !excelImportEnabled) return false;
             if (item.label === "Fuel Billing" && !fuelBillingEnabled) return false;
-            if (item.label === "Hotel Room Stay" && !hotelManagementEnabled) return false;
+
 
             // 2. Global Admin Bypass - Show everything else to administrators
             if (userRole === "ADMIN") return true;

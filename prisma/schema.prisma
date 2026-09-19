@@ -69,7 +69,9 @@ model Item {
   id           String  @id @default(auto()) @map("_id") @db.ObjectId
   name         String
   description  String?
-  price        Float?
+  price        Float? // We'll keep this but maybe unused or mapped to something else, though the plan adds MRP
+  purchasingPrice Float?
+  mrp          Float?
   sellingPrice Float?
   gst          Float?
   unit         String?
@@ -463,7 +465,7 @@ model BusinessProfile {
   taxInclusive         Boolean @default(false)
   servedStatusLabel    String  @default("SERVED")
   enableFuelBilling    Boolean @default(false)
-  enableHotelManagement Boolean @default(false)
+
 
   // ✅ Customer Data Requirement Settings
   collectCustomerName    Boolean @default(true)

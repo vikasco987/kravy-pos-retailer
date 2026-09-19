@@ -207,7 +207,7 @@ export default function BarcodePrintModal({ isOpen, onClose, items }: BarcodePri
             <div className={`grid ${config.gridClass}`}>
               {printableItems.map((item, index) => {
                 // Generate a fallback code using the item's ID or name hash if no barcode exists
-                const fallbackCode = item.name.substring(0, 4).toUpperCase() + '-' + index;
+                const fallbackCode = item.id ? item.id.substring(item.id.length - 6).toUpperCase() : item.name.substring(0, 4).toUpperCase() + '-' + index;
                 const codeToPrint = item.inventoryCode || item.barcode || fallbackCode;
                 
                 return (

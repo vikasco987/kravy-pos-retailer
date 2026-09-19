@@ -189,8 +189,8 @@ export default function MenuEditPage() {
         <div className="max-w-6xl mx-auto space-y-8 p-6 transition-colors duration-300">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-extrabold text-[var(--kravy-text-primary)] tracking-tight">Menu Manager</h1>
-                    <p className="text-[var(--kravy-text-muted)] mt-1 font-medium">Add, edit, and organize your digital menu items.</p>
+                    <h1 className="text-3xl font-extrabold text-[var(--kravy-text-primary)] tracking-tight">Catalog Manager</h1>
+                    <p className="text-[var(--kravy-text-muted)] mt-1 font-medium">Add, edit, and organize your digital catalog items.</p>
                 </div>
                 <Button
                     onClick={openAddModal}

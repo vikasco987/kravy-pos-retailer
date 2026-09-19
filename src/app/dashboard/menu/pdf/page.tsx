@@ -202,7 +202,7 @@ export default function MenuPdfGeneratorPage() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${profile?.businessName || 'Restaurant'} - Digital Web Menu</title>
+  <title>${profile?.businessName || 'Store'} - Digital Web Catalog</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { background-color: #f4f4f5; font-family: system-ui, -apple-system, sans-serif; }
@@ -259,7 +259,7 @@ export default function MenuPdfGeneratorPage() {
             </button>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-black tracking-tight text-white">Web Menu PDF & HTML Studio</h1>
+                <h1 className="text-lg font-black tracking-tight text-white">Web Catalog PDF & HTML Studio</h1>
                 <span className="px-2 py-0.5 rounded-full text-[0.6rem] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   Exact Web Replica 📱
                 </span>

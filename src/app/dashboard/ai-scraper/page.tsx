@@ -102,10 +102,10 @@ export default function AIScraperPage() {
         <div>
           <h1 className="text-4xl font-black tracking-tight text-gray-900 flex items-center gap-3">
             <Zap className="text-orange-500 fill-orange-500" size={32} />
-            AI Menu Scraper
+            AI Product Scraper
           </h1>
           <p className="text-gray-500 mt-2 font-medium">
-            Automatically find and sync high-quality food images for your menu items.
+            Automatically find and sync high-quality product images for your catalog items.
           </p>
         </div>
         <div className="flex gap-3">
@@ -221,7 +221,7 @@ export default function AIScraperPage() {
                   <Search size={32} className="text-gray-200" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-gray-800">No menu items found</h3>
+                  <h3 className="text-xl font-black text-gray-800">No catalog items found</h3>
                   <p className="text-sm text-gray-400 max-w-xs mx-auto mt-2">Make sure you have items in your menu that need images.</p>
                 </div>
               </div>

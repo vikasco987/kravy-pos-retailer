@@ -11,6 +11,8 @@ export default function ItemModal({ item, addonGroups = [], onSave, onClose, cat
     const defaultItem = {
         name: "",
         price: null,
+        purchasingPrice: null,
+        mrp: null,
         sellingPrice: null,
         description: "",
         isVeg: true,
@@ -390,15 +392,15 @@ export default function ItemModal({ item, addonGroups = [], onSave, onClose, cat
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest ml-1 mb-2">Price (₹)</label>
+                    <label className="block text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest ml-1 mb-2">Purchasing Price (₹)</label>
                     <input
                       className="w-full bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500/20 font-bold transition-all"
                       type="number"
-                      value={local.price ?? ""}
+                      value={local.purchasingPrice ?? ""}
                       placeholder="Optional"
-                      onChange={(e) => setLocal({ ...local, price: e.target.value === "" ? null : Number(e.target.value) })}
+                      onChange={(e) => setLocal({ ...local, purchasingPrice: e.target.value === "" ? null : Number(e.target.value) })}
                     />
                   </div>
                   <div>
@@ -411,29 +413,15 @@ export default function ItemModal({ item, addonGroups = [], onSave, onClose, cat
                       onChange={(e) => setLocal({ ...local, sellingPrice: e.target.value === "" ? null : Number(e.target.value) })}
                     />
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest ml-1 mb-3">Dietary Type</label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setLocal({ ...local, isVeg: true, isEgg: false })}
-                      className={`flex-1 py-3 rounded-xl border-2 font-black text-[10px] uppercase tracking-wider transition-all ${local.isVeg ? "border-green-500 bg-green-50 text-green-600 dark:bg-green-900/20" : "border-[var(--kravy-border)] text-[var(--kravy-text-muted)] hover:bg-[var(--kravy-surface-hover)]"}`}
-                    >
-                      🥗 Veg
-                    </button>
-                    <button
-                      onClick={() => setLocal({ ...local, isVeg: false, isEgg: true })}
-                      className={`flex-1 py-3 rounded-xl border-2 font-black text-[10px] uppercase tracking-wider transition-all ${local.isEgg ? "border-amber-500 bg-amber-50 text-amber-600 dark:bg-amber-900/20" : "border-[var(--kravy-border)] text-[var(--kravy-text-muted)] hover:bg-[var(--kravy-surface-hover)]"}`}
-                    >
-                      🥚 Egg
-                    </button>
-                    <button
-                      onClick={() => setLocal({ ...local, isVeg: false, isEgg: false })}
-                      className={`flex-1 py-3 rounded-xl border-2 font-black text-[10px] uppercase tracking-wider transition-all ${(!local.isVeg && !local.isEgg) ? "border-red-500 bg-red-50 text-red-600 dark:bg-red-900/20" : "border-[var(--kravy-border)] text-[var(--kravy-text-muted)] hover:bg-[var(--kravy-surface-hover)]"}`}
-                    >
-                      🍗 Non-Veg
-                    </button>
+                  <div>
+                    <label className="block text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest ml-1 mb-2">MRP (₹)</label>
+                    <input
+                      className="w-full bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500/20 font-bold transition-all"
+                      type="number"
+                      value={local.mrp ?? ""}
+                      placeholder="Optional"
+                      onChange={(e) => setLocal({ ...local, mrp: e.target.value === "" ? null : Number(e.target.value) })}
+                    />
                   </div>
                 </div>
 
@@ -582,7 +570,9 @@ export default function ItemModal({ item, addonGroups = [], onSave, onClose, cat
                 }
                 onSave({
                    ...local,
-                   price: Number(local.price || local.sellingPrice),
+                   price: Number(local.mrp || local.sellingPrice), // Keep price synced with MRP for legacy reasons if needed
+                   mrp: Number(local.mrp || local.sellingPrice),
+                   purchasingPrice: local.purchasingPrice ? Number(local.purchasingPrice) : null,
                    sellingPrice: Number(local.sellingPrice)
                 });
               }}

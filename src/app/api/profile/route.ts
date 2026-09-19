@@ -311,7 +311,7 @@ export async function POST(request: Request) {
     if (body.loyaltyPointRatio !== undefined) updateData.loyaltyPointRatio = n(body.loyaltyPointRatio);
     if (body.loyaltyMinRedeem !== undefined) updateData.loyaltyMinRedeem = n(body.loyaltyMinRedeem);
     if (body.enableFuelBilling !== undefined) updateData.enableFuelBilling = b(body.enableFuelBilling);
-    if (body.enableHotelManagement !== undefined) updateData.enableHotelManagement = b(body.enableHotelManagement);
+
     if (body.enableLoyaltyProgram !== undefined) updateData.enableLoyaltyProgram = b(body.enableLoyaltyProgram);
     if (body.loyaltyMinOrderAmount !== undefined) updateData.loyaltyMinOrderAmount = n(body.loyaltyMinOrderAmount);
     if (body.loyaltyValueInRupees !== undefined) updateData.loyaltyValueInRupees = n(body.loyaltyValueInRupees);

@@ -397,7 +397,9 @@ export async function POST(req: Request) {
     const item = await prisma.item.create({
       data: {
         name: body.name,
-        price: body.price != null ? Number(body.price) : null,
+        price: body.mrp != null ? Number(body.mrp) : (body.price != null ? Number(body.price) : null),
+        mrp: body.mrp != null ? Number(body.mrp) : null,
+        purchasingPrice: body.purchasingPrice != null ? Number(body.purchasingPrice) : null,
         sellingPrice: sellingPrice,
         unit: body.unit || null,
         imageUrl: body.imageUrl || null,
@@ -556,7 +558,9 @@ export async function PUT(req: Request) {
       where: { id },
       data: {
         name: name ?? undefined,
-        price: price !== undefined ? Number(price) : undefined,
+        price: body.mrp !== undefined ? (body.mrp !== null ? Number(body.mrp) : null) : (price !== undefined ? Number(price) : undefined),
+        mrp: body.mrp !== undefined ? (body.mrp !== null ? Number(body.mrp) : null) : undefined,
+        purchasingPrice: body.purchasingPrice !== undefined ? (body.purchasingPrice !== null ? Number(body.purchasingPrice) : null) : undefined,
         sellingPrice:
           sellingPrice !== undefined ? Number(sellingPrice) : undefined,
         unit: unit ?? undefined,

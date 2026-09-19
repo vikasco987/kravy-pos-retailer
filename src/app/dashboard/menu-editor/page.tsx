@@ -17,10 +17,10 @@ export default async function MenuEditorPage() {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
            <div className="space-y-2">
               <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">
-                 Menu <span className="text-red-600">Architect</span>
+                 Catalog <span className="text-red-600">Architect</span>
               </h1>
               <p className="text-slate-500 dark:text-slate-500 font-bold uppercase tracking-[0.3em] text-[0.7rem]">
-                 Build world-class dining experiences with Zomato-inspired controls
+                 Build a world-class retail catalog with advanced controls
               </p>
            </div>
            

@@ -37,6 +37,8 @@ export async function GET(req: NextRequest) {
         isEgg: true,
         hsnCode: true,
         shortCode: true,
+        inventoryCode: true,
+        barcode: true,
         zones: true,
         variants: true,
         addonGroupIds: true,
