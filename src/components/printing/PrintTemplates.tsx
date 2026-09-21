@@ -298,6 +298,8 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
                 return tn.toString().padStart(3, '0');
               })();
 
+              if (!s('showToken')) return null;
+
               return (
                 <div className="text-right bill-token-container">
                   <div style={{ fontSize: 'calc(var(--r-details-size) - 2px)', fontWeight: '800', textTransform: 'uppercase' }}>Token</div>
