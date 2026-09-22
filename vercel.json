@@ -1,20 +1,5 @@
 {
   "version": 2,
   "buildCommand": "prisma generate && next build",
-  "env": {
-    "DATABASE_URL": "mongodb+srv://Krishna:Radha%40987@billgsoftware.lprzjz2.mongodb.net/Billgsoftware?retryWrites=true&w=majority&appName=Billgsoftware",
-    
-    "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME": "digpvlfup",
-    "NEXT_PUBLIC_CLOUDINARY_API_KEY": "651122263868765",
-    "NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET": "mybillingmenu",
-
-    "CLOUDINARY_CLOUD_NAME": "digpvlfup",
-    "CLOUDINARY_API_KEY": "651122263868765",
-    "CLOUDINARY_API_SECRET": "ibhgdkbxJsT9vGrWBK0DzVD5I88",
-
-    "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_bXVzaWNhbC1oZXJyaW5nLTgwLmNsZXJrLmFjY291bnRzLmRldiQ",
-    "CLERK_SECRET_KEY": "sk_test_6CjClO9j7Ej7NErdimGoPuF0bi3r7EYgc4xoUHfFFS",
-    "SCRAPER_SECRET_KEY": "kravy_scraper_secret_2026"
-  },
   "regions": ["bom1"]
 }
