@@ -165,14 +165,12 @@ const navGroups = [
       { icon: <UserPlus size={18} />, label: "Staff Management", href: "/dashboard/staff", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <Package size={18} />, label: "Inventory Stock", href: "/dashboard/inventory", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <IndianRupee size={18} />, label: "Restaurant Expenses", href: "/dashboard/expenses", roles: ["ADMIN", "SELLER", "STAFF"] },
-      { icon: <QrCode size={18} />, label: "QR Order Terminal", href: "/dashboard/qr-orders", badge: "Scan", badgeColor: "#8B5CF6" },
     ]
   },
   {
     group: "MARKETING",
     items: [
       { icon: <Sparkles size={18} />, label: "Marketing Hub", href: "/dashboard/combos", badge: "Live", badgeColor: "#8B5CF6", showHorizontalGroup: true },
-      { icon: <Camera size={18} />, label: "Gallery Manager", href: "/dashboard/gallery", badge: "Photos", badgeColor: "#7C3AED" },
     ]
   },
   {
@@ -199,7 +197,7 @@ const navGroups = [
     group: "ADMINISTRATION",
     items: [
       { icon: <UserCircle size={18} />, label: "Business Profile", href: "/dashboard/profile", roles: ["ADMIN", "SELLER", "STAFF"] },
-      { icon: <Mail size={18} />, label: "Gmail Integration", href: "/dashboard/integration/gmail", roles: ["ADMIN", "SELLER"] },
+
       { icon: <Settings size={18} />, label: "POS Settings", href: "/dashboard/settings", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <Printer size={18} />, label: "Printing Setup", href: "/dashboard/settings/printing", roles: ["ADMIN", "SELLER", "STAFF"], badge: "New", badgeColor: "#8B5CF6" },
       { icon: <Smartphone size={18} />, label: "App Settings", href: "/dashboard/admin/app-settings", roles: ["ADMIN"] },
@@ -500,25 +498,7 @@ function SidebarItem({ item, index, isActive, collapsed, isDark, pathname }: any
               <span style={{ fontSize: '0.65rem', fontWeight: 800, color: pathname.startsWith('/dashboard/offers') ? '#10B981' : '#64748B' }}>OFFERS</span>
             </motion.div>
           </Link>
-          <Link href="/dashboard/gallery" style={{ textDecoration: 'none', flex: 1 }} prefetch={false} onClick={() => { kravy.click(); }}>
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              style={{
-                padding: '10px',
-                background: pathname === '/dashboard/gallery' ? 'rgba(124,58,237,0.15)' : 'rgba(255,255,255,0.03)',
-                borderRadius: '12px',
-                border: `1px solid ${pathname === '/dashboard/gallery' ? 'rgba(124,58,237,0.3)' : 'rgba(255,255,255,0.05)'}`,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-            >
-              <Camera size={16} color={pathname === '/dashboard/gallery' ? '#7C3AED' : '#64748B'} />
-              <span style={{ fontSize: '0.65rem', fontWeight: 800, color: pathname === '/dashboard/gallery' ? '#7C3AED' : '#64748B' }}>GALLERY</span>
-            </motion.div>
-          </Link>
+
         </div>
       )}
     </motion.div>
@@ -966,7 +946,8 @@ export default function Sidebar({ profile }: { profile?: any }) {
             if (allowedPaths.length > 0) return false;
 
             // 5. Legacy Role-based Fallback (used when allowedPaths is empty)
-            const hasRoleAccess = allowedPaths.length === 0 && item.roles ? item.roles.includes(userRole) : (allowedPaths.length === 0);
+            const effectiveRole = userRole === "USER" ? "SELLER" : userRole;
+            const hasRoleAccess = allowedPaths.length === 0 && item.roles ? item.roles.includes(effectiveRole) : (allowedPaths.length === 0);
               
             return hasRoleAccess;
           });

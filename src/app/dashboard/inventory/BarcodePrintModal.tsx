@@ -6,7 +6,7 @@ import { X, Printer } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 
-export type BarcodeSize = '1x1' | '2x1' | '2.5x1.5';
+export type BarcodeSize = 'small' | 'medium' | 'large';
 
 interface Item {
   name: string;
@@ -21,7 +21,7 @@ interface BarcodePrintModalProps {
 }
 
 export default function BarcodePrintModal({ isOpen, onClose, items }: BarcodePrintModalProps) {
-  const [size, setSize] = useState<BarcodeSize>('2x1');
+  const [size, setSize] = useState<BarcodeSize>('medium');
   const [isClient, setIsClient] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
 
@@ -53,11 +53,15 @@ export default function BarcodePrintModal({ isOpen, onClose, items }: BarcodePri
     window.print();
   };
 
-  // Size configurations
+  // Physical module width calculation for Code 128 (approx 13 chars = ~198 modules including margins):
+  // A4 printable width is ~750px. 
+  // Small (3/row): ~250px available. width 1.0 => 198px. Fits perfectly with quiet zone!
+  // Medium (2/row): ~375px available. width 1.4 => 277px. Fits perfectly!
+  // Large (1/row): ~750px available. width 2.0 => 396px. Fits perfectly!
   const sizeConfig = {
-    '1x1': { gridClass: 'grid-cols-6 gap-2', labelClass: 'aspect-square p-1', barcodeWidth: 1.5, barcodeHeight: 30, fontSize: 10 },
-    '2x1': { gridClass: 'grid-cols-4 gap-4', labelClass: 'aspect-[2/1] p-2', barcodeWidth: 2, barcodeHeight: 40, fontSize: 12 },
-    '2.5x1.5': { gridClass: 'grid-cols-3 gap-6', labelClass: 'aspect-[2.5/1.5] p-3', barcodeWidth: 2.5, barcodeHeight: 50, fontSize: 14 },
+    'small': { gridClass: 'grid-cols-3 gap-6', labelClass: 'aspect-[2.5/1] p-2', barcodeWidth: 1.0, barcodeHeight: 25, fontSize: 10, label: 'Small (3/row)' },
+    'medium': { gridClass: 'grid-cols-2 gap-8', labelClass: 'aspect-[2.5/1] p-3', barcodeWidth: 1.4, barcodeHeight: 35, fontSize: 12, label: 'Medium (2/row)' },
+    'large': { gridClass: 'grid-cols-1 gap-8', labelClass: 'aspect-[4/1] p-4 max-w-[500px] mx-auto', barcodeWidth: 2.0, barcodeHeight: 50, fontSize: 14, label: 'Large (1/row)' },
   };
 
   const config = sizeConfig[size];
@@ -99,17 +103,17 @@ export default function BarcodePrintModal({ isOpen, onClose, items }: BarcodePri
                     Label Size
                   </label>
                   <div className="grid grid-cols-3 gap-3">
-                    {(['1x1', '2x1', '2.5x1.5'] as BarcodeSize[]).map((s) => (
+                    {(['small', 'medium', 'large'] as BarcodeSize[]).map((s) => (
                       <button
                         key={s}
                         onClick={() => setSize(s)}
-                        className={`py-3 px-4 rounded-xl text-sm font-bold border transition-all ${
+                        className={`py-3 px-2 rounded-xl text-xs sm:text-sm font-bold border transition-all ${
                           size === s 
                             ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-500' 
                             : 'bg-[var(--kravy-bg)] border-[var(--kravy-border)] text-[var(--kravy-text-secondary)] hover:border-gray-300'
                         }`}
                       >
-                        {s}&quot;
+                        {sizeConfig[s].label}
                       </button>
                     ))}
                   </div>
@@ -213,21 +217,24 @@ export default function BarcodePrintModal({ isOpen, onClose, items }: BarcodePri
                 return (
                   <div 
                     key={index} 
-                    className={`${config.labelClass} flex flex-col items-center justify-center border border-dashed border-gray-400 text-center break-inside-avoid`}
+                    className={`${config.labelClass} flex flex-col items-center justify-center border border-dashed border-gray-400 text-center break-inside-avoid overflow-hidden`}
                   >
                     <div className="font-bold mb-1 truncate w-full px-1" style={{ fontSize: `${config.fontSize}px` }}>
                       {item.name}
                     </div>
-                    <Barcode 
-                      key={`${index}-${size}`} // Force re-render when size changes
-                      value={codeToPrint} 
-                      width={config.barcodeWidth} 
-                      height={config.barcodeHeight} 
-                      fontSize={config.fontSize - 2}
-                      displayValue={true}
-                      margin={0}
-                      background="transparent"
-                    />
+                    <div className="w-full flex-1 flex items-center justify-center overflow-hidden [&>svg]:[shape-rendering:crispEdges]">
+                      <Barcode 
+                        key={`${index}-${size}`}
+                        value={codeToPrint} 
+                        width={config.barcodeWidth} 
+                        height={config.barcodeHeight} 
+                        fontSize={config.fontSize - 2}
+                        displayValue={true}
+                        margin={10}
+                        background="#FFFFFF"
+                        lineColor="#000000"
+                      />
+                    </div>
                   </div>
                 );
               })}

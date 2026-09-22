@@ -321,6 +321,7 @@ export async function POST(request: Request) {
     if (body.multiZoneMenuEnabled !== undefined) updateData.multiZoneMenuEnabled = b(body.multiZoneMenuEnabled);
     if (body.expiryTrackingEnabled !== undefined) updateData.expiryTrackingEnabled = b(body.expiryTrackingEnabled);
     if (body.phonePrefixType !== undefined) updateData.phonePrefixType = s(body.phonePrefixType);
+    if (body.customUnits !== undefined) updateData.customUnits = body.customUnits;
     
     // ✅ QR Menu Settings
     if (body.qrMenuShowDetails !== undefined) updateData.qrMenuShowDetails = b(body.qrMenuShowDetails);

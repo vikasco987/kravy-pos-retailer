@@ -30,7 +30,7 @@ export async function GET() {
     }
 
     // priority 3: Fallback Hardcoded Defaults (if still empty)
-    const isPrivileged = authUser.type === "OWNER" || authUser.type === "ADMIN" || authUser.type === "SELLER";
+    const isPrivileged = authUser.type === "OWNER" || authUser.type === "ADMIN" || authUser.type === "SELLER" || authUser.type === "USER";
     
     if (finalAllowed.length === 0) {
       if (isPrivileged) {

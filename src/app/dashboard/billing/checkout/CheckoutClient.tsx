@@ -910,16 +910,17 @@ export default function CheckoutClient() {
         if (catsRes.ok) {
           const data = await catsRes.json();
           setCategoriesList(prev => {
-            const merged = [...prev];
-            data.forEach((c: any) => {
-              const existing = merged.find(m => m.id === c.id);
-              if (existing) {
-                existing.sortOrder = c.sortOrder;
-              } else {
-                merged.push(c);
-              }
+            const activeItemCategoryIds = new Set(finalItems.map(it => it.category?.id).filter(Boolean));
+            const newCats = [...data];
+            
+            // Keep categories from cache ONLY if they are still used by an item
+            prev.forEach(p => {
+               if (activeItemCategoryIds.has(p.id) && !newCats.find(c => c.id === p.id)) {
+                  newCats.push(p);
+               }
             });
-            return merged.sort((a, b) => {
+            
+            return newCats.sort((a, b) => {
               if (a.sortOrder != null && b.sortOrder != null) return a.sortOrder - b.sortOrder;
               if (a.sortOrder != null) return -1;
               if (b.sortOrder != null) return 1;

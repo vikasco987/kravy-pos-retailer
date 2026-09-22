@@ -41,8 +41,9 @@ export default function ClientLayout({
   const isTerminal = pathname === "/dashboard/terminal";
   const isCheckout = pathname === "/dashboard/billing/checkout";
   const isKitchen = pathname === "/dashboard/kitchen" || pathname === "/dashboard/workflow";
+  const isUpload = pathname === "/dashboard/menu/upload";
   const isExpenses = pathname.startsWith("/dashboard/expenses");
-  const isPOS = isTerminal || isCheckout || isKitchen;
+  const isPOS = isTerminal || isCheckout || isKitchen || isUpload;
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mounted, setMounted] = useState(false);

@@ -85,7 +85,7 @@ const CategorySelect: React.FC<CategorySelectProps> = ({
     }
   };
 
-  const isLoading = !categories || categories.length === 0;
+  const isLoading = !categories;
 
   return (
     <div className="relative mb-6" ref={dropdownRef}>

@@ -309,11 +309,7 @@ export default async function DailySalesReportPage({
           <BreakdownRow dotColor="#3B82F6" label="Counter Delivery" count={types.DELIVERY.c} revenue={types.DELIVERY.r} />
           <BreakdownRow dotColor="#10B981" label="Dine-in" count={types.DINEIN.c} revenue={types.DINEIN.r} />
           <BreakdownRow dotColor="#F59E0B" label="Takeaway" count={types.TAKEAWAY.c} revenue={types.TAKEAWAY.r} />
-          <div style={{ height: "1px", background: "var(--kravy-border)", margin: "16px 0" }} />
-          <h4 style={{ fontSize: "0.8rem", fontWeight: 800, marginBottom: "12px", color: "#FF6B35", textTransform: "uppercase", letterSpacing: "0.5px" }}>External Platforms (Gmail Synced)</h4>
-          <BreakdownRow dotColor="#EA4335" label="Zomato" count={zomatoOrders} revenue={zomatoRevenue} />
-          <BreakdownRow dotColor="#FC8019" label="Swiggy" count={swiggyOrders} revenue={swiggyRevenue} />
-          <div style={{ height: "1px", background: "var(--kravy-border)", margin: "16px 0" }} />
+
           <BreakdownRow dotColor="#10B981" label="Cash Payments" count={payments.CASH.c} revenue={payments.CASH.r} />
           <BreakdownRow dotColor="#8B5CF6" label="UPI Payments" count={payments.UPI.c} revenue={payments.UPI.r} />
         </div>
