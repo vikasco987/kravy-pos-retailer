@@ -23,86 +23,148 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // --- Post-Processing: Smart Merge Sizes & Portions ---
-        let lastNormalItem: any = null;
-        let cleanedMenu: any[] = [];
-        const modifierRegex = /^(\d+\/-\s*[a-zA-Z]*|\d+\s*(Pc|pcs|gm|kg).*)$/i;
-
+        // --- Robust Variant Normalization ---
+        const variantSuffixes = ['small', 'medium', 'large', 's', 'm', 'l', 'half', 'full', 'quarter', 'regular', 'jumbo', '250g', '500g', '1kg'];
+        const finalMenu: any[] = [];
+        const grouped = new Map();
+        let lastBaseItem = null;
+        let fallbackBaseName = "";
+        
         for (let i = 0; i < menuItems.length; i++) {
             let item = menuItems[i];
             if (!item || typeof item !== 'object') continue;
             
             let name = (item.name || "").trim();
-            if (!name) continue; // Skip items with no name
-            item.name = name; // Ensure it's set properly
+            if (!name) continue;
+            item.name = name; // ensure trimmed
 
-            if (modifierRegex.test(name) && lastNormalItem && lastNormalItem.name) {
-                let baseName = String(lastNormalItem.name).replace(/\s*\(Half\)$/, '');
+            if (item.variants && item.variants.length > 0) {
+                finalMenu.push({ type: 'normal', item });
+                lastBaseItem = item;
+                fallbackBaseName = item.name;
+                continue;
+            }
 
-                if (name.toLowerCase().includes('f') || name.includes('/-')) {
-                    item.name = `${baseName} (Full)`;
-                    if (!String(lastNormalItem.name).includes('(Half)')) {
-                        lastNormalItem.name = `${baseName} (Half)`;
+            let isVariant = false;
+            let baseName = item.name || "";
+            let variantName = "";
+            
+            for (const suffix of variantSuffixes) {
+                // Exact suffix match
+                const exactRegex = new RegExp(`^(${suffix})(?:\\s*\\))?$`, 'i');
+                const exactMatch = (item.name || "").trim().match(exactRegex);
+                
+                if (exactMatch && fallbackBaseName) {
+                    baseName = fallbackBaseName;
+                    variantName = exactMatch[1].trim();
+                    isVariant = true;
+                    break;
+                }
+                
+                // Suffix with separator
+                const regex = new RegExp(`[\\s\\-_\\(]+(${suffix})(?:\\s*\\))?\\s*$`, 'i');
+                const match = (item.name || "").match(regex);
+                if (match) {
+                    const potentialBase = item.name.replace(regex, '').trim();
+                    if (potentialBase.length > 1) {
+                        baseName = potentialBase;
+                        variantName = match[1].trim();
+                        isVariant = true;
+                        break;
                     }
+                }
+            }
+            
+            if (isVariant) {
+                const catKey = (item.category || "Uncategorized").trim().toLowerCase();
+                const mapKey = `${catKey}::${baseName.toLowerCase()}`;
+                
+                if (!grouped.has(mapKey)) {
+                    grouped.set(mapKey, { 
+                        baseName: baseName, 
+                        category: item.category, 
+                        type: item.type, 
+                        description: item.description, 
+                        items: [] 
+                    });
+                }
+                grouped.get(mapKey).items.push({ originalItem: item, variantName });
+                fallbackBaseName = baseName;
+            } else {
+                finalMenu.push({ type: 'normal', item });
+                fallbackBaseName = item.name;
+            }
+        }
+        
+        // Resolve grouped items
+        const resolvedMenu: any[] = [];
+        
+        const baseItemMap = new Map();
+        for (const entry of finalMenu) {
+            if (entry.type === 'normal') {
+                const catKey = (entry.item.category || "Uncategorized").trim().toLowerCase();
+                const mapKey = `${catKey}::${(entry.item.name || "").toLowerCase()}`;
+                if (!baseItemMap.has(mapKey)) {
+                    baseItemMap.set(mapKey, []);
+                }
+                baseItemMap.get(mapKey).push(entry);
+            }
+        }
+
+        for (const [mapKey, group] of grouped.entries()) {
+            const matchingBaseEntries = baseItemMap.get(mapKey) || [];
+            
+            if (group.items.length > 1 || matchingBaseEntries.length > 0) {
+                let baseItemToMutate: any = null;
+                if (matchingBaseEntries.length > 0) {
+                    baseItemToMutate = matchingBaseEntries[0].item;
+                    matchingBaseEntries[0].type = 'merged'; 
                 } else {
-                    item.name = `${baseName} (${name})`;
+                    baseItemToMutate = {
+                        name: group.baseName,
+                        category: group.category,
+                        type: group.type,
+                        description: group.description,
+                        price: group.items[0].originalItem.price,
+                    };
+                    resolvedMenu.push(baseItemToMutate);
+                }
+                
+                // Format variants specifically for the kravy-pos-retailer schema
+                if (!baseItemToMutate.variants || !Array.isArray(baseItemToMutate.variants)) {
+                    baseItemToMutate.variants = [];
                 }
 
-                if (item.price === lastNormalItem.price && (name.toLowerCase().includes('1 pc') || name.toLowerCase().includes('1pc'))) {
-                    continue;
+                // Find or create a 'Size' group
+                let sizeGroup = baseItemToMutate.variants.find((v: any) => v.groupName && v.groupName.toLowerCase().includes('size'));
+                if (!sizeGroup) {
+                    sizeGroup = {
+                        id: Math.random().toString(36).substring(7),
+                        groupName: "Size",
+                        type: "radio",
+                        required: true,
+                        options: []
+                    };
+                    baseItemToMutate.variants.push(sizeGroup);
+                }
+                if (!sizeGroup.options) sizeGroup.options = [];
+                
+                for (const vItem of group.items) {
+                    // Check if already exists
+                    if (!sizeGroup.options.find((o: any) => o.name === vItem.variantName)) {
+                        sizeGroup.options.push({
+                            name: vItem.variantName,
+                            price: vItem.originalItem.price
+                        });
+                    }
                 }
             } else {
-                lastNormalItem = item;
+                resolvedMenu.push(group.items[0].originalItem);
             }
-            cleanedMenu.push(item);
         }
-
-        // --- Post-Processing: Group & Enforce Portions ---
-        const groups: { [key: string]: any[] } = {};
-        for (let item of cleanedMenu) {
-            if (!item.name) continue;
-            let baseName = String(item.name).split('(')[0].trim();
-            if (!groups[baseName]) groups[baseName] = [];
-            groups[baseName].push(item);
-        }
-
-        let finalMenu: any[] = [];
-        for (let baseName in groups) {
-            let groupItems = groups[baseName];
-
-            let toRemove = new Set();
-            for (let i = 0; i < groupItems.length; i++) {
-                for (let j = i + 1; j < groupItems.length; j++) {
-                    let item1 = groupItems[i];
-                    let item2 = groupItems[j];
-                    if (item1.price === item2.price) {
-                        if (item1.name.includes('(') && !item2.name.includes('(')) toRemove.add(item2);
-                        else if (!item1.name.includes('(') && item2.name.includes('(')) toRemove.add(item1);
-                    }
-                }
-            }
-
-            let activeItems = groupItems.filter((i: any) => !toRemove.has(i));
-
-            if (activeItems.length > 1) {
-                let itemsWithoutBrackets = activeItems.filter((i: any) => i.name && !String(i.name).includes('('));
-
-                if (itemsWithoutBrackets.length === 2) {
-                    itemsWithoutBrackets.sort((a: any, b: any) => (a.price || 0) - (b.price || 0));
-                    itemsWithoutBrackets[0].name = `${itemsWithoutBrackets[0].name} (Half)`;
-                    itemsWithoutBrackets[1].name = `${itemsWithoutBrackets[1].name} (Full)`;
-                } else if (itemsWithoutBrackets.length === 3) {
-                    itemsWithoutBrackets.sort((a: any, b: any) => (a.price || 0) - (b.price || 0));
-                    itemsWithoutBrackets[0].name = `${itemsWithoutBrackets[0].name} (Small)`;
-                    itemsWithoutBrackets[1].name = `${itemsWithoutBrackets[1].name} (Medium)`;
-                    itemsWithoutBrackets[2].name = `${itemsWithoutBrackets[2].name} (Large)`;
-                } else {
-                    for (let item of itemsWithoutBrackets) {
-                        item.name = `${item.name} (Regular)`;
-                    }
-                }
-            }
-            finalMenu.push(...activeItems);
+        
+        for (const entry of finalMenu) {
+            resolvedMenu.push(entry.item);
         }
 
         return NextResponse.json({
@@ -111,7 +173,7 @@ export async function POST(req: NextRequest) {
             address: parsedMenu.address || "Delhi NCR",
             timings: parsedMenu.timings || "11:00 AM - 11:00 PM",
             phone: parsedMenu.phone || "9999999999",
-            menu: finalMenu
+            menu: resolvedMenu
         });
 
     } catch (e: any) {
