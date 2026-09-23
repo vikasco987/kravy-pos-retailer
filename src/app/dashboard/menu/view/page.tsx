@@ -347,6 +347,21 @@ import ItemModal from "@/components/MenuEditor/ItemModal";
 import { useConfirm } from "@/components/ConfirmContext";
 
 /* types */
+type MenuVariant = {
+  id?: string;
+  name: string;
+  price?: number;
+  isAvailable?: boolean;
+};
+
+type MenuVariantGroup = {
+  id?: string;
+  groupName: string;
+  type: string;
+  required: boolean;
+  options: MenuVariant[];
+};
+
 type MenuItem = {
   id: string;
   name: string;
@@ -374,6 +389,7 @@ type MenuItem = {
   isActive: boolean;
   expiryDate?: string | null;
   isFavorite: boolean;
+  variants?: MenuVariantGroup[];
 };
 
 type MenuCategory = {
@@ -1351,6 +1367,7 @@ export default function ViewMenuPage() {
           isFavorite: !!it.isFavorite,
           shortCode: it.shortCode ?? null,
           expiryDate: it.expiryDate ? new Date(it.expiryDate).toISOString().split('T')[0] : null,
+          variants: it.variants || [],
         });
       });
 
@@ -2319,13 +2336,22 @@ export default function ViewMenuPage() {
               <h3 className="text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em]">
                 MENU CATEGORIES
               </h3>
-              <button 
-                onClick={() => setShowReorderModal(true)}
-                className="bg-indigo-500/10 text-indigo-600 hover:bg-indigo-600 hover:text-white p-1.5 rounded-lg transition-all"
-                title="Customize Category Order"
-              >
-                <Sparkles size={14} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => window.location.reload()}
+                  className="bg-indigo-500/10 text-indigo-600 hover:bg-indigo-600 hover:text-white p-1.5 rounded-lg transition-all"
+                  title="Refresh Page"
+                >
+                  <RotateCcw size={14} />
+                </button>
+                <button 
+                  onClick={() => setShowReorderModal(true)}
+                  className="bg-indigo-500/10 text-indigo-600 hover:bg-indigo-600 hover:text-white p-1.5 rounded-lg transition-all"
+                  title="Customize Category Order"
+                >
+                  <Sparkles size={14} />
+                </button>
+              </div>
             </div>
             {/* Category Search Box */}
             <div className="mb-4">
@@ -2644,6 +2670,18 @@ export default function ViewMenuPage() {
                               </div>
                             )}
                             {item.unit && <div className="text-[0.65rem] font-bold text-[var(--kravy-text-muted)] uppercase tracking-tighter opacity-70">{item.unit}</div>}
+                            
+                            {item.variants && item.variants.length > 0 && (
+                              <div className="w-full mt-2 pt-2 border-t border-[var(--kravy-border)]/50">
+                                <div className="text-[10px] font-black text-purple-700 uppercase tracking-widest mb-1">
+                                  {item.variants.reduce((total, group) => total + (group.options?.length || 0), 0)} Variants
+                                </div>
+                                <div className="text-[9px] font-bold text-purple-600/80 leading-tight">
+                                  {item.variants.flatMap(v => v.options?.map(o => o.name) || []).slice(0, 3).join(' · ')}
+                                  {item.variants.reduce((total, group) => total + (group.options?.length || 0), 0) > 3 && ' +'}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -3529,6 +3567,20 @@ export default function ViewMenuPage() {
                               <span className="text-[9px] font-black text-orange-500 uppercase bg-orange-500/10 px-1.5 py-0.5 rounded">{item.category}</span>
                               <span className="text-[9px] font-bold text-[var(--kravy-text-muted)]">₹{item.price}</span>
                             </div>
+                            
+                            {item.variants && item.variants.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {item.variants.flatMap((v: any) => v.options || []).map((opt: any, idx: number) => (
+                                  <span
+                                    key={opt.id ?? opt.name ?? idx}
+                                    className="rounded-md bg-purple-50 px-1.5 py-0.5 text-[9px] font-bold text-purple-700 border border-purple-200"
+                                  >
+                                    {opt.name}
+                                    {opt.price != null && ` · ₹${opt.price}`}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>

@@ -425,7 +425,7 @@ export default function ItemModal({ item, addonGroups = [], onSave, onClose, cat
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest ml-1 mb-2">Category</label>
                     <select
@@ -443,6 +443,15 @@ export default function ItemModal({ item, addonGroups = [], onSave, onClose, cat
                       value={local.shortCode ?? ""}
                       placeholder="e.g. 1999"
                       onChange={(e) => setLocal({ ...local, shortCode: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest ml-1 mb-2">Manufacturer Barcode</label>
+                    <input
+                      className="w-full bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500/20 font-bold transition-all"
+                      value={local.barcode ?? ""}
+                      placeholder="Scan or type barcode"
+                      onChange={(e) => setLocal({ ...local, barcode: e.target.value })}
                     />
                   </div>
                 </div>

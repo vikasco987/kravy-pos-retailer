@@ -252,43 +252,18 @@ export async function POST(req: NextRequest) {
           let nextToken = body.tokenNumber || (kotNumbers && Array.isArray(kotNumbers) && kotNumbers.length > 0 ? kotNumbers[kotNumbers.length - 1] : null);
           if (profile?.id) {
             const txStartDate = new Date();
-            const todayStr = txStartDate.toISOString().split('T')[0];
-            const preFetchDateStr = profile.lastTokenDate ? new Date(profile.lastTokenDate).toISOString().split('T')[0] : "";
-            console.log(`[DEBUG_MIDNIGHT] todayStr: ${todayStr}, preFetchDateStr: ${preFetchDateStr}, profile.lastTokenDate: ${profile.lastTokenDate}`);
 
-            let updatedProfile;
-
-            if (preFetchDateStr === todayStr) {
-              // OPTIMIZED PATH (1 query) - Pre-fetch confirms it's already today
-              updatedProfile = await tx.businessProfile.update({
-                where: { id: profile.id },
-                data: {
-                  billCounter: { increment: 1 },
-                  ...(!nextToken ? {
-                    lastTokenNumber: { increment: 1 },
-                    lastTokenDate: txStartDate
-                  } : {})
-                },
-                select: { billCounter: true, lastTokenNumber: true }
-              });
-            } else {
-              // SAFE PATH (2 queries) - Fallback if pre-fetch says it's a new day
-              const currentProfile = await tx.businessProfile.findUnique({ where: { id: profile.id } });
-              const lastTokenDateStr = currentProfile?.lastTokenDate ? new Date(currentProfile.lastTokenDate).toISOString().split('T')[0] : "";
-              const isNewDayTx = lastTokenDateStr !== todayStr;
-
-              updatedProfile = await tx.businessProfile.update({
-                where: { id: profile.id },
-                data: {
-                  billCounter: { increment: 1 },
-                  ...(!nextToken ? {
-                    lastTokenNumber: isNewDayTx ? 1 : { increment: 1 },
-                    lastTokenDate: txStartDate
-                  } : {})
-                },
-                select: { billCounter: true, lastTokenNumber: true }
-              });
-            }
+            let updatedProfile = await tx.businessProfile.update({
+              where: { id: profile.id },
+              data: {
+                billCounter: { increment: 1 },
+                ...(!nextToken ? {
+                  lastTokenNumber: { increment: 1 },
+                  lastTokenDate: txStartDate
+                } : {})
+              },
+              select: { billCounter: true, lastTokenNumber: true }
+            });
 
             nextSerial = updatedProfile.billCounter;
             if (!nextToken) nextToken = updatedProfile.lastTokenNumber;

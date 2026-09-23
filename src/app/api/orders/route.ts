@@ -116,24 +116,13 @@ export async function PATCH(req: NextRequest) {
                             where: { userId: effectiveId },
                             orderBy: { createdAt: 'asc' }
                         });
-                        const today = new Date().toISOString().split('T')[0];
-                        const lastTokenDate = profile?.lastTokenDate ? new Date(profile.lastTokenDate).toISOString().split('T')[0] : "";
-                        
-                        if (lastTokenDate === today) {
-                            nextToken = (profile?.lastTokenNumber || 0) + 1;
-                        } else {
-                            nextToken = 1;
-                        }
+                        nextToken = (profile?.lastTokenNumber || 0) + 1;
 
                         if (profile?.id) {
-                            let updateData: any = {};
-                            if (lastTokenDate === today) {
-                                updateData.lastTokenNumber = { increment: 1 };
-                                updateData.lastTokenDate = new Date();
-                            } else {
-                                updateData.lastTokenNumber = 1;
-                                updateData.lastTokenDate = new Date();
-                            }
+                            let updateData: any = {
+                                lastTokenNumber: { increment: 1 },
+                                lastTokenDate: new Date()
+                            };
                             
                             const updatedProfile = await prisma.businessProfile.update({
                                 where: { id: profile.id },
@@ -289,14 +278,7 @@ export async function POST(req: NextRequest) {
                     where: { userId: effectiveId },
                     orderBy: { createdAt: 'asc' }
                 });
-                const today = new Date().toISOString().split('T')[0];
-                const lastTokenDate = latestProfile?.lastTokenDate ? new Date(latestProfile.lastTokenDate).toISOString().split('T')[0] : "";
-                
-                if (lastTokenDate === today) {
-                    nextToken = (latestProfile?.lastTokenNumber || 0) + 1;
-                } else {
-                    nextToken = 1;
-                }
+                nextToken = (latestProfile?.lastTokenNumber || 0) + 1;
 
                 // Sync with BusinessProfile (using upsert to prevent errors if profile missing)
                 if (latestProfile?.id) {

@@ -144,8 +144,8 @@ export default function BillingPage() {
   const [showColPicker, setShowColPicker] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [visibleCols, setVisibleCols] = useState({
-    sno: true, billInfo: true, items: true, source: true, customer: true, customerPhone: true,
-    subtotal: true, gst: true, discount: true, total: true, timeline: true, payment: true, token: true
+    sno: true, billInfo: true, items: true, source: true, customer: false, customerPhone: false,
+    subtotal: false, gst: false, discount: false, total: true, timeline: true, payment: true, token: true
   });
   const [colFilters, setColFilters] = useState({
     billNumber: "", tableName: "", customerName: "", customerPhone: "", paymentStatus: "", paymentMode: "",

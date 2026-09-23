@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 export async function POST(req: NextRequest) {
     try {
         const parsedMenu = await req.json();
+        require('fs').writeFileSync('last_ai_response.json', JSON.stringify(parsedMenu, null, 2));
         
         let menuItems: any[] = [];
         if (Array.isArray(parsedMenu)) {
@@ -164,7 +165,29 @@ export async function POST(req: NextRequest) {
         }
         
         for (const entry of finalMenu) {
-            resolvedMenu.push(entry.item);
+            const resolvedItem = entry.item;
+            
+            // If base price is 0 or missing, and variants exist, set it to the lowest variant price
+            let parsedPrice = typeof resolvedItem.price === 'string' ? parseFloat(resolvedItem.price) : resolvedItem.price;
+            if ((!parsedPrice || isNaN(parsedPrice) || parsedPrice === 0) && resolvedItem.variants && Array.isArray(resolvedItem.variants) && resolvedItem.variants.length > 0) {
+                let lowestPrice = Infinity;
+                for (const group of resolvedItem.variants) {
+                    const opts = (group.options && Array.isArray(group.options)) ? group.options : (group.name && group.price !== undefined ? [group] : []);
+                    for (const opt of opts) {
+                        const optPrice = typeof opt.price === 'string' ? parseFloat(opt.price) : opt.price;
+                        if (optPrice !== undefined && !isNaN(optPrice) && optPrice > 0 && optPrice < lowestPrice) {
+                            lowestPrice = optPrice;
+                        }
+                    }
+                }
+                if (lowestPrice !== Infinity) {
+                    resolvedItem.price = lowestPrice;
+                }
+            } else {
+                resolvedItem.price = parsedPrice || 0;
+            }
+
+            resolvedMenu.push(resolvedItem);
         }
 
         return NextResponse.json({

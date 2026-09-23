@@ -76,10 +76,7 @@ export async function POST(req: NextRequest) {
         if (languagePref === "dual") {
             languageRule = `5. ENGLISH & NATIVE BILINGUAL NAMES: The menu items must be outputted with their English name followed immediately by the native/regional script name (e.g. Hindi, Marathi, Gujarati, Tamil, etc., whichever is present in the document), separated by a single space. DO NOT USE BRACKETS for the native name! Brackets break the thermal printer. Example: 'Masala Sandwich मसाला सैंडविच' or 'Misal Pav मिसळ पाव'. DO NOT output 'Misal Pav (मिसळ पाव)'. Ensure the spelling is accurate in both languages.`;
         } else if (languagePref === "arabic") {
-            languageRule = `5. ENGLISH & ARABIAN BILINGUAL NAMES: The menu items must be outputted with their English name followed immediately by the Arabic script name, separated by a single space. DO NOT USE BRACKETS for the Arabic name! Brackets break the thermal printer. Example: 'Chicken Mandi مندي دجاج' or 'Hummus حمص'. DO NOT output 'Hummus (حمص)'. Ensure the spelling is accurate in both languages.`;
-        }
-
-        const prompt = `
+            languageRule = `5. ENGLISH & ARABIAN BILINGUAL NAMES: The menu items must be outputted with their English name followed immediately by the Arabic script name, separated by a single space. DO NOT USE BRACKETS for the Arabic name! Brackets break the thermal printer. Example: 'Chicken Mandi مندي دجاج' or 'Hummus حمص'. DO NOT output 'Hummus         const prompt = `
 You are a highly advanced AI system designed to digitize menus and product catalogs from images, PDFs, and parsed spreadsheet data with elite precision.
 Your job is to read this document and extract EVERY single item with 100% precision.
 
@@ -101,13 +98,11 @@ Please return a structured JSON response matching the following structure:
     {
       "category": "Logical Category Name (For Food: Dal, Breads, etc. For Retail: Hardware, Construction, Electronics, etc.)",
       "name": "Formatted Item Name. FOR FOOD ONLY: ALWAYS add the (V) or (NV) badge. DO NOT add (V) or (NV) badges for Retail/Hardware/Non-Food items!",
-      "price": 250, // Extract the base price as a number.
+      "price": 250, // Extract the base price as a number. Set it to the lowest valid variant price if variants exist.
       "type": "Pure Veg", // FOR FOOD ONLY: Veg items MUST be 'Pure Veg'. Meat MUST be 'Non-Veg'. Egg items MUST be 'Non-Veg (Egg)'. FOR RETAIL/HARDWARE/NON-FOOD: ALWAYS use 'General'.
       "description": "", // Leave empty to save tokens, unless a description is explicitly printed on the menu document.
       "variants": [
-        // CRUCIAL RULE: If the item has different sizes (like Regular, Medium, Large, Half, Full), you MUST extract them into this variants array under a 'Size' group with type 'radio' and required true. DO NOT create separate rows for sizes! 
-        // ALSO, if the item has Add-ons (e.g. Extra Toppings, Flavours, Extra Cheese), you MUST extract them into this variants array as well, but with type 'checkbox' and required false. 
-        // If there are no sizes or add-ons, leave this array empty or omit it.
+        // CRUCIAL RULE: See EXTRACTION RULES below for how to populate variants.
         {
           "groupName": "Size",
           "type": "radio",
@@ -131,6 +126,31 @@ Please return a structured JSON response matching the following structure:
   ]
 }
 
+### IMPORTANT EXTRACTION RULES FOR PRICES & VARIANTS
+1. Never turn an unread/ambiguous price into 0. Preserve the raw detected price, interpret from context, or return a review-friendly structure rather than price=0.
+2. Do not hallucinate variant names unless context supports it. For "Pizza 130/210", you may infer "Half" and "Full" if common for the region, or "Small" and "Large". Do not hallucinate variants for a price range (e.g. ₹199 - ₹399).
+3. Header context matters: inspect column headers, section titles, and spatial layout (horizontal alignment) to decide what a number means (e.g. if under "Half" and "Full" columns).
+4. Separate quantity from price: "250ml", "500g", "6 pcs" are variant labels, not prices. The number following them is the price.
+5. Currency is optional: ₹199, Rs 199, 199/-, 199.00 all represent 199. Interpret "/-" as formatting, not a second variant. Do not convert valid decimal prices to 0.
+6. Vegetarian/Non-veg markers (like 🌱, 🔴, Veg, Non-Veg) should NOT be interpreted as variants.
+7. Separate Products vs Variants: "Plain Dosa 100" and "Masala Dosa 120" are SEPARATE items, not variants of Dosa. Use semantic evidence before grouping "Cheese Burger" and "Regular Burger" as variants.
+
+### TEST CASES / EXAMPLES TO LEARN FROM:
+- "Pizza 130/210" -> Variants: Small/Half ₹130, Large/Full ₹210.
+- "Pizza Half 130 Full 210" -> Variants: Half ₹130, Full ₹210.
+- "Pizza S - 130 M - 170 L - 210" -> Variants: S ₹130, M ₹170, L ₹210.
+- "Pizza 130 Small 170 Medium" -> Variants: Small ₹130, Medium ₹170.
+- "Pizza (S) 130 (M) 170" -> Variants: S ₹130, M ₹170.
+- "Pizza | S 130 | M 170" -> Variants: Small ₹130, Medium ₹170.
+- "Pizza 130, 170, 210" -> If context suggests sizes, use Variant 1 ₹130, Variant 2 ₹170, Variant 3 ₹210 (or contextual sizes based on headers).
+- Table format (Margherita 130 170 under Small Medium headers) -> Variants mapped to sizes based on headers.
+- "Burger ₹199/-" -> Base price 199, variants: [].
+- "Chicken 250g ₹180 500g ₹320" -> Variants: 250g ₹180, 500g ₹320.
+- "Cold Drink 250ml ₹40 500ml ₹60" -> Variants: 250ml ₹40, 500ml ₹60.
+- "Samosa 1 Pc ₹20 Plate ₹80" -> Variants: 1 Pc ₹20, Plate ₹80 (Do not assume Small/Large).
+- "Pizza Size: Small 150 Large 250 Crust: Regular 0 Cheese Burst 80" -> Separate variant groups for Size and Crust.
+- "Masala Dosa ₹120" -> Base price 120, variants: [].
+
 Strictly follow these rules:
 1. Return ONLY the raw JSON object. Do not add any conversational text. The JSON MUST NOT contain literal newlines inside string values. Please do not pretty-print.
 2. Group items under correct logical categories.
@@ -138,7 +158,7 @@ Strictly follow these rules:
 4. Ensure the output is valid JSON. VERY IMPORTANT: You MUST properly escape any double quotes inside string values using a backslash (e.g., "name": "10\\" Pizza") to prevent JSON parsing errors. Never use literal newlines inside strings.
 ${languageRule}
 6. EXTREME IMPORTANCE: DO NOT SKIP ANY ITEMS. YOU MUST EXTRACT EVERY SINGLE ROW, NO MATTER HOW LONG THE DOCUMENT IS. NEVER TRUNCATE OR USE ELLIPSES (...). EXTRACT 100% OF THE ITEMS.
-`;
+\`;
 
         const searchParams = req.nextUrl.searchParams;
         const parseOnly = searchParams.get("parseOnly") === "true";

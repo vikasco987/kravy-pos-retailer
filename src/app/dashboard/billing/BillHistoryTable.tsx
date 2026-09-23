@@ -385,7 +385,6 @@ export default function BillHistoryTable({ bills, business, userRole, userPermis
             {visibleCols.timeline && <Th label="Date & Time" width="160px" />}
             {visibleCols.billInfo && <Th label="Bill Info" width="140px" />}
             {visibleCols.source && <Th label="Type" width="110px" />}
-            {visibleCols.source && <Th label="Source" width="110px" />}
             {visibleCols.items && <Th label="Items" width="100px" />}
             {visibleCols.customer && <Th label="Customer" width="150px" />}
             {visibleCols.customerPhone && <Th label="Phone" width="110px" />}
@@ -430,29 +429,6 @@ export default function BillHistoryTable({ bills, business, userRole, userPermis
                     </td>
                   )}
                   {visibleCols.source && <td><TypeBadge type={bill.tableName || "POS"} /></td>}
-                  {visibleCols.source && (
-                    <td>
-                      <span style={{ 
-                        padding: "4px 8px", borderRadius: "6px", 
-                        background: (bill.tableName || "POS") === "POS" ? "rgba(99, 102, 241, 0.1)" : "rgba(245, 158, 11, 0.1)", 
-                        color: (bill.tableName || "POS") === "POS" ? "#6366F1" : "#D97706", 
-                        fontSize: "0.65rem", fontWeight: 900, textTransform: "uppercase", border: "1px solid currentColor"
-                      }}>
-                        {(bill.tableName || "POS") === "POS" ? "Counter" : bill.tableName}
-                      </span>
-                      {bill.zoneName && (
-                        <span style={{ 
-                          marginLeft: "6px",
-                          padding: "4px 8px", borderRadius: "6px", 
-                          background: "rgba(168, 85, 247, 0.1)", 
-                          color: "#A855F7", 
-                          fontSize: "0.6rem", fontWeight: 900, textTransform: "uppercase", border: "1px solid currentColor"
-                        }}>
-                          {bill.zoneName}
-                        </span>
-                      )}
-                    </td>
-                  )}
                   {visibleCols.items && (
                     <td>
                       <button onClick={async () => toggleRow(bill.id)} style={{ padding: "6px 12px", borderRadius: "10px", background: "#EEF2FF", color: "#6366F1", fontSize: "0.7rem", fontWeight: 900, border: "1px solid #E0E7FF", cursor: "pointer", transition: "all 0.2s" }}>

@@ -770,8 +770,23 @@ export default function AutoApplyClient() {
                                     <p className="text-xs font-bold text-gray-900 dark:text-white truncate" title={item.name}>{item.name || 'Unnamed Item'}</p>
                                     <div className="flex justify-between items-center mt-1">
                                         <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium truncate max-w-[80px]">{item.category || 'Uncategorized'}</p>
-                                        <p className="text-[11px] text-orange-500 font-bold">₹{item.price || '0'}</p>
+                                        <p className="text-[11px] text-orange-500 font-bold">
+                                            {item.variants && item.variants.length > 0 ? `Starts at ₹${item.price || '0'}` : `₹${item.price || '0'}`}
+                                        </p>
                                     </div>
+                                    
+                                    {item.variants && item.variants.length > 0 && (
+                                        <div className="mt-1.5 flex flex-wrap gap-1">
+                                            {item.variants.flatMap((v: any) => {
+                                                const opts = (v.options && Array.isArray(v.options)) ? v.options : (v.name && v.price !== undefined ? [v] : []);
+                                                return opts;
+                                            }).map((opt: any, idx: number) => (
+                                                <span key={opt.id ?? opt.name ?? idx} className="rounded-md bg-purple-50 px-1.5 py-0.5 text-[9px] font-bold text-purple-700 border border-purple-200">
+                                                    {opt.name}{opt.price != null && ` · ₹${opt.price}`}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="flex-1 bg-gray-100 dark:bg-black/40 flex items-center justify-center relative overflow-hidden">
                                     {item.img_status === 'waiting' && (

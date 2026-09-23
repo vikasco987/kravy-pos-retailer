@@ -43,16 +43,10 @@ export async function POST(req: Request) {
             console.log(`[RESERVE_TOKEN_PERF] 2. Business profile findUnique lookup: ${Date.now() - tProfileStart}ms`);
         }
 
-        const today = new Date().toISOString().split('T')[0];
-        let updateData: any = {};
-
-        if (lastTokenDateStr === today) {
-            updateData.lastTokenNumber = { increment: 1 };
-            updateData.lastTokenDate = new Date();
-        } else {
-            updateData.lastTokenNumber = 1;
-            updateData.lastTokenDate = new Date();
-        }
+        const updateData: any = {
+            lastTokenNumber: { increment: 1 },
+            lastTokenDate: new Date()
+        };
 
         const tUpdateStart = Date.now();
         const updatedProfile = await prisma.businessProfile.update({
