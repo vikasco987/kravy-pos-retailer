@@ -76,7 +76,10 @@ export async function POST(req: NextRequest) {
         if (languagePref === "dual") {
             languageRule = `5. ENGLISH & NATIVE BILINGUAL NAMES: The menu items must be outputted with their English name followed immediately by the native/regional script name (e.g. Hindi, Marathi, Gujarati, Tamil, etc., whichever is present in the document), separated by a single space. DO NOT USE BRACKETS for the native name! Brackets break the thermal printer. Example: 'Masala Sandwich मसाला सैंडविच' or 'Misal Pav मिसळ पाव'. DO NOT output 'Misal Pav (मिसळ पाव)'. Ensure the spelling is accurate in both languages.`;
         } else if (languagePref === "arabic") {
-            languageRule = `5. ENGLISH & ARABIAN BILINGUAL NAMES: The menu items must be outputted with their English name followed immediately by the Arabic script name, separated by a single space. DO NOT USE BRACKETS for the Arabic name! Brackets break the thermal printer. Example: 'Chicken Mandi مندي دجاج' or 'Hummus حمص'. DO NOT output 'Hummus         const prompt = `
+            languageRule = `5. ENGLISH & ARABIAN BILINGUAL NAMES: The menu items must be outputted with their English name followed immediately by the Arabic script name, separated by a single space. DO NOT USE BRACKETS for the Arabic name! Brackets break the thermal printer. Example: 'Chicken Mandi مندي دجاج' or 'Hummus حمص'. DO NOT output 'Hummus (حمص)'. Ensure the spelling is accurate in both languages.`;
+        }
+
+        const prompt = `
 You are a highly advanced AI system designed to digitize menus and product catalogs from images, PDFs, and parsed spreadsheet data with elite precision.
 Your job is to read this document and extract EVERY single item with 100% precision.
 
