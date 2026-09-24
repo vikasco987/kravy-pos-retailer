@@ -288,6 +288,8 @@ export async function POST(request: Request) {
     if (body.posCashEnabled !== undefined) updateData.posCashEnabled = b(body.posCashEnabled);
     if (body.posUpiEnabled !== undefined) updateData.posUpiEnabled = b(body.posUpiEnabled);
     if (body.posCardEnabled !== undefined) updateData.posCardEnabled = b(body.posCardEnabled);
+    if (body.posCounterEnabled !== undefined) updateData.posCounterEnabled = b(body.posCounterEnabled);
+    if (body.posWalletEnabled !== undefined) updateData.posWalletEnabled = b(body.posWalletEnabled);
 
     // ✅ SaaS Subscription & Premium Popups
     if (body.isPremium !== undefined) updateData.isPremium = b(body.isPremium);
