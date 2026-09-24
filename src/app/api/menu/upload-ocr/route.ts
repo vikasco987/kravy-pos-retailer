@@ -161,7 +161,7 @@ Strictly follow these rules:
 4. Ensure the output is valid JSON. VERY IMPORTANT: You MUST properly escape any double quotes inside string values using a backslash (e.g., "name": "10\\" Pizza") to prevent JSON parsing errors. Never use literal newlines inside strings.
 ${languageRule}
 6. EXTREME IMPORTANCE: DO NOT SKIP ANY ITEMS. YOU MUST EXTRACT EVERY SINGLE ROW, NO MATTER HOW LONG THE DOCUMENT IS. NEVER TRUNCATE OR USE ELLIPSES (...). EXTRACT 100% OF THE ITEMS.
-\`;
+`;
 
         const searchParams = req.nextUrl.searchParams;
         const parseOnly = searchParams.get("parseOnly") === "true";
