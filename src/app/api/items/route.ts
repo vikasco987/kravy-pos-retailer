@@ -354,39 +354,24 @@ export async function POST(req: Request) {
     let sellingPrice = body.sellingPrice != null ? Number(body.sellingPrice) : (body.price != null ? Number(body.price) : 0);
 
     if (businessProfile?.enableSerialNumber) {
-      // 1. Determine the base number (from recycled pool or counter)
-      let baseNumber = 100;
-      let isRecycled = false;
+      // 1. Atomically increment the counter to ensure concurrency safety
+      const updatedProfile = await prisma.businessProfile.update({
+        where: { id: businessProfile.id },
+        data: {
+          serialCounter: { increment: 1 }
+        },
+        select: { serialCounter: true }
+      });
+      
+      // Since we just incremented, the assigned base number is the previous value.
+      // Default in DB is 100. First increment makes it 101, so baseNumber = 100.
+      let baseNumber = updatedProfile.serialCounter - 1;
 
-      if (businessProfile.recycledCounters && businessProfile.recycledCounters.length > 0) {
-        // Take the first available recycled number
-        baseNumber = businessProfile.recycledCounters[0];
-        isRecycled = true;
-      } else {
-        baseNumber = businessProfile.serialCounter || 100;
-      }
-
-      // 2. Format the code: Purely sequential base number
-      inventoryCode = baseNumber.toString();
-
-      // 3. Update the business profile (increment counter or remove from recycled)
-      if (isRecycled) {
-        await prisma.businessProfile.update({
-          where: { id: businessProfile.id },
-          data: {
-            recycledCounters: {
-              set: businessProfile.recycledCounters.slice(1) // Remove the first one
-            }
-          }
-        });
-      } else {
-        await prisma.businessProfile.update({
-          where: { id: businessProfile.id },
-          data: {
-            serialCounter: baseNumber + 1
-          }
-        });
-      }
+      // 2. Format the code: [First 2 digits of base] + [Selling Price] + [Remaining digits of base]
+      const baseStr = baseNumber.toString();
+      const prefix = baseStr.substring(0, 2);
+      const suffix = baseStr.substring(2);
+      inventoryCode = `${prefix}${sellingPrice}${suffix}`;
     } else {
       // Fallback: Generate a system unique ID if setting is OFF
       const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -516,44 +501,7 @@ export async function PUT(req: Request) {
 
     let inventoryCodeToSet: string | null | undefined = undefined;
 
-    // ✅ Recycle inventory code if stock becomes 0
-    if (body.currentStock !== undefined && Number(body.currentStock) === 0 && existing.inventoryCode) {
-      const code = existing.inventoryCode;
-      const sp = existing.sellingPrice?.toString() || "";
-      
-      const prefix = code.substring(0, 2);
-      const remaining = code.substring(2);
-      
-      let baseCounter: number | null = null;
-      
-      if (remaining.startsWith(sp)) {
-        const suffix = remaining.substring(sp.length);
-        const reconstructedBase = parseInt(prefix + suffix, 10);
-        if (!isNaN(reconstructedBase)) {
-          baseCounter = reconstructedBase;
-        }
-      }
-
-      if (baseCounter !== null) {
-        const dbUser = await findOrCreateDBUser(effectiveId);
-        const bp = await prisma.businessProfile.findFirst({
-          where: { userId: dbUser.clerkId || dbUser.id }
-        });
-        
-        if (bp && bp.enableSerialNumber) {
-          await prisma.businessProfile.update({
-            where: { id: bp.id },
-            data: {
-              recycledCounters: {
-                push: baseCounter
-              }
-            }
-          });
-          // Free the inventory code on the item
-          inventoryCodeToSet = null;
-        }
-      }
-    }
+    // We no longer recycle inventory codes when stock is 0.
 
     const updated = await prisma.item.update({
       where: { id },
@@ -691,44 +639,7 @@ export async function DELETE(req: Request) {
       );
     }
 
-    // ✅ Recycle the base counter if inventoryCode exists
-    if (existing.inventoryCode) {
-      const code = existing.inventoryCode;
-      const sp = existing.sellingPrice?.toString() || "";
-      
-      // Code format: [Prefix: 2 chars] + [SellingPrice] + [Suffix]
-      const prefix = code.substring(0, 2);
-      const remaining = code.substring(2);
-      
-      let baseCounter: number | null = null;
-      
-      if (remaining.startsWith(sp)) {
-        const suffix = remaining.substring(sp.length);
-        const reconstructedBase = parseInt(prefix + suffix, 10);
-        if (!isNaN(reconstructedBase)) {
-          baseCounter = reconstructedBase;
-        }
-      }
-
-      if (baseCounter !== null) {
-        // Push to recycledCounters in BusinessProfile
-        const dbUser = await findOrCreateDBUser(effectiveId);
-        const bp = await prisma.businessProfile.findFirst({
-          where: { userId: dbUser.clerkId || dbUser.id }
-        });
-        
-        if (bp) {
-          await prisma.businessProfile.update({
-            where: { id: bp.id },
-            data: {
-              recycledCounters: {
-                push: baseCounter
-              }
-            }
-          });
-        }
-      }
-    }
+    // We no longer recycle base counters when an item is deleted.
 
     await prisma.item.delete({ where: { id } });
 
