@@ -413,7 +413,7 @@ export async function POST(req: Request) {
         taxStatus: body.taxStatus || "Without Tax",
         gst: body.gst !== undefined && body.gst !== null ? Number(body.gst) : null,
         openingStock: body.openingStock != null ? Number(body.openingStock) : 0,
-        currentStock: body.currentStock != null ? Number(body.currentStock) : 0,
+        currentStock: body.currentStock != null ? Number(body.currentStock) : (body.openingStock != null ? Number(body.openingStock) : 0),
         reorderLevel: body.reorderLevel != null ? Number(body.reorderLevel) : 0,
         variants: body.variants ? body.variants : undefined,
         addonGroupIds: body.addonGroupIds || [],

@@ -147,19 +147,24 @@ export default function BackupPage() {
           )}
           <button
             onClick={async () => {
-              const res = await fetch("/api/bill-manager/export"); // Reusing bills export for now as primary data
-              if (res.ok) {
-                const blob = await res.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                const exportDate = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
-                a.download = `Kravy_Full_Data_Export_${exportDate}.xlsx`;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-              } else {
-                alert("Export failed");
+              try {
+                // Update button state (you might want to add loading state)
+                const res = await fetch("/api/admin/backups/export-live-all"); 
+                if (res.ok) {
+                  const blob = await res.blob();
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  const exportDate = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
+                  a.download = `Kravy_Full_Data_Export_${exportDate}.xlsx`;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                } else {
+                  alert("Export failed: " + await res.text());
+                }
+              } catch (e) {
+                alert("Error during export: " + e);
               }
             }}
             style={{
@@ -179,7 +184,7 @@ export default function BackupPage() {
               letterSpacing: "1px"
             }}
           >
-            <FileText size={18} /> Export Excel
+            <FileText size={18} /> Export Full DB (Excel)
           </button>
           <button
             onClick={handleCreateBackup}

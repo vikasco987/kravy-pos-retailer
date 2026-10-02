@@ -16,9 +16,9 @@ export default function OrderTypeChart({ data }: Props) {
   const totalAmount = data.DELIVERY.total + data.TAKEAWAY.total + data.DINEIN.total;
   
   const items = [
-    { name: "Delivery", value: data.DELIVERY.total, color: "#3B82F6", percent: totalAmount > 0 ? (data.DELIVERY.total / totalAmount) * 100 : 0 },
-    { name: "Dine-in", value: data.DINEIN.total, color: "#10B981", percent: totalAmount > 0 ? (data.DINEIN.total / totalAmount) * 100 : 0 },
-    { name: "Takeaway", value: data.TAKEAWAY.total, color: "#F59E0B", percent: totalAmount > 0 ? (data.TAKEAWAY.total / totalAmount) * 100 : 0 },
+    { name: "Online Delivery", value: data.DELIVERY.total, color: "#3B82F6", percent: totalAmount > 0 ? (data.DELIVERY.total / totalAmount) * 100 : 0 },
+    { name: "In-Store Walk-in", value: data.DINEIN.total, color: "#10B981", percent: totalAmount > 0 ? (data.DINEIN.total / totalAmount) * 100 : 0 },
+    { name: "Store Pickup", value: data.TAKEAWAY.total, color: "#F59E0B", percent: totalAmount > 0 ? (data.TAKEAWAY.total / totalAmount) * 100 : 0 },
   ].sort((a, b) => b.value - a.value);
 
   const format = (num: number) =>
@@ -38,7 +38,7 @@ export default function OrderTypeChart({ data }: Props) {
       overflow: "hidden"
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-        <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>Order type breakdown</h3>
+        <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>Sales Channel Breakdown</h3>
         <Link 
           href="/dashboard/reports/analytics/order-type" 
           style={{ 
