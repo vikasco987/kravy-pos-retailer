@@ -26,7 +26,10 @@ export function useProfileCache() {
     }
 
     try {
-      activePromise = fetch("/api/profile").then(async (res) => {
+      activePromise = fetch(`/api/profile?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      }).then(async (res) => {
         if (!res.ok) {
           throw new Error(`HTTP Error: ${res.status}`);
         }
