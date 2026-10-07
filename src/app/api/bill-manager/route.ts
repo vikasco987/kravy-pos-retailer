@@ -65,7 +65,16 @@ export async function GET(req: NextRequest) {
       skip,
     });
 
-    return NextResponse.json({ bills, clerkUserId: effectiveId, pagination: { take, skip, page } });
+    const modifiedBills = bills.map((bill) => {
+      const b: any = { ...bill };
+      b.itemsCount = Array.isArray(bill.items) ? bill.items.length : 0;
+      if (isHeld !== "true") {
+        delete b.items; // Reduces payload significantly for history list!
+      }
+      return b;
+    });
+
+    return NextResponse.json({ bills: modifiedBills, clerkUserId: effectiveId, pagination: { take, skip, page } });
   } catch (err) {
     console.error("BILL MANAGER LIST ERROR:", err);
     return NextResponse.json(

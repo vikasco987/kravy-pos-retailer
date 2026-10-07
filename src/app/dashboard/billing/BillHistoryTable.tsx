@@ -272,8 +272,42 @@ const BillActions = ({ bill, refresh, business, userRole, userPermissions, openM
               borderRadius: "18px", padding: "8px", zIndex: 99999, display: "flex", flexDirection: "column", gap: "2px",
               maxHeight: "300px"
             }}>
-              <MenuOption icon={<Eye size={14} color="#3B82F6" />} label="View Details" onClick={async () => { setOpenMenuId(null); setViewBillDetails(bill); }} />
-              <MenuOption icon={<Eye size={14} color="#8B5CF6" />} label="Preview" onClick={async () => { setOpenMenuId(null); setPreviewBill(bill); }} />
+              <MenuOption icon={<Eye size={14} color="#3B82F6" />} label="View Details" onClick={async () => { 
+                setOpenMenuId(null); 
+                const tid = toast.loading("Loading details...");
+                try {
+                  const res = await fetch(`/api/bill-manager/${bill.id}`);
+                  if (res.ok) {
+                    const data = await res.json();
+                    setViewBillDetails(data.bill || data);
+                    toast.dismiss(tid);
+                  } else {
+                    toast.error("Failed to load details", { id: tid });
+                    setViewBillDetails(bill);
+                  }
+                } catch (e) {
+                  toast.error("Error loading details", { id: tid });
+                  setViewBillDetails(bill);
+                }
+              }} />
+              <MenuOption icon={<Eye size={14} color="#8B5CF6" />} label="Preview" onClick={async () => { 
+                setOpenMenuId(null); 
+                const tid = toast.loading("Loading preview...");
+                try {
+                  const res = await fetch(`/api/bill-manager/${bill.id}`);
+                  if (res.ok) {
+                    const data = await res.json();
+                    setPreviewBill(data.bill || data);
+                    toast.dismiss(tid);
+                  } else {
+                    toast.error("Failed to load preview", { id: tid });
+                    setPreviewBill(bill);
+                  }
+                } catch (e) {
+                  toast.error("Error loading preview", { id: tid });
+                  setPreviewBill(bill);
+                }
+              }} />
               <MenuOption icon={<Printer size={14} color="#6B7280" />} label="Reprint Bill" onClick={async () => { setOpenMenuId(null); router.push(`/dashboard/billing/${bill.id}`); }} />
               {canEdit && (
                 <MenuOption icon={<FileText size={14} color="#3B82F6" />} label="Edit Bill" onClick={async () => { setOpenMenuId(null); router.push(`/dashboard/billing/checkout?resumeBillId=${bill.id}`); }} />
@@ -401,7 +435,7 @@ export default function BillHistoryTable({ bills, business, userRole, userPermis
           {bills.map((bill: any, idx: number) => {
             const isExpanded = expandedRows.has(bill.id);
             const dt = new Date(bill.createdAt);
-            const itemsCount = bill.items?.length || 0;
+            const itemsCount = bill.itemsCount !== undefined ? bill.itemsCount : (bill.items?.length || 0);
 
             return (
               <React.Fragment key={bill.id}>
