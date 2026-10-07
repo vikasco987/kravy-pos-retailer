@@ -39,7 +39,8 @@ export default function SubscriptionIndicator({ profile }: { profile: any }) {
 
   // Determine plan name based on total days (roughly)
   let planName = "PREMIUM PLAN";
-  if (totalDays >= 1050) planName = "3 YEAR PLAN";
+  if (totalDays >= 1800) planName = "5 YEAR PLAN";
+  else if (totalDays >= 1050) planName = "3 YEAR PLAN";
   else if (totalDays >= 690) planName = "2 YEAR PLAN";
   else if (totalDays >= 330) planName = "1 YEAR PLAN";
   else if (totalDays >= 170) planName = "6 MONTH PLAN";

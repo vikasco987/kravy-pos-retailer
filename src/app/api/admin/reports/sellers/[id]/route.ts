@@ -99,17 +99,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
-    const existingProfile = await prisma.businessProfile.findFirst({
+    const result = await prisma.businessProfile.updateMany({
       where: { userId: id },
-      orderBy: { createdAt: 'asc' }
+      data: updateData,
     });
 
-    if (existingProfile?.id) {
-      await prisma.businessProfile.update({
-        where: { id: existingProfile.id },
-        data: updateData,
-      });
-    } else {
+    if (result.count === 0) {
       await prisma.businessProfile.create({
         data: {
           userId: id,

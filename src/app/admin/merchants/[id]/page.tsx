@@ -42,6 +42,7 @@ export default function MerchantDetailPage({ params }: { params: Promise<{ id: s
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [showJson, setShowJson] = useState(false);
+  const [showProfileJson, setShowProfileJson] = useState(false);
 
   const [controls, setControls] = useState({
     isPremium: false,
@@ -279,8 +280,44 @@ export default function MerchantDetailPage({ params }: { params: Promise<{ id: s
                     >
                         {updating ? "Saving..." : <><Check size={20} /> Save System Changes</>}
                     </button>
+                    {/* View Profile JSON */}
+                    <button 
+                        onClick={() => setShowProfileJson(!showProfileJson)}
+                        className="p-4 rounded-2xl border border-white/10 bg-indigo-500/10 text-indigo-400 font-black hover:bg-indigo-500/20 transition-all flex items-center justify-center gap-2 shadow-xl shadow-white/5"
+                    >
+                        <Code size={20} /> {showProfileJson ? "Hide JSON" : "View JSON"}
+                    </button>
                 </div>
             </div>
+
+            {/* Profile JSON Inline View */}
+            <AnimatePresence>
+                {showProfileJson && (
+                    <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="mt-6 relative z-10"
+                    >
+                        <div className="p-6 bg-black/60 rounded-2xl border border-white/10 relative">
+                            <button 
+                                onClick={() => {
+                                    if (data?.seller) {
+                                        navigator.clipboard.writeText(JSON.stringify(data.seller, null, 2));
+                                        toast.success("Profile JSON copied!");
+                                    }
+                                }}
+                                className="absolute top-4 right-4 p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-black uppercase tracking-widest"
+                            >
+                                Copy JSON
+                            </button>
+                            <pre className="text-xs font-mono text-indigo-300 overflow-auto max-h-96 custom-scrollbar">
+                                {JSON.stringify(data?.seller, null, 2)}
+                            </pre>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
 
         {/* Charts & Activity */}
