@@ -819,8 +819,48 @@ function Field({ label, children }: any) {
 }
 
 function DragDrop({ id, label, preview, setPreview }: any) {
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      const input = document.getElementById(id) as HTMLInputElement;
+      
+      // Update preview
+      setPreview(URL.createObjectURL(file));
+
+      // Update the hidden input files so that onSubmit can grab it
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      if (input) {
+        input.files = dataTransfer.files;
+      }
+    }
+  };
+
   return (
-    <label className="group border-2 border-dashed border-[var(--kravy-border)] rounded-2xl p-6 text-center cursor-pointer hover:bg-[var(--kravy-surface-hover)] hover:border-indigo-500/50 transition-all">
+    <label 
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`relative group border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
+        isDragging 
+          ? "bg-indigo-500/10 border-indigo-500" 
+          : "border-[var(--kravy-border)] hover:bg-[var(--kravy-surface-hover)] hover:border-indigo-500/50"
+      }`}
+    >
       <input
         id={id}
         type="file"
@@ -833,6 +873,14 @@ function DragDrop({ id, label, preview, setPreview }: any) {
           )
         }
       />
+      
+      {/* Overlay for Drag State */}
+      {isDragging && (
+        <div className="absolute inset-0 bg-indigo-500/20 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl pointer-events-none border-2 border-indigo-500">
+          <p className="text-indigo-600 dark:text-indigo-400 font-bold text-lg animate-pulse">Drop file here</p>
+        </div>
+      )}
+
       {preview ? (
         <div className="relative group">
           <img src={preview} className="h-32 mx-auto rounded-xl object-cover shadow-lg border border-[var(--kravy-border)]" />
@@ -846,7 +894,7 @@ function DragDrop({ id, label, preview, setPreview }: any) {
             <Plus className="text-[var(--kravy-brand)]" size={24} />
           </div>
           <p className="text-sm font-bold text-[var(--kravy-text-primary)]">Upload {label}</p>
-          <p className="text-xs text-[var(--kravy-text-muted)] mt-1">PNG, JPG up to 5MB</p>
+          <p className="text-xs text-[var(--kravy-text-muted)] mt-1">Drag & drop or click to upload (PNG, JPG max 5MB)</p>
         </div>
       )}
     </label>
