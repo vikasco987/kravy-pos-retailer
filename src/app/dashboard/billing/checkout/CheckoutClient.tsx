@@ -212,9 +212,6 @@ const MenuItemCard = React.memo(({ m, items, addToCart, reduceFromCart, expiryTr
       </div>
 
       <div className="p-2.5 md:p-3 flex flex-col gap-1.5 flex-shrink-0">
-        <div className={`w-[14px] h-[14px] border-[1.5px] rounded-sm flex items-center justify-center ${m.isVeg && !m.name.includes("(NV)") && !m.name.toLowerCase().includes("egg") ? "border-green-600" : (m.isEgg || m.name.toLowerCase().includes("egg") || m.name.includes("(E)")) ? "border-amber-500" : "border-red-600"}`}>
-            <div className={`w-[6px] h-[6px] rounded-full ${m.isVeg && !m.name.includes("(NV)") && !m.name.toLowerCase().includes("egg") ? "bg-green-600" : (m.isEgg || m.name.toLowerCase().includes("egg") || m.name.includes("(E)")) ? "bg-amber-500" : "bg-red-600"}`} />
-        </div>
         <p className={`text-[11px] md:text-xs font-bold leading-snug line-clamp-2 transition-colors
           ${totalQtyInCart > 0 ? "text-[var(--kravy-brand)]" : "text-[var(--kravy-text-primary)] group-hover:text-[var(--kravy-brand)]"}`}>
           {m.name.replace(/\s?\((V|NV|R)\)/gi, "").trim()}
@@ -2898,7 +2895,7 @@ export default function CheckoutClient() {
                     )}
                   </div>
                 )}
-                {business && (
+                {business && business.posKotEnabled !== false && (
                   <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-lg shrink-0">
                     <Layers size={12} className="text-indigo-500" />
                     <span className="text-[10px] font-black text-indigo-700 uppercase tracking-tighter whitespace-nowrap">Tokens: {business.lastTokenNumber || 0}</span>
