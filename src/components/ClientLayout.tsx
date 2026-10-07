@@ -52,7 +52,10 @@ export default function ClientLayout({
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const res = await fetch("/api/profile");
+        const res = await fetch(`/api/profile?_t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' }
+        });
         if (res.ok) {
           const data = await res.json();
           setProfile(data);

@@ -532,7 +532,7 @@ export default function Sidebar({ profile }: { profile?: any }) {
     setMounted(true);
 
     // Fetch profile to check tax status & hidden sidebar items
-    fetch("/api/profile")
+    fetch(`/api/profile?_t=${Date.now()}`, { cache: 'no-store' })
       .then(res => res.json())
       .then(data => {
         if (data) {
