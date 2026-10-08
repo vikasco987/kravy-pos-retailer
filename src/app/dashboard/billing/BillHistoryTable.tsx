@@ -432,7 +432,13 @@ export default function BillHistoryTable({ bills, business, userRole, userPermis
           </tr>
         </thead>
         <tbody>
-          {bills.map((bill: any, idx: number) => {
+          {bills.map((rawBill: any, idx: number) => {
+            const bill = { ...rawBill };
+            if (typeof bill.items === 'string') {
+              try { bill.items = JSON.parse(bill.items); } catch(e) { bill.items = []; }
+            }
+            if (!Array.isArray(bill.items)) bill.items = [];
+            
             const isExpanded = expandedRows.has(bill.id);
             const dt = new Date(bill.createdAt);
             const itemsCount = bill.itemsCount !== undefined ? bill.itemsCount : (bill.items?.length || 0);
@@ -634,8 +640,14 @@ const numberToWords = (num: number): string => {
   return result + ' Only';
 };
 
-const BillPreviewModal = ({ bill, business, onClose }: { bill: any, business: any, onClose: () => void }) => {
-  if (!bill) return null;
+const BillPreviewModal = ({ bill: initialBill, business, onClose }: { bill: any, business: any, onClose: () => void }) => {
+  const [showJson, setShowJson] = useState(false);
+  if (!initialBill) return null;
+  const bill = { ...initialBill };
+  if (typeof bill.items === 'string') {
+    try { bill.items = JSON.parse(bill.items); } catch(e) { bill.items = []; }
+  }
+  if (!Array.isArray(bill.items)) bill.items = [];
 
   const dt = new Date(bill.createdAt);
   const dateStr = dt.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -726,9 +738,8 @@ const BillPreviewModal = ({ bill, business, onClose }: { bill: any, business: an
   };
 
   const handlePrintPdf = async () => {
-    const origin = window.location.origin;
-    const pdfUrl = `${origin}/api/bill-manager/${bill.id}/pdf${bill.clerkUserId ? `?clerkId=${bill.clerkUserId}` : ""}`;
-    window.open(pdfUrl, "_blank");
+    // Redirect to standalone view for direct thermal printing
+    window.location.href = `/dashboard/billing/${bill.id}`;
   };
 
   return createPortal(
@@ -741,14 +752,25 @@ const BillPreviewModal = ({ bill, business, onClose }: { bill: any, business: an
              <div style={{ fontSize: "1.15rem", fontWeight: 950, color: "#0F172A" }}>Bill Preview</div>
              <div style={{ fontSize: "0.65rem", fontWeight: 800, color: "#64748B", textTransform: "uppercase", letterSpacing: "1px" }}>Check Before Printing</div>
            </div>
-           <button onClick={onClose} style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#FEE2E2", color: "#EF4444", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-             <X size={18} />
-           </button>
+           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+             <button onClick={() => setShowJson(!showJson)} style={{ padding: "6px 12px", borderRadius: "8px", background: showJson ? "#6366F1" : "#EEF2FF", color: showJson ? "white" : "#6366F1", border: "none", fontSize: "0.75rem", fontWeight: 800, cursor: "pointer", transition: "all 0.2s" }}>
+               {showJson ? "Hide JSON" : "Show JSON"}
+             </button>
+             <button onClick={onClose} style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#FEE2E2", color: "#EF4444", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+               <X size={18} />
+             </button>
+           </div>
         </div>
 
         {/* Scrollable Body */}
         <div style={{ padding: "32px 24px 64px 24px", overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", background: "#E2E8F0", flex: 1 }}>
            
+           {showJson ? (
+             <div style={{ width: "100%", maxWidth: "460px", background: "#0F172A", padding: "16px", borderRadius: "12px", color: "#38BDF8", fontFamily: "monospace", fontSize: "0.75rem", overflowX: "auto", position: "relative" }}>
+               <button onClick={() => { navigator.clipboard.writeText(JSON.stringify(initialBill, null, 2)); toast.success("JSON copied to clipboard!"); }} style={{ position: "absolute", top: "12px", right: "12px", padding: "6px 10px", background: "#1E293B", color: "white", borderRadius: "6px", border: "none", fontSize: "0.65rem", cursor: "pointer", fontWeight: "bold", zIndex: 10 }}>Copy</button>
+               <pre style={{ margin: 0, paddingBottom: "20px" }}>{JSON.stringify(initialBill, null, 2)}</pre>
+             </div>
+           ) : (
            {/* Exact Receipt Paper Match */}
            <div style={{ background: "white", width: "100%", maxWidth: "340px", padding: "24px", boxShadow: "0 10px 25px rgba(0,0,0,0.05)", fontFamily: "var(--font-inter), sans-serif", color: "black", flexShrink: 0 }}>
               
@@ -793,10 +815,17 @@ const BillPreviewModal = ({ bill, business, onClose }: { bill: any, business: an
 
               {/* Items List */}
               <div style={{ marginBottom: "12px" }}>
-                 {bill.items?.map((it: any, i: number) => {
-                   const q = Number(it.qty || it.quantity || 0);
-                   const r = Number(it.rate || it.price || 0);
-                   let itemGst = perProductEnabled && it.gst !== undefined && it.gst !== null ? it.gst : (taxActive ? globalRate : 0);
+                 {(() => {
+                   let parsedItems = bill.items;
+                   if (typeof parsedItems === 'string') {
+                     try { parsedItems = JSON.parse(parsedItems); } catch(e) { parsedItems = []; }
+                   }
+                   if (!Array.isArray(parsedItems)) parsedItems = [];
+                   
+                   return parsedItems.map((it: any, i: number) => {
+                     const q = Number(it.qty || it.quantity || 0);
+                     const r = Number(it.rate || it.price || 0);
+                     let itemGst = perProductEnabled && it.gst !== undefined && it.gst !== null ? it.gst : (taxActive ? globalRate : 0);
                    
                    // Fallback visual fix for historical items
                    if (itemGst === 0 && bill.tax > 0) {
@@ -815,7 +844,7 @@ const BillPreviewModal = ({ bill, business, onClose }: { bill: any, business: an
                         </div>
                      </div>
                    );
-                 })}
+                 }); })()}
               </div>
 
               <div style={{ borderTop: "2px dashed black", margin: "12px 0 8px 0" }} />
@@ -963,13 +992,14 @@ const BillPreviewModal = ({ bill, business, onClose }: { bill: any, business: an
                  </div>
               </div>
            </div>
+           )}
         </div>
 
         {/* Footer Actions */}
-        <div style={{ padding: "16px 24px", background: "white", borderTop: "1px solid #E2E8F0", display: "flex", flexDirection: "column", gap: "10px" }}>
-           <button onClick={onClose} style={{ width: "100%", padding: "12px", borderRadius: "12px", border: "1px solid #E2E8F0", background: "white", fontWeight: 800, color: "#475569", cursor: "pointer", fontSize: "0.95rem", transition: "0.2s" }} className="hover:bg-slate-50">Close</button>
-           <button onClick={handlePrintPdf} style={{ width: "100%", padding: "12px", borderRadius: "12px", border: "1px solid #F97316", background: "white", fontWeight: 800, color: "#EA580C", cursor: "pointer", fontSize: "0.95rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", transition: "0.2s" }} className="hover:bg-orange-50"><Printer size={18} /> Print PDF / Direct</button>
-           <button onClick={handleWhatsApp} style={{ width: "100%", padding: "12px", borderRadius: "12px", border: "none", background: "#10B981", fontWeight: 800, color: "white", cursor: "pointer", fontSize: "0.95rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", transition: "0.2s" }} className="hover:bg-emerald-400"><Smartphone size={18} /> WhatsApp</button>
+        <div style={{ padding: "16px 24px", background: "white", borderTop: "1px solid #E2E8F0", display: "flex", gap: "12px" }}>
+           <button onClick={onClose} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid #E2E8F0", background: "white", fontWeight: 800, color: "#475569", cursor: "pointer", fontSize: "0.85rem", transition: "0.2s" }} className="hover:bg-slate-50 hover:text-red-500 hover:border-red-200">Close</button>
+           <button onClick={handlePrintPdf} style={{ flex: 1.5, padding: "10px", borderRadius: "10px", border: "1px solid #F97316", background: "#FFF7ED", fontWeight: 800, color: "#EA580C", cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", transition: "0.2s" }} className="hover:bg-orange-100 hover:border-orange-500"><Printer size={16} /> Print</button>
+           <button onClick={handleWhatsApp} style={{ flex: 1.5, padding: "10px", borderRadius: "10px", border: "none", background: "#10B981", fontWeight: 800, color: "white", cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", transition: "0.2s", boxShadow: "0 4px 12px rgba(16, 185, 129, 0.2)" }} className="hover:bg-emerald-500"><Smartphone size={16} /> WhatsApp</button>
         </div>
       </div>
     </div>,
