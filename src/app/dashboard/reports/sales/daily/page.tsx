@@ -1,3 +1,4 @@
+import { getServerCurrency } from '@/lib/server-currency';
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveClerkId } from "@/lib/auth-utils";
@@ -9,6 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { BillActionsReport } from "./BillActionsReport";
+import CopyJsonButton from "./CopyJsonButton";
 
 export const revalidate = 0;
 
@@ -83,14 +85,14 @@ const ChartBar = ({ label, height, isPeak }: any) => (
   </div>
 );
 
-const BreakdownRow = ({ dotColor, label, count, revenue }: any) => (
+const BreakdownRow = ({ dotColor, label, count, revenue, sym }: any) => (
   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0" }}>
     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
       <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: dotColor }} />
       <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--kravy-text-primary)" }}>{label}</span>
     </div>
     <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>
-      {count} orders — <span style={{ color: "var(--kravy-text-muted)" }}>₹{new Intl.NumberFormat("en-IN").format(Math.round(revenue))}</span>
+      {count} orders — <span style={{ color: "var(--kravy-text-muted)" }}>{sym}{new Intl.NumberFormat("en-IN").format(Math.round(revenue))}</span>
     </div>
   </div>
 );
@@ -118,6 +120,7 @@ export default async function DailySalesReportPage({
   }>;
 }) {
   const effectiveId = await getEffectiveClerkId();
+  const { sym } = await getServerCurrency();
   if (!effectiveId) redirect("/auth/custom");
 
   const params = await searchParams;
@@ -144,6 +147,7 @@ export default async function DailySalesReportPage({
   const whereClause: any = {
     clerkUserId: effectiveId,
     isDeleted: false,
+    isHeld: false,
     createdAt: { gte: startRange, lte: endRange }
   };
 
@@ -185,7 +189,7 @@ export default async function DailySalesReportPage({
   const prevEnd = new Date(startRange.getTime() - 1);
   
   const prevBills = await prisma.billManager.findMany({
-    where: { clerkUserId: effectiveId, isDeleted: false, createdAt: { gte: prevStart, lte: prevEnd } },
+    where: { clerkUserId: effectiveId, isDeleted: false, isHeld: false, createdAt: { gte: prevStart, lte: prevEnd } },
     select: { total: true }
   });
 
@@ -229,7 +233,7 @@ export default async function DailySalesReportPage({
   // Analytics mapping
   const hourCounts = Array(24).fill(0);
   const itemMap: Record<string, { qty: number, revenue: number }> = {};
-  const types = { DELIVERY: { c: 0, r: 0 }, DINEIN: { c: 0, r: 0 }, TAKEAWAY: { c: 0, r: 0 } };
+  const types = { DELIVERY: { c: 0, r: 0 }, DINEIN: { c: 0, r: 0 }, TAKEAWAY: { c: 0, r: 0 }, COUNTER: { c: 0, r: 0 } };
   const payments = { CASH: { c: 0, r: 0 }, UPI: { c: 0, r: 0 } };
 
   bills.forEach(b => {
@@ -254,6 +258,7 @@ export default async function DailySalesReportPage({
     const t = (b.tableName || "POS").toUpperCase();
     if (t.includes("DELIVERY")) { types.DELIVERY.c++; types.DELIVERY.r += b.total; }
     else if (t.includes("TAKEAWAY")) { types.TAKEAWAY.c++; types.TAKEAWAY.r += b.total; }
+    else if (t.includes("POS") || t.includes("COUNTER")) { types.COUNTER.c++; types.COUNTER.r += b.total; }
     else { types.DINEIN.c++; types.DINEIN.r += b.total; }
 
     // Payment
@@ -288,10 +293,10 @@ export default async function DailySalesReportPage({
 
       {/* --- Stats Cards --- */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "20px" }}>
-        <StatsCard label="Net revenue (Combined)" value={`₹${format(totalRevenue)}`} badge={`${growth >= 0 ? "+" : ""}${Math.abs(growth).toFixed(0)}%`} subtext="vs prev period" />
+        <StatsCard label="Net revenue (Combined)" value={`${sym}${format(totalRevenue)}`} badge={`${growth >= 0 ? "+" : ""}${Math.abs(growth).toFixed(0)}%`} subtext="vs prev period" />
         <StatsCard label="Total orders" value={combinedOrdersCount} badge={`${combinedOrdersCount >= prevOrdersCount ? "+" : ""}${combinedOrdersCount - prevOrdersCount}`} subtext="vs prev period" />
-        <StatsCard label="Avg order value" value={`₹${format(avgOrder)}`} badge="+3%" subtext="this week" />
-        <StatsCard label="Total tax collected" value={`₹${format(totalTax)}`} subtext="GST 5% + 18%" />
+        <StatsCard label="Avg order value" value={`${sym}${format(avgOrder)}`} badge="+3%" subtext="this week" />
+        <StatsCard label="Total tax collected" value={`${sym}${format(totalTax)}`} subtext="GST 5% + 18%" />
       </div>
 
       {/* --- Analytics Row --- */}
@@ -306,12 +311,17 @@ export default async function DailySalesReportPage({
         </div>
         <div style={{ background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "32px", padding: "32px" }}>
           <h3 style={{ fontSize: "1.1rem", fontWeight: 800, marginBottom: "24px", color: "var(--kravy-text-primary)" }}>Summary breakdowns</h3>
-          <BreakdownRow dotColor="#3B82F6" label="Counter Delivery" count={types.DELIVERY.c} revenue={types.DELIVERY.r} />
-          <BreakdownRow dotColor="#10B981" label="Dine-in" count={types.DINEIN.c} revenue={types.DINEIN.r} />
-          <BreakdownRow dotColor="#F59E0B" label="Takeaway" count={types.TAKEAWAY.c} revenue={types.TAKEAWAY.r} />
-
-          <BreakdownRow dotColor="#10B981" label="Cash Payments" count={payments.CASH.c} revenue={payments.CASH.r} />
-          <BreakdownRow dotColor="#8B5CF6" label="UPI Payments" count={payments.UPI.c} revenue={payments.UPI.r} />
+          <BreakdownRow sym={sym} dotColor="#3B82F6" label="Counter / POS" count={types.COUNTER.c} revenue={types.COUNTER.r} />
+          <BreakdownRow sym={sym} dotColor="#10B981" label="Dine-in" count={types.DINEIN.c} revenue={types.DINEIN.r} />
+          <BreakdownRow sym={sym} dotColor="#F59E0B" label="Takeaway" count={types.TAKEAWAY.c} revenue={types.TAKEAWAY.r} />
+          <BreakdownRow sym={sym} dotColor="#EF4444" label="Home Delivery" count={types.DELIVERY.c} revenue={types.DELIVERY.r} />
+          <div style={{ height: "1px", background: "var(--kravy-border)", margin: "16px 0" }} />
+          <h4 style={{ fontSize: "0.8rem", fontWeight: 800, marginBottom: "12px", color: "#FF6B35", textTransform: "uppercase", letterSpacing: "0.5px" }}>External Platforms (Gmail Synced)</h4>
+          <BreakdownRow sym={sym} dotColor="#EA4335" label="Zomato" count={zomatoOrders} revenue={zomatoRevenue} />
+          <BreakdownRow sym={sym} dotColor="#FC8019" label="Swiggy" count={swiggyOrders} revenue={swiggyRevenue} />
+          <div style={{ height: "1px", background: "var(--kravy-border)", margin: "16px 0" }} />
+          <BreakdownRow sym={sym} dotColor="#10B981" label="Cash Payments" count={payments.CASH.c} revenue={payments.CASH.r} />
+          <BreakdownRow sym={sym} dotColor="#8B5CF6" label="UPI Payments" count={payments.UPI.c} revenue={payments.UPI.r} />
         </div>
       </div>
       {/* --- Top Selling Items --- */}
@@ -322,7 +332,7 @@ export default async function DailySalesReportPage({
             <div key={name} style={{ padding: "16px", background: "var(--kravy-bg-2)", borderRadius: "12px", border: `1px solid var(--kravy-border)`, boxShadow: "var(--kravy-card-shadow)" }}>
               <div style={{ fontWeight: 900, color: "var(--kravy-text-primary)", fontSize: "0.95rem" }}>{name}</div>
               <div style={{ fontSize: "0.75rem", color: "var(--kravy-text-muted)" }}>Qty: {data.qty}</div>
-              <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>₹{format(data.revenue)}</div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>{sym}{format(data.revenue)}</div>
             </div>
           ))}
         </div>
@@ -342,9 +352,13 @@ export default async function DailySalesReportPage({
 
           {/* New Filter Bar */}
           <form style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
-            {/* Preserve Dates */}
-            <input type="hidden" name="from" value={fromDateStr} />
-            <input type="hidden" name="to" value={toDateStr} />
+            {/* Date Range Selectors */}
+            <div style={{ display: "flex", gap: "6px", alignItems: "center", background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", padding: "8px 12px", borderRadius: "12px" }}>
+              <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--kravy-text-muted)" }}>From</span>
+              <input type="date" name="from" defaultValue={fromDateStr} style={{ background: "transparent", border: "none", color: "var(--kravy-text-primary)", fontSize: "0.85rem", fontWeight: 700, outline: "none", cursor: "pointer" }} />
+              <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--kravy-text-muted)", marginLeft: "4px" }}>To</span>
+              <input type="date" name="to" defaultValue={toDateStr} style={{ background: "transparent", border: "none", color: "var(--kravy-text-primary)", fontSize: "0.85rem", fontWeight: 700, outline: "none", cursor: "pointer" }} />
+            </div>
 
             {/* Search */}
             <div style={{ flex: 1, minWidth: "200px", position: "relative" }}>
@@ -394,6 +408,14 @@ export default async function DailySalesReportPage({
             </select>
 
             <button type="submit" style={{ padding: "10px 24px", background: "var(--kravy-text-primary)", color: "var(--kravy-bg)", border: "none", borderRadius: "12px", fontSize: "0.85rem", fontWeight: 900, cursor: "pointer" }}>Filter Results</button>
+            <a 
+              href={`/api/bill-manager/export?from=${fromDateStr}&to=${toDateStr}&type=${typeFilter}&payment=${paymentFilter}&status=${statusFilter}&query=${searchQuery}`}
+              target="_blank"
+              style={{ padding: "10px 24px", background: "#10B981", color: "white", textDecoration: "none", borderRadius: "12px", fontSize: "0.85rem", fontWeight: 900, cursor: "pointer", display: "flex", alignItems: "center", gap: "8px" }}
+            >
+              <Download size={16} /> Export Excel
+            </a>
+            <CopyJsonButton bills={bills} />
             
             {(searchQuery || typeFilter !== "ALL" || paymentFilter !== "ALL") && (
               <Link href={`/dashboard/reports/sales/daily?from=${fromDateStr}&to=${toDateStr}`} style={{ color: "var(--kravy-red)", fontSize: "0.75rem", fontWeight: 800, textDecoration: "none", display: "flex", alignItems: "center", gap: "4px" }}>
@@ -452,7 +474,7 @@ export default async function DailySalesReportPage({
                       <td><span style={{ padding: "4px 8px", borderRadius: "6px", background: "rgba(99, 102, 241, 0.1)", color: "var(--kravy-purple)", fontSize: "0.65rem", fontWeight: 900 }}>{bill.tableName || "POS"}</span></td>
                       <td style={{ fontSize: "0.9rem", fontWeight: 800 }}>{bill.customerName || "Walk-in"}</td>
                       <td style={{ fontSize: "0.8rem", color: "var(--kravy-text-muted)", fontFamily: "monospace" }}>{bill.customerPhone || "—"}</td>
-                      <td style={{ textAlign: "right", fontSize: "1.1rem", fontWeight: 950 }}>₹{format(bill.total)}</td>
+                      <td style={{ textAlign: "right", fontSize: "1.1rem", fontWeight: 950 }}>{sym}{format(bill.total)}</td>
                       <td><PaymentBadge mode={bill.paymentMode} /></td>
                       <td>
                         {bill.kotNumbers?.length > 0 ? (

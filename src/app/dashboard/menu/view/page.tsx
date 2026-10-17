@@ -1,9 +1,9 @@
+"use client";
+import { useCurrency } from "@/lib/currency-context";
 
 // src/app/menu/view/page.tsx
 
-// "use client";
-
-// import { useAuth } from "@clerk/nextjs";
+// // import { useAuth } from "@clerk/nextjs";
 // import { useEffect, useMemo, useState } from "react";
 // import Image from "next/image";
 // import { motion, AnimatePresence } from "framer-motion";
@@ -26,6 +26,8 @@
 // type CartItem = MenuItem & { quantity: number };
 
 // export default function ViewMenuPage() {
+//   const { currencySymbol: sym } = useCurrency();
+
 //   const { getToken } = useAuth();
 //   const [menus, setMenus] = useState<MenuCategory[]>([]);
 //   const [loading, setLoading] = useState(true);
@@ -219,7 +221,7 @@
 //                         <div className="flex flex-col items-center text-center">
 //                           <h3 className="font-semibold text-gray-800 line-clamp-2">{item.name}</h3>
 //                           <p className="text-green-600 font-bold mt-1">
-//                             ₹{(item.price ?? 0).toFixed(2)}
+//                             {sym}{(item.price ?? 0).toFixed(2)}
 //                           </p>
 //                           {item.unit && <p className="text-xs text-gray-500 mt-1">{item.unit}</p>}
 //                         </div>
@@ -257,7 +259,7 @@
 //           >
 //             <div className="flex flex-col md:flex-row gap-2 md:gap-4 font-semibold text-gray-800">
 //               <span>🛒 {totalItems} item{totalItems > 1 ? "s" : ""}</span>
-//               <span>Total: ₹{totalPrice.toFixed(2)}</span>
+//               <span>Total: {sym}{totalPrice.toFixed(2)}</span>
 //             </div>
 
 //             <button
@@ -335,8 +337,7 @@
 
 //src/app/menu/view/page.tsx
 
-"use client";
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
@@ -345,23 +346,10 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { useRouter, useSearchParams } from "next/navigation";
 import ItemModal from "@/components/MenuEditor/ItemModal";
 import { useConfirm } from "@/components/ConfirmContext";
+import { useTerminalContext } from "@/components/TerminalContext";
+import { useProfileCache } from "@/hooks/useProfileCache";
 
 /* types */
-type MenuVariant = {
-  id?: string;
-  name: string;
-  price?: number;
-  isAvailable?: boolean;
-};
-
-type MenuVariantGroup = {
-  id?: string;
-  groupName: string;
-  type: string;
-  required: boolean;
-  options: MenuVariant[];
-};
-
 type MenuItem = {
   id: string;
   name: string;
@@ -381,6 +369,7 @@ type MenuItem = {
   hiName?: string | null;
   mrName?: string | null;
   taName?: string | null;
+  variants?: any[];
   upsellText?: string | null;
   taxStatus?: string | null;
   gst?: number | null;
@@ -389,7 +378,7 @@ type MenuItem = {
   isActive: boolean;
   expiryDate?: string | null;
   isFavorite: boolean;
-  variants?: MenuVariantGroup[];
+  zones?: string[];
 };
 
 type MenuCategory = {
@@ -402,11 +391,126 @@ type MenuCategory = {
 
 type CartItem = MenuItem & { quantity: number };
 
-function formatPrice(v?: number | null) {
-  return `₹${((v ?? 0)).toFixed(2)}`;
+
+// ─── AssignZoneDropdown: opens UPWARD via portal so it never clips at bottom ───
+function AssignZoneDropdown({
+  bulkZone,
+  setBulkZone,
+  business,
+  updateProfile,
+}: {
+  bulkZone: string | null;
+  setBulkZone: (v: string | null) => void;
+  business: any;
+  updateProfile: (data: any, flag?: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (btnRef.current && !btnRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const options = [
+    ...(business?.zones?.map((z: string) => ({ label: z, value: z })) ?? []),
+    { label: '+ Create New Zone', value: 'CREATE_NEW_ZONE' },
+  ];
+
+  const getDropdownStyle = (): React.CSSProperties => {
+    const btn = btnRef.current;
+    if (!btn) return {};
+    const rect = btn.getBoundingClientRect();
+    return {
+      position: 'fixed',
+      // open above the button
+      bottom: window.innerHeight - rect.top + 8,
+      left: rect.left,
+      zIndex: 9999,
+      minWidth: Math.max(rect.width, 180),
+    };
+  };
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="px-3 sm:px-4 py-2 sm:py-2.5 bg-white/5 border border-white/10 rounded-2xl text-[10px] text-white font-black uppercase tracking-widest cursor-pointer flex items-center gap-1.5 sm:gap-2 whitespace-nowrap hover:bg-white/10 transition-all"
+      >
+        {bulkZone || 'Assign Zone'}
+        <ChevronDown size={11} className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && typeof window !== 'undefined' && createPortal(
+        <>
+          {/* invisible full-screen backdrop to catch outside clicks */}
+          <div className="fixed inset-0 z-[9998]" onClick={() => setOpen(false)} />
+          {/* dropdown panel — always above the bulk bar */}
+          <div
+            style={getDropdownStyle()}
+            className="bg-indigo-950 border border-white/10 rounded-2xl shadow-2xl shadow-black/70 overflow-hidden py-1"
+          >
+            {options.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  if (opt.value === 'CREATE_NEW_ZONE') {
+                    const newZ = prompt('Enter New Zone Name:');
+                    if (newZ && newZ.trim()) {
+                      const upperZ = newZ.trim().toUpperCase();
+                      fetch('/api/profile/zones', {
+                        method: 'POST',
+                        body: JSON.stringify({ action: 'add', zoneName: upperZ }),
+                      }).then(res => {
+                        if (res.ok) {
+                          updateProfile(
+                            { zones: Array.from(new Set([...(business?.zones || []), upperZ])) },
+                            false
+                          );
+                          setBulkZone(upperZ);
+                        }
+                      });
+                    }
+                  } else {
+                    setBulkZone(opt.value || null);
+                  }
+                  setOpen(false);
+                }}
+                className={`w-full text-left px-4 py-2.5 text-[11px] font-black uppercase tracking-wider transition-colors whitespace-nowrap
+                  ${opt.value === 'CREATE_NEW_ZONE'
+                    ? 'text-indigo-400 hover:bg-indigo-800/60 border-t border-white/5 mt-1'
+                    : 'text-white hover:bg-white/10'
+                  }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </>,
+        document.body
+      )}
+    </div>
+  );
 }
+
+
 export default function ViewMenuPage() {
+  const { currencySymbol: sym } = useCurrency();
+  
+  function formatPrice(v?: number | null) {
+    return `${sym}${((v ?? 0)).toFixed(2)}`;
+  }
     const { confirm } = useConfirm();
+    const { emitUpdate } = useTerminalContext();
 
 
   const [menus, setMenus] = useState<MenuCategory[]>([]);
@@ -465,7 +569,9 @@ export default function ViewMenuPage() {
   const [newAiZone, setNewAiZone] = useState<string>("");
   const [isCreatingAiZone, setIsCreatingAiZone] = useState<boolean>(false);
   const [savingExtractedMenu, setSavingExtractedMenu] = useState(false);
-  const [business, setBusiness] = useState<any>(null);
+  
+  const { profile: business, updateProfile } = useProfileCache();
+  const [hasInitProfile, setHasInitProfile] = useState(false);
 
   // Sync All state
   const [syncProgress, setSyncProgress] = useState<{ completed: number; total: number } | null>(null);
@@ -516,10 +622,15 @@ export default function ViewMenuPage() {
   const [bulkDiet, setBulkDiet] = useState<"veg" | "egg" | "nv" | null>(null);
   const [bulkZone, setBulkZone] = useState<string | null>(null);
   const [isBulkMode, setIsBulkMode] = useState(false);
+  // Quick Select custom dropdown state
+  const [quickSelectOpen, setQuickSelectOpen] = useState(false);
+  const quickSelectRef = useRef<HTMLDivElement>(null);
+  const quickSelectBtnRef = useRef<HTMLButtonElement>(null);
   
   const [addonGroups, setAddonGroups] = useState<any[]>([]);
-  const detectDiet = (name: string) => {
+  const detectDiet = (name: string): "veg" | "nv" | "egg" | null => {
     if (name.toUpperCase().includes("(NV)")) return "nv";
+    if (name.toUpperCase().includes("(E)")) return "egg";
     if (name.toUpperCase().includes("(V)")) return "veg";
     return null;
   };
@@ -1256,20 +1367,20 @@ export default function ViewMenuPage() {
         }
       }).catch(e => console.error("Failed to check user me", e));
 
-    fetch("/api/profile")
-      .then(res => res.json())
-      .then(data => {
-        setBusiness(data?.profile || data);
-        setTaxEnabled(data?.taxEnabled || data?.perProductTaxEnabled || false);
-        setExpiryTrackingEnabled(data?.expiryTrackingEnabled || false);
-      })
-      .catch(() => {});
 
     fetch("/api/menu-editor/addon-groups")
       .then(res => res.json())
       .then(data => setAddonGroups(data))
       .catch(console.error);
   }, [asUserId]);
+
+  useEffect(() => {
+    if (business && !hasInitProfile) {
+      setTaxEnabled(business?.taxEnabled || false);
+      setExpiryTrackingEnabled(business?.expiryTrackingEnabled || false);
+      setHasInitProfile(true);
+    }
+  }, [business, hasInitProfile]);
 
   const fetchMenus = async () => {
     setLoading(true);
@@ -1367,7 +1478,6 @@ export default function ViewMenuPage() {
           isFavorite: !!it.isFavorite,
           shortCode: it.shortCode ?? null,
           expiryDate: it.expiryDate ? new Date(it.expiryDate).toISOString().split('T')[0] : null,
-          variants: it.variants || [],
         });
       });
 
@@ -1495,7 +1605,7 @@ export default function ViewMenuPage() {
     }
 
     const list: MenuCategory[] = [];
-    const hasActiveFilter = filterZone !== "all" || debouncedQuery.trim() !== "" || filterHasImage !== "all" || priceMin !== "" || priceMax !== "";
+    const hasActiveFilter = filterZone !== "all" || debouncedQuery.trim() !== "" || filterHasImage !== "any" || priceMin !== "" || priceMax !== "";
     
     for (const m of menus) {
       if (m.id === "favorites_virtual") continue;
@@ -1549,7 +1659,7 @@ export default function ViewMenuPage() {
         
         // Image filter
         if (filterHasImage === "only") match = match && !!it.imageUrl;
-        if (filterHasImage === "none") match = match && !it.imageUrl;
+        if (filterHasImage === "no") match = match && !it.imageUrl;
         
         // Price filter
         if (priceMin !== "") match = match && (it.price ?? 0) >= Number(priceMin);
@@ -1560,7 +1670,7 @@ export default function ViewMenuPage() {
       
       return { ...m, items: filteredItems };
     }).filter(m => {
-      const hasActiveFilter = filterZone !== "all" || debouncedQuery.trim() !== "" || filterHasImage !== "all" || priceMin !== "" || priceMax !== "";
+      const hasActiveFilter = filterZone !== "all" || debouncedQuery.trim() !== "" || filterHasImage !== "any" || priceMin !== "" || priceMax !== "";
       if (!hasActiveFilter) return true;
       
       if (filterZone !== "all") {
@@ -1611,6 +1721,7 @@ export default function ViewMenuPage() {
         items: cat.items.map(it => it.id === item.id ? { ...it, isActive: newStatus } : it)
       })));
       fetchMenus();
+      emitUpdate();
       setToast(`Item ${item.name} is now ${newStatus ? "Online" : "Offline"}`);
     } catch (err: any) {
       console.error(err);
@@ -1662,6 +1773,7 @@ export default function ViewMenuPage() {
         body: JSON.stringify({ id: item.id, isFavorite: newStatus }),
       });
       if (res.ok) {
+        emitUpdate();
         setToast(`Item ${item.name} is now ${newStatus ? "in Favorites" : "removed"}`);
       } else {
         fetchMenus();
@@ -1743,6 +1855,7 @@ export default function ViewMenuPage() {
       });
 
       setEditingItem(null);
+      emitUpdate();
       setToast("Item updated");
     } catch (err: any) {
       console.error(err);
@@ -1801,6 +1914,7 @@ export default function ViewMenuPage() {
       if (!res.ok) throw new Error(await res.text().catch(() => `Failed (${res.status})`));
       setMenus((prev) => prev.map((cat) => ({ ...cat, items: cat.items.filter((it) => it.id !== item.id) })));
       setDeletingItem(null);
+      emitUpdate();
       setToast("Item deleted");
     } catch (err: any) {
       console.error(err);
@@ -1822,6 +1936,7 @@ export default function ViewMenuPage() {
       if (!res.ok) throw new Error(await res.text().catch(() => `Failed (${res.status})`));
       setMenus([]);
       setShowDeleteAllConfirm(false);
+      emitUpdate();
       setToast("Entire menu deleted successfully");
     } catch (err: any) {
       console.error(err);
@@ -1848,6 +1963,7 @@ export default function ViewMenuPage() {
       const newCat = data?.id ? { id: data.id, name: data.name || name, items: [] } : { id: String(Date.now()), name, items: [] };
       setMenus((prev) => [newCat, ...prev]);
       setNewCategoryName("");
+      emitUpdate();
       setToast("Category created");
     } catch (err: any) {
       console.error(err);
@@ -1876,6 +1992,7 @@ export default function ViewMenuPage() {
       if (res.ok) {
         setMenus(prev => prev.map(cat => cat.id === editingCategory.id ? { ...cat, name: newName } : cat));
         setEditingCategory(null);
+        emitUpdate();
         setToast("Category renamed");
       }
     } catch (err) {
@@ -1897,6 +2014,7 @@ export default function ViewMenuPage() {
       if (res.ok) {
         if (deleteItems) {
           setMenus(prev => prev.filter(c => c.id !== deletingCategory.id));
+          emitUpdate();
           setToast(`Category and its ${deletingCategory.items.length} items deleted.`);
         } else {
           // Items will automatically be moved to null/uncategorised on backend.
@@ -1916,6 +2034,7 @@ export default function ViewMenuPage() {
             }
             return filtered;
           });
+          emitUpdate();
           setToast("Category deleted, items moved to Uncategorised.");
         }
         setDeletingCategory(null);
@@ -1960,6 +2079,7 @@ export default function ViewMenuPage() {
       isEgg: quickAddDietary === "egg",
       isBestseller: false,
       isRecommended: false,
+      isFavorite: false,
       isNew: true,
       shortCode: shortCode || null,
       description: description || null,
@@ -2005,6 +2125,7 @@ export default function ViewMenuPage() {
 
       if (res.ok) {
         const newItem = await res.json();
+        emitUpdate();
         setMenus(prev => prev.map(cat => 
           cat.id === quickAddCat.id 
             ? { ...cat, items: cat.items.map(it => it.id === tempId ? {
@@ -2061,6 +2182,7 @@ export default function ViewMenuPage() {
 
       if (res.ok) {
         const data = await res.json();
+        emitUpdate();
         setMenus(prev => prev.map(c => c.id === tempId ? { ...c, id: data.id } : c));
       } else {
         setMenus(prev => prev.filter(c => c.id !== tempId));
@@ -2077,7 +2199,7 @@ export default function ViewMenuPage() {
   if (error) return <p className="p-6 text-center text-red-600">Error: {error}</p>;
 
   return (
-    <div className="h-[calc(100vh-72px)] bg-[var(--kravy-bg)] flex flex-col -m-4 sm:-m-6 lg:-m-8 overflow-hidden transition-colors duration-300">
+    <div className="h-full max-h-full w-full bg-[var(--kravy-bg)] flex flex-col overflow-hidden transition-colors duration-300">
       <div className="flex-shrink-0 z-40 bg-[var(--kravy-navbar-bg)] backdrop-blur-md border-b border-[var(--kravy-border)] transition-all">
         <div className="w-full">
           {isAdmin && (
@@ -2169,26 +2291,27 @@ export default function ViewMenuPage() {
             </div>
           )}
           {/* Top Bar: Search & Filters */}
-          <div className="px-6 py-4 border-b border-[var(--kravy-border)]/30">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex flex-1 gap-3 items-center overflow-x-auto no-scrollbar py-1 min-w-0">
-                <div className="relative group">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-[var(--kravy-border)]/30">
+            <div className="flex flex-col 2xl:flex-row items-stretch 2xl:items-center justify-between gap-3 sm:gap-4">
+              {/* Search & Filters */}
+              <div className="flex flex-1 gap-2 sm:gap-3 items-center overflow-x-auto no-scrollbar py-1 min-w-0">
+                <div className="relative group flex-shrink-0 sm:flex-shrink">
                   <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--kravy-text-faint)] group-focus-within:text-indigo-500 transition-colors" />
                   <input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Search menu items..."
-                    className="bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] pl-10 pr-4 py-2.5 rounded-2xl w-72 min-w-[220px] outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500/50 font-bold transition-all shadow-sm"
+                    className="bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] pl-10 pr-4 py-2 sm:py-2.5 rounded-2xl w-60 sm:w-72 min-w-[200px] outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500/50 font-bold transition-all shadow-sm text-xs sm:text-sm"
                   />
                 </div>
 
-                <div className="h-8 w-[1px] bg-[var(--kravy-border)] mx-1 opacity-50 flex-shrink-0" />
+                <div className="h-7 w-[1px] bg-[var(--kravy-border)] mx-0.5 sm:mx-1 opacity-50 flex-shrink-0" />
 
-                <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value as any)} className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] px-4 py-2 my-0.5 rounded-xl flex-shrink-0 outline-none font-black text-xs uppercase tracking-wider hover:border-indigo-500/50 transition-all cursor-pointer">
+                <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value as any)} className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] px-3 sm:px-4 py-2 my-0.5 rounded-xl flex-shrink-0 outline-none font-black text-xs uppercase tracking-wider hover:border-indigo-500/50 transition-all cursor-pointer">
                   {allCategories.map((c) => <option key={c.id} value={c.id as any}>{c.name}</option>)}
                 </select>
 
-                <select value={filterZone} onChange={(e) => setFilterZone(e.target.value)} className="bg-[var(--kravy-surface)] border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 px-4 py-2 my-0.5 rounded-xl flex-shrink-0 outline-none font-black text-xs uppercase tracking-wider hover:border-indigo-500 transition-all cursor-pointer">
+                <select value={filterZone} onChange={(e) => setFilterZone(e.target.value)} className="bg-[var(--kravy-surface)] border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 px-3 sm:px-4 py-2 my-0.5 rounded-xl flex-shrink-0 outline-none font-black text-xs uppercase tracking-wider hover:border-indigo-500 transition-all cursor-pointer">
                   <option value="all">📍 All Zones</option>
                   {allItemZones.map((z: string) => (
                     <option key={z} value={z} className="bg-[var(--kravy-bg)]">
@@ -2197,44 +2320,45 @@ export default function ViewMenuPage() {
                   ))}
                 </select>
 
-                <select value={sortMode} onChange={(e) => setSortMode(e.target.value as any)} className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] px-4 py-2 my-0.5 rounded-xl flex-shrink-0 outline-none font-black text-xs uppercase tracking-wider hover:border-indigo-500/50 transition-all cursor-pointer">
+                <select value={sortMode} onChange={(e) => setSortMode(e.target.value as any)} className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] px-3 sm:px-4 py-2 my-0.5 rounded-xl flex-shrink-0 outline-none font-black text-xs uppercase tracking-wider hover:border-indigo-500/50 transition-all cursor-pointer">
                   <option value="alpha_asc">Sort: A → Z</option>
                   <option value="alpha_desc">Sort: Z → A</option>
                   <option value="price_asc">Price: Low to High</option>
                   <option value="price_desc">Price: High to Low</option>
                 </select>
 
-                <div className="flex items-center gap-2 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] px-3 py-2 rounded-xl flex-shrink-0">
-                  <span className="text-[9px] font-black text-[var(--kravy-text-muted)] uppercase mr-1">Price:</span>
-                  <input placeholder="Min" type="number" value={priceMin === "" ? "" : String(priceMin)} onChange={(e) => setPriceMin(e.target.value === "" ? "" : Number(e.target.value))} className="bg-transparent text-[var(--kravy-text-primary)] w-12 outline-none text-xs text-center font-bold" />
+                <div className="flex items-center gap-1.5 sm:gap-2 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] px-2.5 sm:px-3 py-2 rounded-xl flex-shrink-0">
+                  <span className="text-[9px] font-black text-[var(--kravy-text-muted)] uppercase mr-0.5 sm:mr-1">Price:</span>
+                  <input placeholder="Min" type="number" value={priceMin === "" ? "" : String(priceMin)} onChange={(e) => setPriceMin(e.target.value === "" ? "" : Number(e.target.value))} className="bg-transparent text-[var(--kravy-text-primary)] w-11 sm:w-12 outline-none text-xs text-center font-bold" />
                   <span className="text-[var(--kravy-text-muted)] opacity-30">-</span>
-                  <input placeholder="Max" type="number" value={priceMax === "" ? "" : String(priceMax)} onChange={(e) => setPriceMax(e.target.value === "" ? "" : Number(e.target.value))} className="bg-transparent text-[var(--kravy-text-primary)] w-12 outline-none text-xs text-center font-bold" />
+                  <input placeholder="Max" type="number" value={priceMax === "" ? "" : String(priceMax)} onChange={(e) => setPriceMax(e.target.value === "" ? "" : Number(e.target.value))} className="bg-transparent text-[var(--kravy-text-primary)] w-11 sm:w-12 outline-none text-xs text-center font-bold" />
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              {/* Action Buttons: Wraps down on smaller screens, never hidden */}
+              <div className="flex items-center flex-wrap gap-2 pt-1 2xl:pt-0">
                 <button
                   onClick={() => setShowDeleteAllConfirm(true)}
-                  className="px-6 py-2.5 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 font-extrabold text-[10px] uppercase tracking-widest flex-shrink-0 hover:bg-rose-600 hover:text-white transition-all flex items-center gap-2 group"
+                  className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 font-extrabold text-[10px] sm:text-xs uppercase tracking-wider hover:bg-rose-600 hover:text-white transition-all flex items-center gap-1.5 group shrink-0"
                   title="Clear Entire Menu"
                 >
                    <Trash2 size={14} className="group-hover:animate-bounce" /> Clear All
                 </button>
-                <div className="w-[1px] h-8 bg-gray-100 mx-1" />
+                <div className="hidden sm:block w-[1px] h-6 bg-gray-200 dark:bg-gray-700 mx-0.5 shrink-0" />
                 <button
                   onClick={() => router.push(asUserId ? `/dashboard/menu/pdf?asUserId=${asUserId}` : "/dashboard/menu/pdf")}
-                  className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-rose-600 to-rose-700 text-white font-black text-xs uppercase tracking-widest flex-shrink-0 hover:scale-105 transition-all flex items-center gap-2 shadow-lg shadow-rose-600/20 active:scale-95"
+                  className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-2xl bg-gradient-to-r from-rose-600 to-rose-700 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider hover:scale-105 transition-all flex items-center gap-1.5 shadow-md shadow-rose-600/20 active:scale-95 shrink-0"
                   title="Download / Print PDF Menu Card"
                 >
-                  <Printer size={16} strokeWidth={2.5} /> PDF Menu Card
+                  <Printer size={15} strokeWidth={2.5} /> PDF Menu Card
                 </button>
                 {isAdmin && (
                   <button
                     onClick={() => setShowUploadMenuModal(true)}
-                    className="px-6 py-2.5 rounded-2xl bg-orange-600 text-white font-black text-xs uppercase tracking-widest flex-shrink-0 hover:bg-orange-700 transition-all flex items-center gap-2.5 shadow-lg shadow-orange-600/20 active:scale-95 animate-pulse"
+                    className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-2xl bg-orange-600 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider hover:bg-orange-700 transition-all flex items-center gap-1.5 shadow-md shadow-orange-600/20 active:scale-95 animate-pulse shrink-0"
                     title="Upload New Menu File"
                   >
-                    <Plus size={16} strokeWidth={3} /> Upload Menu (AI)
+                    <Plus size={15} strokeWidth={3} /> Upload Menu (AI)
                   </button>
                 )}
                 <button
@@ -2246,60 +2370,103 @@ export default function ViewMenuPage() {
                       setQuickAddCat({ id: menus[0].id, name: menus[0].name });
                     }
                   }}
-                  className="px-6 py-2.5 rounded-2xl bg-emerald-600 text-white font-black text-xs uppercase tracking-widest flex-shrink-0 hover:bg-emerald-700 transition-all flex items-center gap-2.5 shadow-lg shadow-emerald-600/20 active:scale-95"
+                  className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-2xl bg-emerald-600 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-md shadow-emerald-600/20 active:scale-95 shrink-0"
                   title="Quick Add Item"
                 >
-                  <Plus size={16} strokeWidth={3} /> New Item
+                  <Plus size={15} strokeWidth={3} /> New Item
                 </button>
                 <button
                   onClick={() => setShowAddCategory(true)}
-                  className="px-6 py-2.5 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest flex-shrink-0 hover:bg-indigo-700 transition-all flex items-center gap-2.5 shadow-lg shadow-indigo-600/20 active:scale-95"
+                  className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-2xl bg-indigo-600 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider hover:bg-indigo-700 transition-all flex items-center gap-1.5 shadow-md shadow-indigo-600/20 active:scale-95 shrink-0"
                 >
-                  <Plus size={16} strokeWidth={3} /> New Category
+                  <Plus size={15} strokeWidth={3} /> New Category
                 </button>
-                <select
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (!val) return;
-                    const ids = new Set<string>();
-                    menus.forEach(cat => {
-                      cat.items.forEach(item => {
-                        if (val === "unassigned") {
-                          if (!(item as any).zones || (item as any).zones.length === 0) ids.add(item.id);
-                        } else {
-                          if ((item as any).zones?.includes(val)) ids.add(item.id);
-                        }
-                      });
-                    });
-                    if (ids.size === 0) {
-                        setToast(val === "unassigned" ? "All items have zones!" : `No items in ${val}`);
-                    } else {
-                        setIsBulkMode(true);
-                        setSelectedIds(ids);
-                    }
-                    e.target.value = "";
-                  }}
-                  className="px-4 py-2.5 rounded-2xl bg-slate-800 text-amber-400 font-black text-xs uppercase tracking-widest flex-shrink-0 hover:bg-slate-700 transition-all shadow-lg shadow-amber-500/10 cursor-pointer focus:outline-none border-none"
-                >
-                  <option value="">📍 QUICK SELECT...</option>
-                  <option value="unassigned">Unassigned Items</option>
-                  {business?.zones?.map((z: string) => <option key={z} value={z}>Zone: {z}</option>)}
-                </select>
+                {/* Custom Quick Select dropdown — rendered via portal to avoid overflow clipping */}
+                <div ref={quickSelectRef} className="relative shrink-0">
+                  <button
+                    ref={quickSelectBtnRef}
+                    type="button"
+                    onClick={() => setQuickSelectOpen(o => !o)}
+                    className="px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl bg-slate-800 text-amber-400 font-black text-[11px] sm:text-xs uppercase tracking-wider hover:bg-slate-700 transition-all shadow-md shadow-amber-500/10 cursor-pointer border-none flex items-center gap-1.5 whitespace-nowrap"
+                  >
+                    📍 QUICK SELECT...
+                    <ChevronDown size={12} className={`transition-transform duration-200 ${quickSelectOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {quickSelectOpen && typeof window !== 'undefined' && createPortal(
+                    <>
+                      {/* Backdrop */}
+                      <div
+                        className="fixed inset-0 z-[9998]"
+                        onClick={() => setQuickSelectOpen(false)}
+                      />
+                      {/* Dropdown panel — positioned dynamically below the button */}
+                      <div
+                        style={(() => {
+                          const btn = quickSelectBtnRef.current;
+                          if (!btn) return {};
+                          const rect = btn.getBoundingClientRect();
+                          return {
+                            position: 'fixed' as const,
+                            top: rect.bottom + 6,
+                            left: rect.left,
+                            zIndex: 9999,
+                            minWidth: rect.width,
+                          };
+                        })()}
+                        className="bg-slate-900 border border-amber-400/20 rounded-2xl shadow-2xl shadow-black/40 overflow-hidden py-1"
+                      >
+                        {[
+                          { label: 'Unassigned Items', value: 'unassigned' },
+                          ...(business?.zones?.map((z: string) => ({ label: `Zone: ${z}`, value: z })) ?? [])
+                        ].map(opt => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => {
+                              const val = opt.value;
+                              const ids = new Set<string>();
+                              menus.forEach(cat => {
+                                cat.items.forEach(item => {
+                                  if (val === 'unassigned') {
+                                    if (!(item as any).zones || (item as any).zones.length === 0) ids.add(item.id);
+                                  } else {
+                                    if ((item as any).zones?.includes(val)) ids.add(item.id);
+                                  }
+                                });
+                              });
+                              if (ids.size === 0) {
+                                setToast(val === 'unassigned' ? 'All items have zones!' : `No items in ${val}`);
+                              } else {
+                                setIsBulkMode(true);
+                                setSelectedIds(ids);
+                              }
+                              setQuickSelectOpen(false);
+                            }}
+                            className="w-full text-left px-4 py-2.5 text-[11px] sm:text-xs font-black uppercase tracking-wider text-amber-400 hover:bg-slate-700 transition-colors whitespace-nowrap"
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </>,
+                    document.body
+                  )}
+                </div>
                 <button
                   onClick={() => {
                     setIsBulkMode(!isBulkMode);
                     if (isBulkMode) setSelectedIds(new Set());
                   }}
-                  className={`px-6 py-2.5 rounded-2xl font-black text-xs uppercase tracking-widest flex-shrink-0 transition-all flex items-center gap-2.5 shadow-lg active:scale-95 ${isBulkMode ? "bg-amber-500 text-white shadow-amber-500/20" : "bg-white border border-indigo-200 text-indigo-600 shadow-indigo-500/10"}`}
+                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-2xl font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95 shrink-0 ${isBulkMode ? "bg-amber-500 text-white shadow-amber-500/20" : "bg-white border border-indigo-200 text-indigo-600 shadow-indigo-500/10"}`}
                 >
-                  <Check size={16} strokeWidth={3} /> {isBulkMode ? "Exit Bulk Edit" : "Bulk Edit"}
+                  <Check size={15} strokeWidth={3} /> {isBulkMode ? "Exit Bulk Edit" : "Bulk Edit"}
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Mobile Category Slider (Only on mobile, stays fixed under top bar) */}
-          <div className="md:hidden py-3 px-6 bg-[var(--kravy-bg)]/40 border-b border-[var(--kravy-border)]/50">
+          {/* Category Slider: Below 1024px (lg:hidden), stays fixed under top bar */}
+          <div className="lg:hidden py-3 px-4 sm:px-6 bg-[var(--kravy-bg)]/40 border-b border-[var(--kravy-border)]/50">
             <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1">
               <button 
                 onClick={() => { setFilterCategory("all"); setActiveCategory(null); }} 
@@ -2328,50 +2495,41 @@ export default function ViewMenuPage() {
       </div>
 
       {/* 🚀 MAIN CONTENT AREA: FIXED SIDEBAR + SCROLLABLE PRODUCTS */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar: Navigation Rail (The "Slider" requested by user) */}
-        <aside className="hidden md:flex flex-col w-[260px] flex-shrink-0 bg-[var(--kravy-surface)] border-r border-[var(--kravy-border)] shadow-xl z-30">
-          <div className="p-6 pb-2">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em]">
+      <div className="flex-1 min-h-0 flex overflow-hidden">
+        {/* Sidebar: Navigation Rail (Shows on 1024px and above) */}
+        <aside className="hidden lg:flex flex-col w-[200px] lg:w-[210px] xl:w-[240px] 2xl:w-[260px] flex-shrink-0 bg-[var(--kravy-surface)] border-r border-[var(--kravy-border)] shadow-xl z-30 transition-all">
+          <div className="p-4 lg:p-6 pb-2">
+            <div className="flex items-center justify-between mb-4 lg:mb-6">
+              <h3 className="text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em] truncate">
                 MENU CATEGORIES
               </h3>
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => window.location.reload()}
-                  className="bg-indigo-500/10 text-indigo-600 hover:bg-indigo-600 hover:text-white p-1.5 rounded-lg transition-all"
-                  title="Refresh Page"
-                >
-                  <RotateCcw size={14} />
-                </button>
-                <button 
-                  onClick={() => setShowReorderModal(true)}
-                  className="bg-indigo-500/10 text-indigo-600 hover:bg-indigo-600 hover:text-white p-1.5 rounded-lg transition-all"
-                  title="Customize Category Order"
-                >
-                  <Sparkles size={14} />
-                </button>
-              </div>
+              <button 
+                onClick={() => setShowReorderModal(true)}
+                className="bg-indigo-500/10 text-indigo-600 hover:bg-indigo-600 hover:text-white p-1.5 rounded-lg transition-all shrink-0"
+                title="Customize Category Order"
+              >
+                <Sparkles size={14} />
+              </button>
             </div>
             {/* Category Search Box */}
-            <div className="mb-4">
+            <div className="mb-3 lg:mb-4">
               <input 
                 type="text" 
-                placeholder="🔍 Search Category..." 
+                placeholder="🔍 Search..." 
                 value={catSearch}
                 onChange={(e) => setCatSearch(e.target.value)}
-                className="w-full bg-[var(--kravy-bg)] border border-[var(--kravy-border)] rounded-xl px-4 py-2 text-xs font-bold text-[var(--kravy-text-primary)] placeholder-[var(--kravy-text-muted)] focus:outline-none focus:border-indigo-500 transition-all"
+                className="w-full bg-[var(--kravy-bg)] border border-[var(--kravy-border)] rounded-xl px-3 lg:px-4 py-2 text-xs font-bold text-[var(--kravy-text-primary)] placeholder-[var(--kravy-text-muted)] focus:outline-none focus:border-indigo-500 transition-all"
               />
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto no-scrollbar px-3 pb-8 space-y-1">
+          <div className="flex-1 overflow-y-auto no-scrollbar px-2 lg:px-3 pb-24 space-y-1">
             <button 
               onClick={() => { setFilterCategory("all"); setActiveCategory(null); }} 
-              className={`w-full text-left px-5 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3 ${filterCategory === "all" ? "bg-indigo-600 text-white shadow-xl shadow-indigo-600/30 translate-x-1" : "text-[var(--kravy-text-secondary)] hover:bg-[var(--kravy-bg)] hover:text-indigo-500"}`}
+              className={`w-full text-left px-3.5 lg:px-5 py-2.5 lg:py-3.5 rounded-2xl font-black text-[11px] lg:text-xs uppercase tracking-wider lg:tracking-widest transition-all flex items-center gap-2.5 lg:gap-3 ${filterCategory === "all" ? "bg-indigo-600 text-white shadow-xl shadow-indigo-600/30 translate-x-0.5" : "text-[var(--kravy-text-secondary)] hover:bg-[var(--kravy-bg)] hover:text-indigo-500"}`}
             >
-              <div className={`w-1.5 h-1.5 rounded-full ${filterCategory === "all" ? "bg-white animate-pulse" : "bg-indigo-500/40"}`} />
-              All Items
+              <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${filterCategory === "all" ? "bg-white animate-pulse" : "bg-indigo-500/40"}`} />
+              <span className="truncate flex-1">All Items</span>
             </button>
 
             {sidebarCategories.filter(m => m.name.toLowerCase().includes(catSearch.toLowerCase())).map((m) => (
@@ -2383,38 +2541,38 @@ export default function ViewMenuPage() {
                     const el = document.getElementById(`cat-${m.id}`); 
                     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); 
                   }} 
-                  className={`w-full text-left px-5 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3 ${filterCategory === m.id ? "bg-indigo-600 text-white shadow-xl shadow-indigo-600/30 translate-x-1" : "text-[var(--kravy-text-secondary)] hover:bg-[var(--kravy-bg)] hover:text-indigo-500"}`}
+                  className={`w-full text-left px-3.5 lg:px-5 py-2.5 lg:py-3.5 rounded-2xl font-black text-[11px] lg:text-xs uppercase tracking-wider lg:tracking-widest transition-all flex items-center gap-2.5 lg:gap-3 ${filterCategory === m.id ? "bg-indigo-600 text-white shadow-xl shadow-indigo-600/30 translate-x-0.5" : "text-[var(--kravy-text-secondary)] hover:bg-[var(--kravy-bg)] hover:text-indigo-500"}`}
                 >
-                  <div className={`w-1.5 h-1.5 rounded-full ${filterCategory === m.id ? "bg-white animate-pulse" : "bg-indigo-500/40"}`} />
+                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${filterCategory === m.id ? "bg-white animate-pulse" : "bg-indigo-500/40"}`} />
                   <span className="truncate flex-1">{m.name}</span>
-                  <span className={`text-[10px] font-bold ${filterCategory === m.id ? "text-indigo-200" : "text-[var(--kravy-text-faint)]"}`}>{m.items.length}</span>
+                  <span className={`text-[10px] font-bold shrink-0 ${filterCategory === m.id ? "text-indigo-200" : "text-[var(--kravy-text-faint)]"}`}>{m.items.length}</span>
                 </button>
                 
                 {/* Category Actions: Edit & Delete */}
-                <div className="absolute right-12 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute right-9 lg:right-12 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button 
                     onClick={(e) => { e.stopPropagation(); setEditingCategory({ id: m.id, name: m.name }); }}
-                    className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center hover:bg-indigo-500 hover:text-white transition-all shadow-sm"
+                    className="w-6 h-6 lg:w-7 lg:h-7 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center hover:bg-indigo-500 hover:text-white transition-all shadow-sm"
                     title="Rename Category"
                   >
-                    <Pencil size={12} />
+                    <Pencil size={11} />
                     <span className="sr-only">Edit</span>
                   </button>
                   <button 
                     onClick={(e) => { e.stopPropagation(); setDeletingCategory(m); }}
-                    className="w-7 h-7 rounded-lg bg-rose-500/10 text-rose-500 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all shadow-sm"
+                    className="w-6 h-6 lg:w-7 lg:h-7 rounded-lg bg-rose-500/10 text-rose-500 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all shadow-sm"
                     title="Delete Category"
                   >
-                    <Trash2 size={12} />
+                    <Trash2 size={11} />
                   </button>
                 </div>
               </div>
             ))}
 
-            <div className="pt-4 px-2">
+            <div className="pt-3 lg:pt-4 px-1 lg:px-2">
               <button
                 onClick={() => setShowAddCategory(true)}
-                className="w-full py-3.5 rounded-2xl bg-indigo-50/50 border-2 border-dashed border-indigo-200 text-indigo-500 font-black text-[10px] uppercase tracking-[0.15em] hover:bg-indigo-50 hover:border-indigo-400 transition-all flex items-center justify-center gap-2"
+                className="w-full py-2.5 lg:py-3.5 rounded-2xl bg-indigo-50/50 border-2 border-dashed border-indigo-200 text-indigo-500 font-black text-[9px] lg:text-[10px] uppercase tracking-wider lg:tracking-[0.15em] hover:bg-indigo-50 hover:border-indigo-400 transition-all flex items-center justify-center gap-1.5"
               >
                 <Plus size={14} /> New Section
               </button>
@@ -2424,25 +2582,25 @@ export default function ViewMenuPage() {
 
         {/* Product Grid Area: ONLY THIS SCROLLS */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden relative scroll-smooth no-scrollbar md:scrollbar-default bg-[var(--kravy-bg)]/30">
-          <div className="max-w-6xl mx-auto p-6 lg:p-10">
-            <div className="flex items-center justify-between mb-8">
+          <div className="w-full mx-auto p-3 sm:p-4 lg:p-4 xl:p-6 2xl:p-8 pb-32">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mb-5 sm:mb-8">
               <div>
-                <h2 className="text-3xl font-black text-[var(--kravy-text-primary)] tracking-tight">
-                  Product Catalog
+                <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-[var(--kravy-text-primary)] tracking-tight">
+                  Restaurant Menu
                 </h2>
-                <p className="text-[var(--kravy-text-muted)] text-sm font-medium mt-1">
+                <p className="text-[var(--kravy-text-muted)] text-xs sm:text-sm font-medium mt-0.5 sm:mt-1">
                   Manage your products, prices and categories
                 </p>
               </div>
               
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                 <button 
                   onClick={handleClearAllImages}
-                  className="flex items-center gap-2 text-xs font-black text-rose-600 bg-rose-50 hover:bg-rose-100 px-4 py-2 rounded-full border border-rose-100 transition-colors"
+                  className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs font-black text-rose-600 bg-rose-50 hover:bg-rose-100 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-rose-100 transition-colors"
                 >
                   <Trash2 size={12} /> Clear All Images
                 </button>
-                <div className="flex items-center gap-2 text-xs font-black text-indigo-600 bg-indigo-50 px-4 py-2 rounded-full border border-indigo-100">
+                <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs font-black text-indigo-600 bg-indigo-50 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-indigo-100">
                   <div className="w-2 h-2 rounded-full bg-indigo-600 animate-ping" />
                   {totalItems} Items Total
                 </div>
@@ -2459,10 +2617,10 @@ export default function ViewMenuPage() {
               </div>
             )}
 
-            <div className="space-y-16">
+            <div className="space-y-8 sm:space-y-10 lg:space-y-12">
               {groupedForUI.map((cat) => (
                 <section key={cat.id} id={`cat-${cat.id}`} className="scroll-mt-6">
-                  <div className="flex items-center justify-between gap-4 mb-6">
+                  <div className="flex items-center justify-between gap-3 mb-3 sm:mb-4">
                     <h3 className="font-black text-[var(--kravy-text-primary)] text-xl flex items-center gap-4 flex-1">
                       {cat.name}
                       <div className="flex-1 h-[2px] bg-gradient-to-r from-[var(--kravy-border-strong)] to-transparent opacity-30" />
@@ -2472,11 +2630,11 @@ export default function ViewMenuPage() {
                 {cat.items.length === 0 ? (
                   <p className="text-sm text-[var(--kravy-text-muted)] font-medium opacity-60">No items available in this category.</p>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-                    {cat.items.map((item) => {
+                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 min-[1800px]:grid-cols-5 gap-2.5 sm:gap-3 lg:gap-3.5 xl:gap-4">
+                    {cat.items.map((item, idx) => {
                       const inCart = cart[item.id]?.quantity ?? 0;
                       return (
-                        <div key={item.id}   className="bg-[var(--kravy-surface)] p-4 rounded-2xl border border-[var(--kravy-border)] shadow-sm relative cursor-pointer min-w-0 transition-all hover:border-indigo-400/50">
+                        <div key={`${item.id}-${cat.id}-${idx}`}   className="bg-[var(--kravy-surface)] p-3 sm:p-4 rounded-2xl border border-[var(--kravy-border)] shadow-sm relative cursor-pointer min-w-0 transition-all hover:border-indigo-400/50 flex flex-col justify-between">
 
                           <div
                             onDragOver={(e) => handleDragOver(e, item.id)}
@@ -2490,7 +2648,7 @@ export default function ViewMenuPage() {
                               setSearchImageQuery(cleanName);
                               handleSearchImages(cleanName, "foodsnap");
                             }}
-                            className={`w-full h-40 mb-4 relative rounded-xl overflow-hidden bg-[var(--kravy-bg-2)] flex items-center justify-center min-w-0 shadow-inner group cursor-pointer ring-offset-2 hover:ring-2 hover:ring-indigo-500 transition-all ${
+                            className={`w-full h-32 sm:h-36 md:h-40 mb-3 sm:mb-4 relative rounded-xl overflow-hidden bg-[var(--kravy-bg-2)] flex items-center justify-center min-w-0 shadow-inner group cursor-pointer ring-offset-2 hover:ring-2 hover:ring-indigo-500 transition-all ${
                               draggedOverItemId === item.id 
                                 ? "border-4 border-dashed border-indigo-600 bg-indigo-50 dark:bg-indigo-950/20 scale-95" 
                                 : ""
@@ -2537,10 +2695,10 @@ export default function ViewMenuPage() {
                             )}
                             
                             {/* Status Badge & Zone Badge */}
-                            <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 flex-wrap">
+                            <div className="absolute top-2 left-2 z-10 flex items-center gap-1 sm:gap-1.5 flex-wrap max-w-[90%]">
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleToggleStatus(item); }}
-                                className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm transition-all ${
+                                className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-wider shadow-sm transition-all shrink-0 ${
                                   item.isActive 
                                     ? "bg-emerald-500 text-white hover:bg-emerald-600" 
                                     : "bg-rose-500 text-white hover:bg-rose-600"
@@ -2551,7 +2709,7 @@ export default function ViewMenuPage() {
                               {editingField?.id === item.id && editingField.field === "zone" ? (
                                 <select
                                   autoFocus
-                                  className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-800 text-amber-300 border border-amber-500 focus:outline-none shadow-md"
+                                  className="text-[8px] sm:text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-slate-800 text-amber-300 border border-amber-500 focus:outline-none shadow-md shrink-0"
                                   value={editingField.value}
                                   onChange={async (e) => {
                                     const val = e.target.value;
@@ -2568,11 +2726,11 @@ export default function ViewMenuPage() {
                               ) : (
                                 <div onClick={(e) => { e.stopPropagation(); setEditingField({ id: item.id, field: "zone", value: (item as any).zones?.[0] || "" }); }} className="cursor-pointer hover:ring-2 hover:ring-amber-500 rounded-full transition-all shrink-0 inline-flex">
                                   {(item as any).zones && (item as any).zones.length > 0 ? (
-                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-slate-900/85 backdrop-blur-md text-amber-300 border border-amber-500/40 shadow-md">
+                                    <span className="px-1.5 py-0.5 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-wider bg-slate-900/85 backdrop-blur-md text-amber-300 border border-amber-500/40 shadow-md truncate max-w-[85px]">
                                       📍 {(item as any).zones.join(", ")}
                                     </span>
                                   ) : (
-                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-900/70 backdrop-blur-md text-slate-300 border border-slate-700 shadow-md">
+                                    <span className="px-1.5 py-0.5 rounded-full text-[8px] sm:text-[9px] font-bold uppercase tracking-wider bg-slate-900/70 backdrop-blur-md text-slate-300 border border-slate-700 shadow-md">
                                       🌐 All Zones
                                     </span>
                                   )}
@@ -2582,7 +2740,7 @@ export default function ViewMenuPage() {
                           </div>
 
                           <div className="flex flex-col items-start gap-1">
-                            <div className="flex items-center justify-between w-full">
+                            <div className="flex flex-col gap-1.5 w-full">
                               <div className="flex items-center gap-2 flex-1 min-w-0">
                                 <div className={`w-3 h-3 border-[1.2px] rounded-sm flex items-center justify-center shrink-0 ${item.isVeg ? "border-green-600" : item.isEgg ? "border-amber-500" : "border-red-600"}`}>
                                     <div className={`w-1 h-1 rounded-full ${item.isVeg ? "bg-green-600" : item.isEgg ? "bg-amber-500" : "bg-red-600"}`} />
@@ -2603,7 +2761,7 @@ export default function ViewMenuPage() {
                                   ) : (
                                     <h4 
                                       onClick={(e) => { e.stopPropagation(); setEditingField({ id: item.id, field: "name", value: item.name }); }} 
-                                      className="font-bold text-[var(--kravy-text-primary)] text-sm md:text-base group-hover:text-indigo-500 transition-colors cursor-pointer break-normal whitespace-normal line-clamp-3 leading-tight pr-2"
+                                      className="font-bold text-[var(--kravy-text-primary)] text-xs sm:text-sm md:text-base group-hover:text-indigo-500 transition-colors cursor-pointer break-words whitespace-normal line-clamp-2 leading-tight pr-1"
                                       title="Click to edit name"
                                     >
                                       {item.name}
@@ -2641,9 +2799,9 @@ export default function ViewMenuPage() {
                                   )}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <button onClick={(e) => { e.stopPropagation(); setEditingItem(item); }} className="p-1.5 text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg hover:scale-110 transition-transform">Edit</button>
-                                <button onClick={(e) => { e.stopPropagation(); setDeletingItem(item); }} className="p-1.5 text-xs bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:scale-110 transition-transform">Delete</button>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button onClick={(e) => { e.stopPropagation(); setEditingItem(item); }} className="px-1.5 py-1 text-[10px] sm:text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg hover:scale-105 transition-transform font-bold">Edit</button>
+                                <button onClick={(e) => { e.stopPropagation(); setDeletingItem(item); }} className="px-1.5 py-1 text-[10px] sm:text-xs bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:scale-105 transition-transform font-bold">Delete</button>
                               </div>
                             </div>
 
@@ -2670,18 +2828,6 @@ export default function ViewMenuPage() {
                               </div>
                             )}
                             {item.unit && <div className="text-[0.65rem] font-bold text-[var(--kravy-text-muted)] uppercase tracking-tighter opacity-70">{item.unit}</div>}
-                            
-                            {item.variants && item.variants.length > 0 && (
-                              <div className="w-full mt-2 pt-2 border-t border-[var(--kravy-border)]/50">
-                                <div className="text-[10px] font-black text-purple-700 uppercase tracking-widest mb-1">
-                                  {item.variants.reduce((total, group) => total + (group.options?.length || 0), 0)} Variants
-                                </div>
-                                <div className="text-[9px] font-bold text-purple-600/80 leading-tight">
-                                  {item.variants.flatMap(v => v.options?.map(o => o.name) || []).slice(0, 3).join(' · ')}
-                                  {item.variants.reduce((total, group) => total + (group.options?.length || 0), 0) > 3 && ' +'}
-                                </div>
-                              </div>
-                            )}
                           </div>
                         </div>
                       );
@@ -2714,71 +2860,48 @@ export default function ViewMenuPage() {
       {/* 🚀 BULK ACTIONS FLOATING BAR */}
       <AnimatePresence>
         {selectedIds.size > 0 && (
-          <div 
-             
-             
-            
-            className="fixed left-4 right-4 bottom-10 z-[60] bg-indigo-950 text-white p-5 rounded-[2.5rem] shadow-[0_30px_60px_-15px_rgba(30,27,75,0.6)] flex flex-col md:flex-row items-center justify-between gap-6 max-w-5xl mx-auto border border-white/20 backdrop-blur-2xl ring-1 ring-white/10"
-          >
-            <div className="flex items-center gap-5">
-              <div className="w-12 h-12 bg-white text-indigo-950 rounded-2xl flex items-center justify-center font-black text-lg shadow-xl rotate-3">
+          <div className="fixed left-2 right-2 sm:left-4 sm:right-4 bottom-28 lg:bottom-10 z-[60] bg-indigo-950 text-white p-3 sm:p-5 rounded-[1.5rem] sm:rounded-[2.5rem] shadow-[0_30px_60px_-15px_rgba(30,27,75,0.6)] flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-6 max-w-5xl mx-auto border border-white/20 backdrop-blur-2xl ring-1 ring-white/10">
+            <div className="flex items-center gap-3 sm:gap-5 shrink-0">
+              <div className="w-9 h-9 sm:w-12 sm:h-12 bg-white text-indigo-950 rounded-xl sm:rounded-2xl flex items-center justify-center font-black text-sm sm:text-lg shadow-xl rotate-3">
                 {selectedIds.size}
               </div>
               <div className="flex flex-col">
-                <div className="text-base font-black uppercase tracking-[0.1em] leading-none">Bulk Selections</div>
-                <div className="text-[10px] font-bold text-indigo-300 mt-2 uppercase tracking-wider">
+                <div className="text-sm sm:text-base font-black uppercase tracking-[0.1em] leading-none">Bulk Selections</div>
+                <div className="text-[9px] sm:text-[10px] font-bold text-indigo-300 mt-1 sm:mt-2 uppercase tracking-wider">
                   Pick status to apply to {selectedIds.size} Items
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col md:flex-row items-center gap-4 flex-1 justify-center">
-              <div className="flex p-1.5 bg-white/5 rounded-[1.5rem] gap-2 border border-white/5 scale-90 md:scale-100">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4 flex-1 justify-center">
+              <div className="flex p-1 sm:p-1.5 bg-white/5 rounded-[1.2rem] sm:rounded-[1.5rem] gap-1 sm:gap-2 border border-white/5">
                 <button 
                   onClick={() => setBulkDiet(bulkDiet === "veg" ? null : "veg")}
-                  className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border ${bulkDiet === "veg" ? "bg-green-500 text-white border-green-400 shadow-lg shadow-green-500/20 px-7" : "bg-white/5 text-green-400 border-white/5 hover:bg-white/10"}`}
+                  className={`px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 sm:gap-2 border ${bulkDiet === "veg" ? "bg-green-500 text-white border-green-400 shadow-lg shadow-green-500/20" : "bg-white/5 text-green-400 border-white/5 hover:bg-white/10"}`}
                 >
                   Veg <div className={`w-1.5 h-1.5 rounded-full ${bulkDiet === "veg" ? "bg-white" : "bg-green-500"}`} />
                 </button>
                 <button 
                   onClick={() => setBulkDiet(bulkDiet === "egg" ? null : "egg")}
-                  className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border ${bulkDiet === "egg" ? "bg-amber-500 text-white border-amber-400 shadow-lg shadow-amber-500/20 px-7" : "bg-white/5 text-amber-400 border-white/5 hover:bg-white/10"}`}
+                  className={`px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 sm:gap-2 border ${bulkDiet === "egg" ? "bg-amber-500 text-white border-amber-400 shadow-lg shadow-amber-500/20" : "bg-white/5 text-amber-400 border-white/5 hover:bg-white/10"}`}
                 >
                   Egg <div className={`w-1.5 h-1.5 rounded-full ${bulkDiet === "egg" ? "bg-white" : "bg-amber-500"}`} />
                 </button>
                 <button 
                   onClick={() => setBulkDiet(bulkDiet === "nv" ? null : "nv")}
-                  className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border ${bulkDiet === "nv" ? "bg-rose-500 text-white border-rose-400 shadow-lg shadow-rose-500/20 px-7" : "bg-white/5 text-rose-300 border-white/5 hover:bg-white/10"}`}
+                  className={`px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 sm:gap-2 border ${bulkDiet === "nv" ? "bg-rose-500 text-white border-rose-400 shadow-lg shadow-rose-500/20" : "bg-white/5 text-rose-300 border-white/5 hover:bg-white/10"}`}
                 >
                   NV <div className={`w-1.5 h-1.5 rounded-full ${bulkDiet === "nv" ? "bg-white" : "bg-rose-500"}`} />
                 </button>
               </div>
 
-              <select
-                value={bulkZone || ""}
-                onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === "CREATE_NEW_ZONE") {
-                        const newZ = prompt("Enter New Zone Name:");
-                        if (newZ && newZ.trim()) {
-                            const upperZ = newZ.trim().toUpperCase();
-                            fetch("/api/profile/zones", { method: "POST", body: JSON.stringify({ action: "add", zoneName: upperZ }) }).then(res => {
-                                if(res.ok) {
-                                    setBusiness((prev: any) => prev ? { ...prev, zones: Array.from(new Set([...(prev.zones || []), upperZ])) } : prev);
-                                    setBulkZone(upperZ);
-                                }
-                            });
-                        }
-                    } else {
-                        setBulkZone(val || null);
-                    }
-                }}
-                className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-2xl text-[10px] text-white focus:outline-none font-black uppercase tracking-widest cursor-pointer"
-              >
-                <option value="" className="bg-indigo-950">Assign Zone</option>
-                {business?.zones?.map((z: string) => <option key={z} value={z} className="bg-indigo-950">{z}</option>)}
-                <option value="CREATE_NEW_ZONE" className="bg-indigo-600 text-white font-black">+ Create New Zone</option>
-              </select>
+              {/* Custom Assign Zone — portal dropdown that opens UPWARD */}
+              <AssignZoneDropdown
+                bulkZone={bulkZone}
+                setBulkZone={setBulkZone}
+                business={business}
+                updateProfile={updateProfile}
+              />
 
               <button 
                 disabled={isBulkUpdating || (!bulkDiet && !bulkZone)}
@@ -2813,7 +2936,7 @@ export default function ViewMenuPage() {
                             updated.isEgg = bulkDiet === "egg";
                           }
                           if (bulkZone) {
-                            updated.zones = [bulkZone];
+                            (updated as any).zones = [bulkZone];
                           }
                           return updated;
                         })
@@ -2912,7 +3035,7 @@ export default function ViewMenuPage() {
           setToast={setToast}
           availableZones={business?.zones || []}
           onAddZone={(z) => {
-             setBusiness((prev: any) => prev ? { ...prev, zones: Array.from(new Set([...(prev.zones || []), z])) } : prev);
+             updateProfile({ zones: Array.from(new Set([...(business?.zones || []), z])) }, false);
           }}
         />
       )}
@@ -2931,7 +3054,7 @@ export default function ViewMenuPage() {
             <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-rose-600">
                <Trash2 size={32} />
             </div>
-            <h3 className="text-2xl font-black text-[var(--kravy-text-primary)] mb-3 tracking-tight">Delete Entire Catalog?</h3>
+            <h3 className="text-2xl font-black text-[var(--kravy-text-primary)] mb-3 tracking-tight">Delete Entire Menu?</h3>
             <p className="text-[var(--kravy-text-muted)] font-medium mb-6 leading-relaxed">
               This will <span className="text-rose-600 font-black underline">permanently delete items</span>. This action cannot be undone.
             </p>
@@ -3158,6 +3281,7 @@ export default function ViewMenuPage() {
                 });
                 if(res.ok) {
                    fetchMenus();
+                   emitUpdate();
                    setToast("Category order saved!");
                 }
               } catch (e) { console.error(e); setToast("Failed to reorder categories"); }
@@ -3172,6 +3296,7 @@ export default function ViewMenuPage() {
                 });
                 if(res.ok) {
                    fetchMenus();
+                   emitUpdate();
                    setToast("Category order reset to alphabetical!");
                 }
               } catch (e) { console.error(e); setToast("Failed to reset category order"); }
@@ -3189,11 +3314,10 @@ export default function ViewMenuPage() {
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex justify-end"
             onClick={() => setImageSearchItem(null)}
           >
-            <div
+            <motion.div
               
               
               
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
               className="w-full max-w-md bg-[var(--kravy-surface)] border-l border-[var(--kravy-border)] h-full shadow-2xl flex flex-col p-8 overflow-hidden z-[10001]"
               onClick={(e) => e.stopPropagation()}
             >
@@ -3296,7 +3420,7 @@ export default function ViewMenuPage() {
                   </div>
                 )}
               </div>
-            </div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
@@ -3309,7 +3433,7 @@ export default function ViewMenuPage() {
             {/* Modal Header */}
             <div className="p-6 border-b border-[var(--kravy-border)]/50 flex justify-between items-center">
               <div>
-                <h3 className="text-xl font-black text-[var(--kravy-text-primary)]">Upload New Catalog (Kravy AI)</h3>
+                <h3 className="text-xl font-black text-[var(--kravy-text-primary)]">Upload New Menu (Kravy AI)</h3>
                 <p className="text-xs text-[var(--kravy-text-muted)] font-medium mt-1">Upload a PDF, Doc, Excel, or Menu Image to automatically extract and merge new items into the existing menu.</p>
               </div>
               <button 
@@ -3346,7 +3470,7 @@ export default function ViewMenuPage() {
                           const newZ = newAiZone.trim().toUpperCase();
                           const res = await fetch("/api/profile/zones", { method: "POST", body: JSON.stringify({ action: "add", zoneName: newZ }) });
                           if (res.ok) {
-                              setBusiness((prev: any) => prev ? { ...prev, zones: Array.from(new Set([...(prev.zones || []), newZ])) } : prev);
+                              updateProfile({ zones: Array.from(new Set([...(business?.zones || []), newZ])) }, false);
                               setSelectedAiZone(newZ);
                               setIsCreatingAiZone(false);
                               setNewAiZone("");
@@ -3361,7 +3485,7 @@ export default function ViewMenuPage() {
                           const newZ = newAiZone.trim().toUpperCase();
                           const res = await fetch("/api/profile/zones", { method: "POST", body: JSON.stringify({ action: "add", zoneName: newZ }) });
                           if (res.ok) {
-                              setBusiness((prev: any) => prev ? { ...prev, zones: Array.from(new Set([...(prev.zones || []), newZ])) } : prev);
+                              updateProfile({ zones: Array.from(new Set([...(business?.zones || []), newZ])) }, false);
                               setSelectedAiZone(newZ);
                               setIsCreatingAiZone(false);
                               setNewAiZone("");
@@ -3441,7 +3565,7 @@ export default function ViewMenuPage() {
                     onDrop={(e) => {
                       e.preventDefault();
                       if (e.dataTransfer.files) {
-                        setMenuFileQueue(prev => [...prev, ...Array.from(e.dataTransfer.files!)]);
+                        setMenuFileQueue(prev => [...prev, ...Array.from(e.dataTransfer.files as FileList)]);
                       }
                     }}
                     className={`border-[2px] border-dashed border-[var(--kravy-border)] hover:border-orange-500 rounded-2xl text-center bg-[var(--kravy-bg-2)]/40 hover:bg-orange-50/10 transition-all cursor-pointer relative flex flex-col items-center justify-center gap-3 ${menuFileQueue.length > 0 ? 'p-6' : 'p-12'}`}
@@ -3452,7 +3576,7 @@ export default function ViewMenuPage() {
                       input.accept = ".pdf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg,.webp";
                       input.onchange = (e: any) => {
                         if (e.target.files) {
-                          setMenuFileQueue(prev => [...prev, ...Array.from(e.target.files)]);
+                          setMenuFileQueue(prev => [...prev, ...Array.from(e.target.files as FileList)]);
                         }
                       };
                       input.click();
@@ -3565,22 +3689,8 @@ export default function ViewMenuPage() {
                             <h5 className="font-bold text-xs text-[var(--kravy-text-primary)] truncate" title={item.name}>{item.name}</h5>
                             <div className="flex items-center gap-2 mt-0.5">
                               <span className="text-[9px] font-black text-orange-500 uppercase bg-orange-500/10 px-1.5 py-0.5 rounded">{item.category}</span>
-                              <span className="text-[9px] font-bold text-[var(--kravy-text-muted)]">₹{item.price}</span>
+                              <span className="text-[9px] font-bold text-[var(--kravy-text-muted)]">{sym}{item.price}</span>
                             </div>
-                            
-                            {item.variants && item.variants.length > 0 && (
-                              <div className="mt-2 flex flex-wrap gap-1">
-                                {item.variants.flatMap((v: any) => v.options || []).map((opt: any, idx: number) => (
-                                  <span
-                                    key={opt.id ?? opt.name ?? idx}
-                                    className="rounded-md bg-purple-50 px-1.5 py-0.5 text-[9px] font-bold text-purple-700 border border-purple-200"
-                                  >
-                                    {opt.name}
-                                    {opt.price != null && ` · ₹${opt.price}`}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
                           </div>
                         </div>
                       </div>
@@ -3638,6 +3748,7 @@ function EditModal({
   availableZones: string[];
   onAddZone: (z: string) => void;
 }) {
+  const { currencySymbol: sym } = useCurrency();
     const [local, setLocal] = useState<MenuItem>(item);
     const [tab, setTab] = useState<"basic" | "variants" | "qr" | "lang" | "image">("basic");
     const [uploading, setUploading] = useState(false);
@@ -3858,7 +3969,7 @@ function EditModal({
                             placeholder="Option Name"
                           />
                           <div className="relative w-28">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">₹</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">{sym}</span>
                             <input
                               type="number"
                               className="w-full bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg pl-7 pr-2 py-2 outline-none focus:border-indigo-400"
@@ -3894,7 +4005,7 @@ function EditModal({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest ml-1 mb-2">Price (₹)</label>
+                    <label className="block text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest ml-1 mb-2">Price ({sym})</label>
                     <input
                       className="w-full bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500/20 font-bold transition-all"
                       type="number"
@@ -3903,7 +4014,7 @@ function EditModal({
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest ml-1 mb-2">Selling Price (₹)</label>
+                    <label className="block text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest ml-1 mb-2">Selling Price ({sym})</label>
                     <input
                       className="w-full bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500/20 font-bold transition-all"
                       type="number"

@@ -1,4 +1,5 @@
 "use client";
+import { useCurrency } from '@/lib/currency-context';
 
 import { TrendingUp, TrendingDown, IndianRupee, FileText, Banknote, Smartphone, Maximize2, Users, UserPlus, UserCheck, Clock, BarChart3, History, Activity, AlertCircle, Search, X, Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -13,6 +14,7 @@ interface Props {
     growth?: number;
     paymentSplit?: { Cash?: number; UPI?: number };
     daySale?: number;
+    dayCollection?: number;
     weekSale?: number;
     monthSale?: number;
     todayCustomers?: number;
@@ -24,6 +26,8 @@ interface Props {
     peakDay?: string;
     activeOrders?: number;
     completedOrders?: number;
+    outstandingDue?: number;
+    totalCustomerUdhaar?: number;
     totalUnpaidAmount?: number;
     unpaidCustomerCount?: number;
     customerDuesList?: Array<{
@@ -49,6 +53,7 @@ interface Props {
 }
 
 export default function StatsGrid({ data, range = 30 }: Props) {
+  const { currencySymbol: sym } = useCurrency();
   const router = useRouter();
   const [localDuesList] = useState(data.customerDuesList || []);
 
@@ -57,6 +62,7 @@ export default function StatsGrid({ data, range = 30 }: Props) {
   const isPositive = growth >= 0;
   
   const daySale = data.daySale || 0;
+  const dayCollection = data.dayCollection || 0;
   const weekSale = data.weekSale || 0;
   const monthSale = data.monthSale || 0;
   const totalBills = data.totalBills || 0;
@@ -66,6 +72,8 @@ export default function StatsGrid({ data, range = 30 }: Props) {
   const fmt = (n: number) => new Intl.NumberFormat("en-IN").format(Math.round(n));
 
   const totalUnpaidAmount = localDuesList.reduce((sum, c) => sum + c.totalUnpaid, 0);
+  const outstandingDue = data.outstandingDue !== undefined ? data.outstandingDue : totalUnpaidAmount;
+  const totalCustomerUdhaar = data.totalCustomerUdhaar !== undefined ? data.totalCustomerUdhaar : totalUnpaidAmount;
   const unpaidCustomerCount = localDuesList.length;
 
   const totalWalletAdvance = data.totalWalletAdvance || 0;
@@ -76,8 +84,56 @@ export default function StatsGrid({ data, range = 30 }: Props) {
 
   const stats = [
     {
+      label: "Today's Sale",
+      value: `${sym}${fmt(daySale)}`,
+      sub: "Net sales invoiced today",
+      icon: <Banknote size={20} strokeWidth={2.5} />,
+      accent: "#FF6B35",
+      path: `/dashboard/reports/sales/daily`,
+      gradient: "linear-gradient(135deg, #FF6B35 0%, #F59E0B 100%)",
+      glow: "rgba(255,107,53,0.3)",
+      trend: true,
+      showTrend: false,
+    },
+    {
+      label: "Today's Collection",
+      value: `${sym}${fmt(dayCollection)}`,
+      sub: "Payments recorded on today's bills",
+      icon: <IndianRupee size={20} strokeWidth={2.5} />,
+      accent: "#10B981",
+      path: `/dashboard/reports/payments?range=1`,
+      gradient: "linear-gradient(135deg, #10B981 0%, #059669 100%)",
+      glow: "rgba(16,185,129,0.35)",
+      trend: true,
+      showTrend: false,
+    },
+    {
+      label: "Outstanding Due",
+      value: `${sym}${fmt(outstandingDue)}`,
+      sub: "Unpaid balance on today's bills",
+      icon: <Clock size={20} strokeWidth={2.5} />,
+      accent: "#F59E0B",
+      path: `/dashboard/reports/unpaid`,
+      gradient: "linear-gradient(135deg, #F59E0B 0%, #D97706 100%)",
+      glow: "rgba(245, 158, 11, 0.35)",
+      trend: false,
+      showTrend: false,
+    },
+    {
+      label: "Total Customer Udhaar",
+      value: `${sym}${fmt(totalCustomerUdhaar)}`,
+      sub: `${unpaidCustomerCount} debtors pending`,
+      icon: <AlertCircle size={20} strokeWidth={2.5} />,
+      accent: "#EF4444",
+      path: `/dashboard/reports/unpaid`,
+      gradient: "linear-gradient(135deg, #EF4444 0%, #DC2626 100%)",
+      glow: "rgba(239, 68, 68, 0.35)",
+      trend: false,
+      showTrend: false,
+    },
+    {
       label: "Total Revenue",
-      value: `₹${fmt(totalRevenue)}`,
+      value: `${sym}${fmt(totalRevenue)}`,
       sub: `${isPositive ? "+" : ""}${growth.toFixed(1)}% vs last period`,
       icon: <IndianRupee size={20} strokeWidth={2.5} />,
       accent: "#10B981",
@@ -88,20 +144,8 @@ export default function StatsGrid({ data, range = 30 }: Props) {
       showTrend: true,
     },
     {
-      label: "Total Customer Udhaar",
-      value: `₹${fmt(totalUnpaidAmount)}`,
-      sub: `${unpaidCustomerCount} customers pending`,
-      icon: <AlertCircle size={20} strokeWidth={2.5} />,
-      accent: "#EF4444",
-      path: `/dashboard/reports/unpaid`,
-      gradient: "linear-gradient(135deg, #EF4444 0%, #DC2626 100%)",
-      glow: "rgba(239, 68, 68, 0.35)",
-      trend: false,
-      showTrend: false,
-    },
-    {
       label: "Total Wallet Advance",
-      value: `₹${fmt(totalWalletAdvance)}`,
+      value: `${sym}${fmt(totalWalletAdvance)}`,
       sub: `${walletCustomersCount} active deposits`,
       icon: <Smartphone size={20} strokeWidth={2.5} />,
       accent: "#8B5CF6",
@@ -112,20 +156,8 @@ export default function StatsGrid({ data, range = 30 }: Props) {
       showTrend: false,
     },
     {
-      label: "Today's Sale",
-      value: `₹${fmt(daySale)}`,
-      sub: "Sales since midnight",
-      icon: <Banknote size={20} strokeWidth={2.5} />,
-      accent: "#FF6B35",
-      path: `/dashboard/reports/sales/daily`,
-      gradient: "linear-gradient(135deg, #FF6B35 0%, #F59E0B 100%)",
-      glow: "rgba(255,107,53,0.3)",
-      trend: true,
-      showTrend: false,
-    },
-    {
       label: "This Week",
-      value: `₹${fmt(weekSale)}`,
+      value: `${sym}${fmt(weekSale)}`,
       sub: "Sales since Sunday",
       icon: <FileText size={20} strokeWidth={2.5} />,
       accent: "#8B5CF6",
@@ -137,7 +169,7 @@ export default function StatsGrid({ data, range = 30 }: Props) {
     },
     {
       label: "This Month",
-      value: `₹${fmt(monthSale)}`,
+      value: `${sym}${fmt(monthSale)}`,
       sub: `Sales in ${new Date().toLocaleString('default', { month: 'long' })}`,
       icon: <Smartphone size={20} strokeWidth={2.5} />,
       accent: "#0EA5E9",
@@ -161,7 +193,7 @@ export default function StatsGrid({ data, range = 30 }: Props) {
     },
     {
       label: "Cash Collected",
-      value: `₹${fmt(cash)}`,
+      value: `${sym}${fmt(cash)}`,
       sub: "Physical payments",
       icon: <Banknote size={20} strokeWidth={2.5} />,
       accent: "#F59E0B",
@@ -173,7 +205,7 @@ export default function StatsGrid({ data, range = 30 }: Props) {
     },
     {
       label: "UPI Payments",
-      value: `₹${fmt(upi)}`,
+      value: `${sym}${fmt(upi)}`,
       sub: "Digital transactions",
       icon: <Smartphone size={20} strokeWidth={2.5} />,
       accent: "#EC4899",
@@ -233,7 +265,7 @@ export default function StatsGrid({ data, range = 30 }: Props) {
     },
     {
       label: "Avg Bill Value",
-      value: `₹${fmt(data.avgOrderValue || 0)}`,
+      value: `${sym}${fmt(data.avgOrderValue || 0)}`,
       sub: `Average per order ${rangeSub}`,
       icon: <BarChart3 size={20} strokeWidth={2.5} />,
       accent: "#8B5CF6",
@@ -313,6 +345,7 @@ export default function StatsGrid({ data, range = 30 }: Props) {
           gap: "18px",
           overflowX: "auto",
           paddingBottom: "12px",
+          width: "100%",
         }}
         className="no-scrollbar"
       >
@@ -424,7 +457,7 @@ export default function StatsGrid({ data, range = 30 }: Props) {
                     color: s.accent,
                     border: `1px solid ${s.accent}30`,
                   }}>
-                    {s.label.includes("Udhaar") ? "⚠️ Dues" : s.label.includes("Wallet") ? "💰 Advance" : s.label.includes("Today") ? "📋 Today" : "📊 Stats"}
+                    {s.label.includes("Udhaar") ? "⚠️ Dues" : s.label.includes("Wallet") ? "💰 Advance" : (s.label.includes("Today") || s.label.includes("Outstanding")) ? "📋 Today" : "📊 Stats"}
                   </div>
                 )}
               </div>

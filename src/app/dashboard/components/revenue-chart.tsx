@@ -1,4 +1,5 @@
 "use client";
+import { useCurrency } from '@/lib/currency-context';
 
 import {
   AreaChart,
@@ -16,6 +17,7 @@ interface RevenueChartProps {
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
+  const { currencySymbol: sym } = useCurrency();
   if (active && payload && payload.length) {
     return (
       <div style={{
@@ -28,7 +30,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
       }}>
         <div style={{ fontSize: "0.72rem", color: "var(--kravy-text-muted)", fontFamily: "monospace", marginBottom: "6px" }}>{label}</div>
         <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--kravy-brand)" }}>
-          ₹{new Intl.NumberFormat("en-IN").format(Math.round(payload[0]?.value || 0))}
+          {sym}{new Intl.NumberFormat("en-IN").format(Math.round(payload[0]?.value || 0))}
         </div>
         {payload[1] && (
           <div style={{ fontSize: "0.78rem", color: "#FF6B35", marginTop: "4px" }}>
@@ -42,6 +44,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function RevenueChart({ data }: RevenueChartProps) {
+  const { currencySymbol: sym } = useCurrency();
   const maxRevenue = data.length ? Math.max(...data.map(d => d.revenue || 0)) : 0;
 
   return (
@@ -104,7 +107,7 @@ export default function RevenueChart({ data }: RevenueChartProps) {
             border: "1px solid var(--kravy-border)",
             fontFamily: "monospace"
           }}>
-            Peak: ₹{new Intl.NumberFormat("en-IN").format(Math.round(maxRevenue))}
+            Peak: {sym}{new Intl.NumberFormat("en-IN").format(Math.round(maxRevenue))}
           </div>
         )}
       </div>
@@ -152,7 +155,7 @@ export default function RevenueChart({ data }: RevenueChartProps) {
                 axisLine={false}
                 tickLine={false}
                 tick={{ fill: "var(--kravy-text-faint)", fontSize: 10, fontFamily: "monospace" }}
-                tickFormatter={(v) => `₹${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
+                tickFormatter={(v) => `${sym}${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
               />
               <Tooltip content={<CustomTooltip />} />
               <Area

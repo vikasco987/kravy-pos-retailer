@@ -5,14 +5,16 @@ import { motion } from "framer-motion";
 import { 
     LayoutDashboard, Check, ArrowLeft, Save, 
     Banknote, Smartphone, CreditCard, Store, Wallet,
-    PauseCircle, SaveAll, Eye, Printer, AlertCircle, Clock, Layers
+    PauseCircle, SaveAll, Eye, Printer, AlertCircle, Clock, Layers, Bluetooth
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import { kravy } from "@/lib/sounds";
 import { useProfileCache } from "@/hooks/useProfileCache";
 
 export default function PosLayoutSettings() {
+    const router = useRouter();
     const { profile: cachedProfile, loading: profileLoading, updateProfile } = useProfileCache();
     const [saving, setSaving] = useState(false);
     const [settings, setSettings] = useState({
@@ -28,6 +30,8 @@ export default function PosLayoutSettings() {
         expiryTrackingEnabled: true,
         allowWalletEditDelete: true,
         enableVirtualGroupVariants: true,
+        posHtmlPrintEnabled: true,
+        posWebBtPrintEnabled: true,
     });
     const loading = profileLoading && !cachedProfile;
 
@@ -44,8 +48,10 @@ export default function PosLayoutSettings() {
                 posPreviewEnabled: cachedProfile.posPreviewEnabled ?? true,
                 posKotEnabled: cachedProfile.posKotEnabled ?? true,
                 expiryTrackingEnabled: cachedProfile.expiryTrackingEnabled ?? false,
-                allowWalletEditDelete: cachedProfile.printSettings?.allowWalletEditDelete ?? cachedProfile.allowWalletEditDelete ?? true,
-                enableVirtualGroupVariants: cachedProfile.printSettings?.enableVirtualGroupVariants ?? cachedProfile.enableVirtualGroupVariants ?? true,
+                allowWalletEditDelete: cachedProfile.allowWalletEditDelete ?? cachedProfile.printSettings?.allowWalletEditDelete ?? true,
+                enableVirtualGroupVariants: cachedProfile.enableVirtualGroupVariants ?? cachedProfile.printSettings?.enableVirtualGroupVariants ?? true,
+                posHtmlPrintEnabled: cachedProfile.posHtmlPrintEnabled ?? cachedProfile.printSettings?.posHtmlPrintEnabled ?? true,
+                posWebBtPrintEnabled: cachedProfile.posWebBtPrintEnabled ?? cachedProfile.printSettings?.posWebBtPrintEnabled ?? true,
             });
         }
     }, [cachedProfile]);
@@ -53,13 +59,17 @@ export default function PosLayoutSettings() {
     const handleSave = async () => {
         setSaving(true);
         try {
+            const payload = {
+                ...settings,
+                ...(cachedProfile?.id ? { id: cachedProfile.id } : {})
+            };
             const res = await fetch(`/api/profile`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(settings),
+                body: JSON.stringify(payload),
             });
             if (res.ok) {
-                updateProfile(settings);
+                updateProfile(settings, false);
                 kravy.success();
                 toast.success("POS layout updated");
             } else {
@@ -128,9 +138,13 @@ export default function PosLayoutSettings() {
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="flex items-center gap-5">
-                    <Link href="/dashboard/settings" className="w-12 h-12 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center hover:scale-110 transition-all shadow-sm">
+                    <button 
+                        onClick={() => router.back()}
+                        className="w-12 h-12 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center hover:scale-110 transition-all shadow-sm cursor-pointer"
+                        title="Back"
+                    >
                         <ArrowLeft size={20} className="text-slate-600 dark:text-white" />
-                    </Link>
+                    </button>
                     <div>
                         <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter">Quick POS Layout</h1>
                         <p className="text-xs text-slate-400 dark:text-white/40 font-bold uppercase tracking-[0.2em] mt-1">Configure visible buttons & actions</p>
@@ -191,6 +205,18 @@ export default function PosLayoutSettings() {
                         <VisibilityToggle icon={Clock} label="Expiry Tracking" sKey="expiryTrackingEnabled" desc="Show item expiration alerts" />
                         <VisibilityToggle icon={Wallet} label="Wallet Tx Edit & Delete" sKey="allowWalletEditDelete" desc="Allow staff to edit or delete past wallet history" />
                         <VisibilityToggle icon={Layers} label="Combine Variants / Addons" sKey="enableVirtualGroupVariants" desc="Group Half/Full/Size variants into 1 card with popup" />
+                    </div>
+                </div>
+
+                {/* Printing Methods */}
+                <div className="space-y-6 lg:col-span-2">
+                    <div className="flex items-center gap-3 px-4">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">Print Button Visbility</h2>
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <VisibilityToggle icon={Printer} label="HTML Print (System Dialog)" sKey="posHtmlPrintEnabled" desc="Show the regular browser print button" />
+                        <VisibilityToggle icon={Bluetooth} label="Direct BT Print" sKey="posWebBtPrintEnabled" desc="Show the fast Web Bluetooth direct print button" />
                     </div>
                 </div>
             </div>

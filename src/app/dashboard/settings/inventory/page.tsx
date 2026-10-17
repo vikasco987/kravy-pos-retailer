@@ -6,10 +6,13 @@ import {
     Package, Save, ArrowLeft, Barcode, CheckCircle2 
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import { kravy } from "@/lib/sounds";
+import { useProfileCache } from "@/hooks/useProfileCache";
 
 export default function InventorySettings() {
+    const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [settings, setSettings] = useState({
@@ -17,20 +20,19 @@ export default function InventorySettings() {
         isStockCompulsory: false,
     });
 
+    const { profile: data, updateProfile } = useProfileCache();
+    const [hasInitProfile, setHasInitProfile] = useState(false);
+
     useEffect(() => {
-        fetch(`/api/profile`)
-            .then(res => res.json())
-            .then(data => {
-                if (data) {
-                    setSettings({
-                        enableSerialNumber: data.enableSerialNumber ?? false,
-                        isStockCompulsory: data.isStockCompulsory ?? false,
-                    });
-                }
-            })
-            .catch(() => toast.error("Failed to load settings"))
-            .finally(() => setLoading(false));
-    }, []);
+        if (data && !hasInitProfile) {
+            setSettings({
+                enableSerialNumber: data.enableSerialNumber ?? false,
+                isStockCompulsory: data.isStockCompulsory ?? false,
+            });
+            setLoading(false);
+            setHasInitProfile(true);
+        }
+    }, [data, hasInitProfile]);
 
     const handleSave = async () => {
         setSaving(true);
@@ -41,6 +43,7 @@ export default function InventorySettings() {
                 body: JSON.stringify(settings),
             });
             if (res.ok) {
+                updateProfile(settings, false);
                 kravy.success();
                 toast.success("Inventory settings updated successfully");
             } else {
@@ -64,12 +67,13 @@ export default function InventorySettings() {
             {/* Header */}
             <div className="flex items-center justify-between bg-[var(--kravy-navbar-bg)] p-6 rounded-3xl border border-[var(--kravy-border)] shadow-sm">
                 <div className="flex items-center gap-4">
-                    <Link 
-                        href="/dashboard/settings" 
-                        className="w-10 h-10 rounded-full bg-[var(--kravy-bg)] flex items-center justify-center hover:bg-[var(--kravy-bg-2)] transition-colors border border-[var(--kravy-border)]"
+                    <button 
+                        onClick={() => router.back()}
+                        className="w-10 h-10 rounded-full bg-[var(--kravy-bg)] flex items-center justify-center hover:bg-[var(--kravy-bg-2)] transition-colors border border-[var(--kravy-border)] cursor-pointer"
+                        title="Back"
                     >
                         <ArrowLeft size={18} />
-                    </Link>
+                    </button>
                     <div>
                         <h1 className="text-2xl font-black text-[var(--kravy-text-primary)] flex items-center gap-3">
                             <Package className="text-indigo-500" />

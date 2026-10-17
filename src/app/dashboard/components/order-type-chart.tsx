@@ -1,5 +1,6 @@
 "use client";
 
+import { useCurrency } from '@/lib/currency-context';
 import React from "react";
 import Link from "next/link";
 import { Maximize2 } from "lucide-react";
@@ -13,12 +14,13 @@ interface Props {
 }
 
 export default function OrderTypeChart({ data }: Props) {
+  const { currencySymbol: sym } = useCurrency();
   const totalAmount = data.DELIVERY.total + data.TAKEAWAY.total + data.DINEIN.total;
   
   const items = [
-    { name: "Online Delivery", value: data.DELIVERY.total, color: "#3B82F6", percent: totalAmount > 0 ? (data.DELIVERY.total / totalAmount) * 100 : 0 },
-    { name: "In-Store Walk-in", value: data.DINEIN.total, color: "#10B981", percent: totalAmount > 0 ? (data.DINEIN.total / totalAmount) * 100 : 0 },
-    { name: "Store Pickup", value: data.TAKEAWAY.total, color: "#F59E0B", percent: totalAmount > 0 ? (data.TAKEAWAY.total / totalAmount) * 100 : 0 },
+    { name: "Delivery", value: data.DELIVERY.total, color: "#3B82F6", percent: totalAmount > 0 ? (data.DELIVERY.total / totalAmount) * 100 : 0 },
+    { name: "Dine-in", value: data.DINEIN.total, color: "#10B981", percent: totalAmount > 0 ? (data.DINEIN.total / totalAmount) * 100 : 0 },
+    { name: "Takeaway", value: data.TAKEAWAY.total, color: "#F59E0B", percent: totalAmount > 0 ? (data.TAKEAWAY.total / totalAmount) * 100 : 0 },
   ].sort((a, b) => b.value - a.value);
 
   const format = (num: number) =>
@@ -38,7 +40,7 @@ export default function OrderTypeChart({ data }: Props) {
       overflow: "hidden"
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-        <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>Sales Channel Breakdown</h3>
+        <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>Order type breakdown</h3>
         <Link 
           href="/dashboard/reports/analytics/order-type" 
           style={{ 
@@ -72,7 +74,7 @@ export default function OrderTypeChart({ data }: Props) {
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <span style={{ fontSize: "0.9rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>{Math.round(item.percent)}%</span>
                 <span style={{ color: "var(--kravy-text-muted)", fontSize: "0.9rem" }}>—</span>
-                <span style={{ fontSize: "0.9rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>₹{format(item.value)}</span>
+                <span style={{ fontSize: "0.9rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>{sym}{format(item.value)}</span>
               </div>
             </div>
             <div style={{ height: "6px", background: "var(--kravy-bg-2)", borderRadius: "3px", overflow: "hidden" }}>
@@ -90,7 +92,7 @@ export default function OrderTypeChart({ data }: Props) {
 
       <div style={{ marginTop: "auto", paddingTop: "20px", borderTop: "1px solid var(--kravy-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--kravy-text-muted)", textTransform: "uppercase" }}>Total Revenue</span>
-        <span style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>₹{format(totalAmount)}</span>
+        <span style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>{sym}{format(totalAmount)}</span>
       </div>
     </div>
   );

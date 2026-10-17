@@ -5,10 +5,15 @@ import BusinessProfile from "./BusinessProfile";
 import ProfileEmpty from "./empty";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Store } from "lucide-react";
+import { Plus, Store, ArrowLeft } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useProfileCache } from "@/hooks/useProfileCache";
 
 export default function Page() {
+  const router = useRouter();
+  const { updateProfile } = useProfileCache();
   const [profiles, setProfiles] = useState<any[]>([]);
   const [enableMultipleProfiles, setEnableMultipleProfiles] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -56,6 +61,7 @@ export default function Page() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enableMultipleProfiles: newValue })
       });
+      updateProfile({ enableMultipleProfiles: newValue }, false);
     } catch (e) {
       console.error(e);
     }
@@ -63,7 +69,7 @@ export default function Page() {
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto p-8 space-y-8 animate-pulse">
+      <div className="w-full space-y-8 animate-pulse">
         <div className="h-20 rounded-2xl bg-[var(--kravy-bg-2)] border border-[var(--kravy-border)]" />
         <div className="h-64 rounded-[40px] bg-[var(--kravy-bg-2)] border border-[var(--kravy-border)]" />
       </div>
@@ -74,7 +80,7 @@ export default function Page() {
   if (selectedProfileIndex !== null || isCreatingNew) {
     const profileData = isCreatingNew ? {} : profiles[selectedProfileIndex!];
     return (
-      <div className="max-w-5xl mx-auto p-4 space-y-4">
+      <div className="w-full space-y-4">
         {enableMultipleProfiles && (
           <Button variant="outline" onClick={() => { setSelectedProfileIndex(null); setIsCreatingNew(false); }}>
             ← Back to Profiles
@@ -97,7 +103,17 @@ export default function Page() {
   if (!enableMultipleProfiles) {
     if (profiles.length === 0) {
       return (
-        <div className="space-y-4 max-w-5xl mx-auto">
+        <div className="space-y-4 w-full">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.back()}
+              className="w-10 h-10 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-sm cursor-pointer"
+              title="Back"
+            >
+              <ArrowLeft size={18} className="text-slate-600 dark:text-white" />
+            </button>
+            <h1 className="text-xl font-black text-slate-900 dark:text-white">Business Profile</h1>
+          </div>
           <Card className="p-6 flex items-center justify-between rounded-3xl bg-[var(--kravy-surface)] border-[var(--kravy-border)]">
             <div>
               <h3 className="font-bold text-lg">Multi-Business Profiles</h3>
@@ -111,13 +127,23 @@ export default function Page() {
     }
 
     return (
-      <div className="space-y-4 max-w-5xl mx-auto p-6">
-        <Card className="p-6 flex items-center justify-between rounded-3xl bg-[var(--kravy-surface)] border-[var(--kravy-border)] shadow-sm">
-          <div>
-            <h3 className="font-bold text-lg">Multi-Business Profiles</h3>
-            <p className="text-sm text-slate-500">Manage multiple restaurants from a single account.</p>
+      <div className="space-y-4 w-full">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.back()}
+            className="w-10 h-10 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-sm cursor-pointer shrink-0"
+            title="Back"
+          >
+            <ArrowLeft size={18} className="text-slate-600 dark:text-white" />
+          </button>
+          <h1 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white truncate">Business Profile</h1>
+        </div>
+        <Card className="p-4 sm:p-6 flex items-center justify-between rounded-2xl sm:rounded-3xl bg-[var(--kravy-surface)] border-[var(--kravy-border)] shadow-sm gap-3">
+          <div className="min-w-0">
+            <h3 className="font-bold text-base sm:text-lg truncate">Multi-Business Profiles</h3>
+            <p className="text-xs sm:text-sm text-slate-500">Manage multiple restaurants from a single account.</p>
           </div>
-          <Switch checked={enableMultipleProfiles} onCheckedChange={toggleMultipleProfiles} />
+          <Switch checked={enableMultipleProfiles} onCheckedChange={toggleMultipleProfiles} className="shrink-0" />
         </Card>
         <BusinessProfile
           data={profiles[0]}
@@ -129,13 +155,23 @@ export default function Page() {
 
   // Multi-Profile List Mode
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-8">
-      <Card className="p-6 flex items-center justify-between rounded-3xl bg-[var(--kravy-surface)] border-[var(--kravy-border)] shadow-sm">
-        <div>
-          <h3 className="font-bold text-lg">Multi-Business Profiles</h3>
-          <p className="text-sm text-slate-500">Manage multiple restaurants from a single account.</p>
+    <div className="w-full space-y-4 sm:space-y-6">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => router.back()}
+          className="w-10 h-10 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-sm cursor-pointer shrink-0"
+          title="Back"
+        >
+          <ArrowLeft size={18} className="text-slate-600 dark:text-white" />
+        </button>
+        <h1 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white truncate">Business Profile</h1>
+      </div>
+      <Card className="p-4 sm:p-6 flex items-center justify-between rounded-2xl sm:rounded-3xl bg-[var(--kravy-surface)] border-[var(--kravy-border)] shadow-sm gap-3">
+        <div className="min-w-0">
+          <h3 className="font-bold text-base sm:text-lg truncate">Multi-Business Profiles</h3>
+          <p className="text-xs sm:text-sm text-slate-500">Manage multiple restaurants from a single account.</p>
         </div>
-        <Switch checked={enableMultipleProfiles} onCheckedChange={toggleMultipleProfiles} />
+        <Switch checked={enableMultipleProfiles} onCheckedChange={toggleMultipleProfiles} className="shrink-0" />
       </Card>
 
       <div>

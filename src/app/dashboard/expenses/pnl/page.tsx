@@ -186,11 +186,11 @@ export default function ProfitLossPage() {
     return (
         <div className="max-w-[1600px] mx-auto p-2 md:p-4 space-y-4 min-h-screen bg-[#F8FAFC] dark:bg-slate-950 kravy-page-fade">
             {/* Header */}
-            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white dark:bg-white/5 p-4 md:p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white dark:bg-white/5 p-4 md:p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm pl-14 md:pl-5">
                 <div className="flex items-center gap-3">
                     <button 
                         onClick={() => { kravy.click(); router.back(); }}
-                        className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 transition-all shadow-inner"
+                        className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 transition-all shadow-inner shrink-0"
                     >
                         <ArrowLeft size={16} />
                     </button>
@@ -262,8 +262,8 @@ export default function ProfitLossPage() {
                 </div>
             </div>
 
-            {/* P&L Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* P&L Stats Grid - Horizontal Scroll under 1024px */}
+            <div className="flex lg:grid lg:grid-cols-4 gap-3 sm:gap-4 overflow-x-auto pb-2 lg:pb-0 scrollbar-hide snap-x -mx-2 px-2 md:mx-0 md:px-0">
                 {[
                     { label: "Gross Sales", value: `₹${totalSales.toLocaleString()}`, icon: ShoppingCart, color: "text-emerald-500", bg: "bg-emerald-500/10", trend: "Realized", trendColor: "text-emerald-500" },
                     { label: "Operational Costs", value: `₹${totalExpenses.toLocaleString()}`, icon: Wallet, color: "text-rose-500", bg: "bg-rose-500/10", trend: "Paid Out", trendColor: "text-rose-500" },
@@ -275,16 +275,16 @@ export default function ProfitLossPage() {
                         animate={{ opacity: 1, y: 0 }} 
                         transition={{ delay: i * 0.1 }} 
                         key={stat.label} 
-                        className="bg-white dark:bg-white/5 p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm group hover:shadow-xl hover:-translate-y-1 transition-all"
+                        className="bg-white dark:bg-white/5 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm group hover:shadow-xl hover:-translate-y-1 transition-all min-w-[220px] sm:min-w-[240px] lg:min-w-0 flex-1 shrink-0 snap-start"
                     >
                         <div className="flex items-center justify-between mb-2">
-                            <div className={`w-8 h-8 rounded-lg ${stat.bg} ${stat.color} flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                            <div className={`w-8 h-8 rounded-lg ${stat.bg} ${stat.color} flex items-center justify-center group-hover:scale-110 transition-transform shrink-0`}>
                                 <stat.icon size={14} />
                             </div>
-                            <span className={`text-[9px] font-black uppercase tracking-widest ${stat.trendColor}`}>{stat.trend}</span>
+                            <span className={`text-[9px] font-black uppercase tracking-widest whitespace-nowrap ${stat.trendColor}`}>{stat.trend}</span>
                         </div>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{stat.label}</p>
-                        <h3 className={`text-xl font-black tracking-tighter ${stat.label === "Net Profit" ? (netProfit >= 0 ? "text-emerald-500" : "text-rose-500") : "text-slate-900 dark:text-white"}`}>{stat.value}</h3>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5 truncate">{stat.label}</p>
+                        <h3 className={`text-lg sm:text-xl font-black tracking-tighter truncate ${stat.label === "Net Profit" ? (netProfit >= 0 ? "text-emerald-500" : "text-rose-500") : "text-slate-900 dark:text-white"}`}>{stat.value}</h3>
                     </motion.div>
                 ))}
             </div>
@@ -292,15 +292,15 @@ export default function ProfitLossPage() {
             {/* Comparison Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Sales vs Expenses Comparison */}
-                <div className="bg-white dark:bg-white/5 p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm relative overflow-hidden">
+                <div className="bg-white dark:bg-white/5 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm relative overflow-hidden">
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tighter">Sales vs Expenses</h3>
+                            <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tighter">Sales vs Expenses</h3>
                             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Comparison of inflows and outflows</p>
                         </div>
                     </div>
                     
-                    <div className="h-[280px] w-full">
+                    <div className="h-[240px] sm:h-[280px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={trendData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
@@ -316,15 +316,15 @@ export default function ProfitLossPage() {
                 </div>
 
                 {/* Profit Trend Chart */}
-                <div className="bg-white dark:bg-white/5 p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm relative overflow-hidden">
+                <div className="bg-white dark:bg-white/5 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm relative overflow-hidden">
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tighter">Profitability Curve</h3>
+                            <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tighter">Profitability Curve</h3>
                             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Net income trend line</p>
                         </div>
                     </div>
                     
-                    <div className="h-[280px] w-full">
+                    <div className="h-[240px] sm:h-[280px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={trendData}>
                                 <defs>
@@ -345,31 +345,31 @@ export default function ProfitLossPage() {
             </div>
 
             {/* Financial Breakdown Table */}
-            <div className="bg-white dark:bg-white/5 p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm overflow-hidden">
-                <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tighter mb-4">Performance Breakdown</h3>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
+            <div className="bg-white dark:bg-white/5 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm overflow-hidden">
+                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tighter mb-4">Performance Breakdown</h3>
+                <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                    <table className="w-full min-w-[580px] text-left">
                         <thead>
-                            <tr className="border-b border-slate-100 dark:border-white/5">
-                                <th className="py-3.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">Time Interval</th>
-                                <th className="py-3.5 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Gross Sales</th>
-                                <th className="py-3.5 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Expenses</th>
-                                <th className="py-3.5 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Net Profit</th>
-                                <th className="py-3.5 text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Efficiency</th>
+                            <tr className="border-b border-slate-100 dark:border-white/5 whitespace-nowrap">
+                                <th className="py-3 px-2 sm:px-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Time Interval</th>
+                                <th className="py-3 px-2 sm:px-3 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Gross Sales</th>
+                                <th className="py-3 px-2 sm:px-3 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Expenses</th>
+                                <th className="py-3 px-2 sm:px-3 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Net Profit</th>
+                                <th className="py-3 px-2 sm:px-3 text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Efficiency</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                        <tbody className="divide-y divide-slate-100 dark:divide-white/5 whitespace-nowrap">
                             {trendData.slice().reverse().map((row, i) => (
                                 <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors">
-                                    <td className="py-3.5 font-bold text-slate-600 dark:text-slate-400 uppercase text-[9px] tracking-widest">{row.name}</td>
-                                    <td className="py-3.5 text-right font-black text-emerald-500">₹{row.sales.toLocaleString()}</td>
-                                    <td className="py-3.5 text-right font-black text-rose-500">₹{row.expenses.toLocaleString()}</td>
-                                    <td className={`py-3.5 text-right font-black ${row.profit >= 0 ? "text-indigo-500" : "text-rose-600"}`}>₹{row.profit.toLocaleString()}</td>
-                                    <td className="py-3.5 text-center">
+                                    <td className="py-3 px-2 sm:px-3 font-bold text-slate-600 dark:text-slate-400 uppercase text-[9px] tracking-widest">{row.name}</td>
+                                    <td className="py-3 px-2 sm:px-3 text-right font-black text-emerald-500">₹{row.sales.toLocaleString()}</td>
+                                    <td className="py-3 px-2 sm:px-3 text-right font-black text-rose-500">₹{row.expenses.toLocaleString()}</td>
+                                    <td className={`py-3 px-2 sm:px-3 text-right font-black ${row.profit >= 0 ? "text-indigo-500" : "text-rose-600"}`}>₹{row.profit.toLocaleString()}</td>
+                                    <td className="py-3 px-2 sm:px-3 text-center">
                                         <div className="flex items-center justify-center">
                                             <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${row.profit >= row.sales * 0.3 ? "bg-emerald-100 text-emerald-600" : row.profit >= 0 ? "bg-amber-100 text-amber-600" : "bg-rose-100 text-rose-600"}`}>
                                                 {row.sales > 0 ? ((row.profit / row.sales) * 100).toFixed(0) : 0}%
-                                              </span>
+                                            </span>
                                         </div>
                                     </td>
                                 </tr>

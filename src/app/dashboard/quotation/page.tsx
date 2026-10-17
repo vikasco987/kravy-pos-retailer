@@ -130,7 +130,7 @@ export default function QuotationAiPage() {
       const fileName = `Kravy_Quotation_${(data.customerName || "Customer").replace(/[^a-zA-Z0-9]/g, "_")}.pdf`;
 
       const opt = {
-        margin: [8, 8, 8, 8],
+        margin: [8, 8, 8, 8] as [number, number, number, number],
         filename: fileName,
         image: { type: "jpeg", quality: 0.98 },
         html2canvas: { 

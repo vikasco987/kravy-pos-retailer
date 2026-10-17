@@ -1,5 +1,6 @@
 "use client";
 
+import { useCurrency } from '@/lib/currency-context';
 import React from "react";
 import {
   BarChart,
@@ -17,6 +18,7 @@ interface Props {
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
+  const { currencySymbol: sym } = useCurrency();
   if (active && payload && payload.length) {
     return (
       <div style={{
@@ -31,7 +33,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#3B82F6" }} />
-            <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>Revenue: ₹{new Intl.NumberFormat("en-IN").format(Math.round(payload[0].value))}</span>
+            <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>Revenue: {sym}{new Intl.NumberFormat("en-IN").format(Math.round(payload[0].value))}</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10B981" }} />
@@ -45,6 +47,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function WeeklyRevenueChart({ data }: Props) {
+  const { currencySymbol: sym } = useCurrency();
   return (
     <div style={{
       background: "var(--kravy-surface)",
@@ -76,7 +79,7 @@ export default function WeeklyRevenueChart({ data }: Props) {
               axisLine={false} 
               tickLine={false} 
               tick={{ fill: "var(--kravy-text-muted)", fontSize: 10, fontWeight: 700 }}
-              tickFormatter={(v) => `₹${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
+              tickFormatter={(v) => `${sym}${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
             />
             <YAxis 
               yAxisId="right"

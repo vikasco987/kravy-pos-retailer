@@ -1,5 +1,5 @@
 "use client";
-
+import { useCurrency } from "@/lib/currency-context";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { 
@@ -7,10 +7,15 @@ import {
     User, Phone, MapPin, Check, Zap, Clock
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import { kravy } from "@/lib/sounds";
+import { useProfileCache } from "@/hooks/useProfileCache";
 
 export default function CustomerDataSettings() {
+  const router = useRouter();
+  const { currencySymbol: sym } = useCurrency();
+
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [settings, setSettings] = useState({
@@ -35,37 +40,36 @@ export default function CustomerDataSettings() {
         qrPayCardEnabled: false,
     });
 
+    const { profile: data, updateProfile } = useProfileCache();
+    const [hasInitProfile, setHasInitProfile] = useState(false);
+
     useEffect(() => {
-        fetch(`/api/profile`)
-            .then(res => res.json())
-            .then(data => {
-                if (data) {
-                    setSettings({
-                        collectCustomerName: data.collectCustomerName ?? true,
-                        requireCustomerName: data.requireCustomerName ?? false,
-                        collectCustomerPhone: data.collectCustomerPhone ?? true,
-                        requireCustomerPhone: data.requireCustomerPhone ?? false,
-                        collectCustomerAddress: data.collectCustomerAddress ?? false,
-                        requireCustomerAddress: data.requireCustomerAddress ?? false,
-                        isOnline: data.isOnline ?? true,
-                        openingTime: data.openingTime ?? "00:00",
-                        closingTime: data.closingTime ?? "23:59",
-                        offlineMessage: data.offlineMessage ?? "Restaurant is currently closed or not accepting orders.",
-                        servedStatusLabel: data.servedStatusLabel ?? "SERVED",
-                        qrDeliveryChargeEnabled: data.qrDeliveryChargeEnabled ?? false,
-                        qrDeliveryChargeAmount: data.qrDeliveryChargeAmount ?? 0,
-                        qrPackagingChargeEnabled: data.qrPackagingChargeEnabled ?? false,
-                        qrPackagingChargeAmount: data.qrPackagingChargeAmount ?? 0,
-                        allowWalletEditDelete: data.printSettings?.allowWalletEditDelete ?? data.allowWalletEditDelete ?? true,
-                        qrPayCashEnabled: data.qrPayCashEnabled ?? false,
-                        qrPayUpiEnabled: data.qrPayUpiEnabled ?? true,
-                        qrPayCardEnabled: data.qrPayCardEnabled ?? false,
-                    });
-                }
-            })
-            .catch(() => toast.error("Failed to load settings"))
-            .finally(() => setLoading(false));
-    }, []);
+        if (data && !hasInitProfile) {
+            setSettings({
+                collectCustomerName: data.collectCustomerName ?? true,
+                requireCustomerName: data.requireCustomerName ?? false,
+                collectCustomerPhone: data.collectCustomerPhone ?? true,
+                requireCustomerPhone: data.requireCustomerPhone ?? false,
+                collectCustomerAddress: data.collectCustomerAddress ?? false,
+                requireCustomerAddress: data.requireCustomerAddress ?? false,
+                isOnline: data.isOnline ?? true,
+                openingTime: data.openingTime ?? "00:00",
+                closingTime: data.closingTime ?? "23:59",
+                offlineMessage: data.offlineMessage ?? "Restaurant is currently closed or not accepting orders.",
+                servedStatusLabel: data.servedStatusLabel ?? "SERVED",
+                qrDeliveryChargeEnabled: data.qrDeliveryChargeEnabled ?? false,
+                qrDeliveryChargeAmount: data.qrDeliveryChargeAmount ?? 0,
+                qrPackagingChargeEnabled: data.qrPackagingChargeEnabled ?? false,
+                qrPackagingChargeAmount: data.qrPackagingChargeAmount ?? 0,
+                allowWalletEditDelete: data.printSettings?.allowWalletEditDelete ?? data.allowWalletEditDelete ?? true,
+                qrPayCashEnabled: data.qrPayCashEnabled ?? false,
+                qrPayUpiEnabled: data.qrPayUpiEnabled ?? true,
+                qrPayCardEnabled: data.qrPayCardEnabled ?? false,
+            });
+            setLoading(false);
+            setHasInitProfile(true);
+        }
+    }, [data, hasInitProfile]);
 
     const handleSave = async () => {
         console.log("DEBUG: Saving Settings:", settings);
@@ -77,6 +81,7 @@ export default function CustomerDataSettings() {
                 body: JSON.stringify(settings),
             });
             if (res.ok) {
+                updateProfile(settings, false);
                 kravy.success();
                 toast.success("Settings updated successfully");
             } else {
@@ -160,9 +165,13 @@ export default function CustomerDataSettings() {
         <div className="max-w-4xl mx-auto space-y-8 kravy-page-fade">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <Link href="/dashboard/settings" className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-all text-slate-600">
+                    <button
+                        onClick={() => router.back()}
+                        className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-all text-slate-600 cursor-pointer"
+                        title="Back"
+                    >
                         <ArrowLeft size={18} />
-                    </Link>
+                    </button>
                     <div>
                         <h1 className="text-2xl font-black text-slate-900 tracking-tight">Customer Setup</h1>
                         <p className="text-xs text-slate-500 font-mono uppercase tracking-widest">QR Menu Data Collection Rules</p>
@@ -351,7 +360,7 @@ export default function CustomerDataSettings() {
                         </div>
                         {settings.qrDeliveryChargeEnabled && (
                             <div className="space-y-2 mt-4 animate-in fade-in slide-in-from-top-2 duration-200">
-                                <label className="text-[10px] uppercase font-black tracking-widest text-slate-500">Charge Amount (₹)</label>
+                                <label className="text-[10px] uppercase font-black tracking-widest text-slate-500">Charge Amount ({sym})</label>
                                 <input 
                                     type="number"
                                     min="0"
@@ -379,7 +388,7 @@ export default function CustomerDataSettings() {
                         </div>
                         {settings.qrPackagingChargeEnabled && (
                             <div className="space-y-2 mt-4 animate-in fade-in slide-in-from-top-2 duration-200">
-                                <label className="text-[10px] uppercase font-black tracking-widest text-slate-500">Charge Amount (₹)</label>
+                                <label className="text-[10px] uppercase font-black tracking-widest text-slate-500">Charge Amount ({sym})</label>
                                 <input 
                                     type="number"
                                     min="0"

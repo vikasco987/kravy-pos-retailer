@@ -1,5 +1,5 @@
 "use client";
-
+import { useCurrency } from "@/lib/currency-context";
 import React, { useState, useEffect, useMemo } from "react";
 import { 
   IndianRupee, 
@@ -41,6 +41,8 @@ import ReportExportDropdown from "@/components/ReportExportDropdown";
 const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
 
 export default function GSTDashboardPage() {
+  const { currencySymbol: sym } = useCurrency();
+
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [mounted, setMounted] = useState(false);
@@ -163,9 +165,9 @@ export default function GSTDashboardPage() {
                 { key: "billNumber", label: "Invoice No" },
                 { key: "date", label: "Date" },
                 { key: "customerName", label: "Buyer Name" },
-                { key: "taxable", label: "Taxable (₹)", format: (v) => v ? Number(v).toFixed(2) : "0.00" },
-                { key: "totalGst", label: "Total GST (₹)", format: (v) => v ? Number(v).toFixed(2) : "0.00" },
-                { key: "grandTotal", label: "Total (₹)", format: (v) => v ? Number(v).toFixed(2) : "0.00" },
+                { key: "taxable", label: "Taxable ({sym})", format: (v) => v ? Number(v).toFixed(2) : "0.00" },
+                { key: "totalGst", label: "Total GST ({sym})", format: (v) => v ? Number(v).toFixed(2) : "0.00" },
+                { key: "grandTotal", label: "Total ({sym})", format: (v) => v ? Number(v).toFixed(2) : "0.00" },
               ]}
               filename={`GST_Dashboard_Summary_${startDate}_to_${endDate}`}
               title={`GST Dashboard Summary (${startDate} to ${endDate})`}
@@ -197,7 +199,7 @@ export default function GSTDashboardPage() {
                   </div>
                   <div className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)] group-hover:text-indigo-500 transition-colors">{stat.label}</div>
                 </div>
-                <div className="text-3xl font-black text-[var(--kravy-text-primary)] tracking-tighter">₹{stat.value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                <div className="text-3xl font-black text-[var(--kravy-text-primary)] tracking-tighter">{sym}{stat.value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
                 <div className="mt-4 flex items-center gap-2">
                   <div className="h-1 flex-1 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
                     <motion.div 
@@ -331,9 +333,9 @@ export default function GSTDashboardPage() {
                           <p className="text-xs font-black text-[var(--kravy-text-primary)]">#{bill.billNumber}</p>
                           <p className="text-[10px] font-bold text-[var(--kravy-text-muted)] uppercase">{format(new Date(bill.date), "dd MMM")}</p>
                         </td>
-                        <td className="py-4 px-4 text-xs font-bold">₹{bill.taxable.toFixed(2)}</td>
-                        <td className="py-4 px-4 text-xs font-bold text-amber-600">₹{(bill.deliveryGst + bill.packagingGst).toFixed(2)}</td>
-                        <td className="py-4 pl-4 text-xs font-black text-indigo-600 text-right">₹{bill.totalGst.toFixed(2)}</td>
+                        <td className="py-4 px-4 text-xs font-bold">{sym}{bill.taxable.toFixed(2)}</td>
+                        <td className="py-4 px-4 text-xs font-bold text-amber-600">{sym}{(bill.deliveryGst + bill.packagingGst).toFixed(2)}</td>
+                        <td className="py-4 pl-4 text-xs font-black text-indigo-600 text-right">{sym}{bill.totalGst.toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>

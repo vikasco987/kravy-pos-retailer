@@ -7,32 +7,20 @@ import {
     Percent, ChevronLeft, Save, Loader2, Settings2,
     Tag, CheckCircle2, Circle, Info, ToggleLeft, ToggleRight,
     Gift, Flame, ShieldCheck, BadgePercent, Trash2, Plus,
-    PackageOpen, ReceiptText, AlertTriangle, QrCode, UtensilsCrossed
+    PackageOpen, ReceiptText, AlertTriangle, QrCode, UtensilsCrossed, Copy
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { kravy } from "@/lib/sounds";
 import { useProfileCache } from "@/hooks/useProfileCache";
 
-type Offer = {
-    id: string;
-    title: string;
-    description?: string;
-    code?: string;
-    discountType: string;
-    discountValue: number;
-    minOrderValue?: number;
-    isActive: boolean;
-};
+
 
 export default function PricingSettingsPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    // Tax settings
     const [taxEnabled, setTaxEnabled] = useState(true);
-    const [perProductTaxEnabled, setPerProductTaxEnabled] = useState(false);
-    const [taxInclusive, setTaxInclusive] = useState(false);
     const [qrMenuPriceInclusive, setQrMenuPriceInclusive] = useState(false);
     const [enableKOTWithBill, setEnableKOTWithBill] = useState(false);
     const [enableMenuQRInBill, setEnableMenuQRInBill] = useState(false);
@@ -49,21 +37,22 @@ export default function PricingSettingsPage() {
     const [packagingGstEnabled, setPackagingGstEnabled] = useState(false);
     const [packagingGstRate, setPackagingGstRate] = useState(0);
 
-    const [taxRate, setTaxRate] = useState(5.0);
     const [businessProfile, setBusinessProfile] = useState<any>(null);
-
-    // Offers
     const { profile: cachedProfile, loading: profileLoading, updateProfile } = useProfileCache();
-    const [offers, setOffers] = useState<Offer[]>([]);
-    const [offersLoading, setOffersLoading] = useState(true);
+    useEffect(() => {
+        console.log(`[KRAVY-PERF] PAGE_MOUNT: TaxPage mounted`);
+    }, []);
 
     // Populate data quickly when cache is available
     useEffect(() => {
-        if (cachedProfile && loading) {
+        if (!profileLoading) {
+            console.log(`[KRAVY-PERF] LOADING_STATE_END: TaxPage loading completed`);
+            setLoading(false);
+        }
+        
+        if (cachedProfile) {
             setBusinessProfile(cachedProfile);
             setTaxEnabled(cachedProfile?.taxEnabled ?? true);
-            setPerProductTaxEnabled(cachedProfile?.perProductTaxEnabled ?? false);
-            setTaxInclusive(cachedProfile?.taxInclusive ?? false);
             setQrMenuPriceInclusive(cachedProfile?.qrMenuPriceInclusive ?? false);
             setEnableDeliveryCharges(cachedProfile?.enableDeliveryCharges ?? false);
             setDeliveryChargeAmount(cachedProfile?.deliveryChargeAmount ?? 0);
@@ -76,46 +65,15 @@ export default function PricingSettingsPage() {
             setSyncQuickPosWithKitchen(cachedProfile?.syncQuickPosWithKitchen ?? false);
             setEnableKOTWithBill(cachedProfile?.enableKOTWithBill ?? false);
             setEnableMenuQRInBill(cachedProfile?.enableMenuQRInBill ?? false);
-            setTaxRate(cachedProfile?.taxRate ?? 5.0);
-            if (!profileLoading) setLoading(false);
         }
     }, [cachedProfile, profileLoading]);
 
-    // New offer form
-    const [showNewOffer, setShowNewOffer] = useState(false);
-    const [newOffer, setNewOffer] = useState({
-        title: "",
-        code: "",
-        discountType: "PERCENTAGE",
-        discountValue: 10,
-        minOrderValue: 0,
-    });
-    const [savingOffer, setSavingOffer] = useState(false);
-
-    useEffect(() => {
-        async function fetchAll() {
-            try {
-                const offerRes = await fetch(`/api/admin/offers`, { cache: "no-store" });
-                const offerData = await offerRes.json();
-                setOffers(Array.isArray(offerData) ? offerData : []);
-            } catch {
-                kravy.error();
-                toast.error("Error loading settings");
-            } finally {
-                setLoading(false);
-                setOffersLoading(false);
-            }
-        }
-        fetchAll();
-    }, []);
 
     async function handleSaveTax() {
         setSaving(true);
         try {
             const payload = { 
                 taxEnabled, 
-                perProductTaxEnabled, 
-                taxInclusive,
                 qrMenuPriceInclusive, 
                 enableDeliveryCharges,
                 deliveryChargeAmount: Number(deliveryChargeAmount),
@@ -127,79 +85,34 @@ export default function PricingSettingsPage() {
                 packagingGstRate: Number(packagingGstRate),
                 syncQuickPosWithKitchen,
                 enableKOTWithBill,
-                enableMenuQRInBill,
-                taxRate: Number(taxRate) 
+                enableMenuQRInBill
             };
             const res = await fetch(`/api/profile`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
             });
-            if (!res.ok) throw new Error();
+            
+            const data = await res.json();
+            
+            if (!res.ok) {
+                console.error("Save Tax Error Response:", data);
+                throw new Error(data.error || data.message || "Failed to save settings");
+            }
+            
+            updateProfile(data, false);
             kravy.success();
             toast.success("Tax settings saved! ✅");
-        } catch {
+        } catch (err: any) {
+            console.error("Save Tax Error:", err);
             kravy.error();
-            toast.error("Failed to save tax settings");
+            toast.error(`Error: ${err.message || "Failed to save tax settings"}`);
         } finally {
             setSaving(false);
         }
     }
 
-    async function handleCreateOffer() {
-        kravy.error();
-        if (!newOffer.title) { toast.error("Offer title required"); return; }
-        kravy.error();
-        if (newOffer.discountValue <= 0) { toast.error("Discount must be > 0"); return; }
-        setSavingOffer(true);
-        try {
-            const res = await fetch(`/api/admin/offers`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(newOffer),
-            });
-            if (!res.ok) throw new Error();
-            const created = await res.json();
-            setOffers(prev => [created, ...prev]);
-            setShowNewOffer(false);
-            setNewOffer({ title: "", code: "", discountType: "PERCENTAGE", discountValue: 10, minOrderValue: 0 });
-            kravy.success();
-            toast.success("Offer created! 🎉");
-        } catch {
-            kravy.error();
-            toast.error("Failed to create offer");
-        } finally {
-            setSavingOffer(false);
-        }
-    }
 
-    async function handleDeleteOffer(id: string) {
-        try {
-            const res = await fetch(`/api/admin/offers?id=${id}`, { method: "DELETE" });
-            if (!res.ok) throw new Error();
-            setOffers(prev => prev.filter(o => o.id !== id));
-            kravy.success();
-            toast.success("Offer deleted");
-        } catch {
-            kravy.error();
-            toast.error("Failed to delete offer");
-        }
-    }
-
-    async function handleToggleOffer(offer: Offer) {
-        try {
-            const res = await fetch(`/api/admin/offers`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id: offer.id, isActive: !offer.isActive }),
-            });
-            if (!res.ok) throw new Error();
-            setOffers(prev => prev.map(o => o.id === offer.id ? { ...o, isActive: !o.isActive } : o));
-        } catch {
-            kravy.error();
-            toast.error("Failed to update offer");
-        }
-    }
 
     async function handleToggleKOT(newVal: boolean) {
         const oldVal = enableKOTWithBill;
@@ -213,7 +126,7 @@ export default function PricingSettingsPage() {
             if (res.ok) {
                 const data = await res.json();
                 setBusinessProfile(data);
-                updateProfile(data);
+                updateProfile(data, false);
                 kravy.success();
                 toast.success(`Auto-KOT ${newVal ? 'Enabled' : 'Disabled'} ✅`);
             } else {
@@ -237,7 +150,7 @@ export default function PricingSettingsPage() {
             if (res.ok) {
                 const data = await res.json();
                 setBusinessProfile(data);
-                updateProfile(data);
+                updateProfile(data, false);
                 kravy.success();
                 toast.success(`Menu QR ${val ? 'Enabled' : 'Disabled'} on Bills ✅`);
             } else {
@@ -260,221 +173,202 @@ export default function PricingSettingsPage() {
         );
     }
 
-    // Live preview calculation
-    const sampleSubtotal = 1000;
-    const sampleTax = taxEnabled 
-        ? (taxInclusive 
-            ? (sampleSubtotal * (1 - 1 / (1 + taxRate/100))) 
-            : (sampleSubtotal * taxRate / 100)) 
-        : 0;
-    const sampleTotal = taxInclusive ? sampleSubtotal : (sampleSubtotal + sampleTax);
+
+    const copySchema = async () => {
+        if (!cachedProfile) {
+            toast.error("No profile data to copy");
+            return;
+        }
+
+        const debugData = {
+            apiUrls: [
+                "/api/profile (GET/PUT)"
+            ],
+            profileSchema: cachedProfile
+        };
+
+        try {
+            await navigator.clipboard.writeText(JSON.stringify(debugData, null, 2));
+            kravy.success();
+            toast.success("JSON Schema Copied! ✅");
+        } catch (err) {
+            console.error("Failed to copy", err);
+            toast.error("Copy failed! See console.");
+        }
+    };
 
     return (
-        <div className="max-w-3xl mx-auto py-8 px-4 kravy-page-fade space-y-8">
+        <div className="w-full space-y-6 sm:space-y-8">
 
             {/* ── HEADER ── */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
+                <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
                     <button
                         onClick={() => router.back()}
-                        className="p-2.5 rounded-xl bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-muted)] hover:text-[var(--kravy-brand)] hover:border-[var(--kravy-brand)]/50 transition-all"
+                        className="p-1.5 sm:p-2 md:p-2.5 rounded-xl bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-muted)] hover:text-[var(--kravy-brand)] hover:border-[var(--kravy-brand)]/50 transition-all shrink-0 active:scale-95 shadow-sm"
                     >
-                        <ChevronLeft size={20} />
+                        <ChevronLeft size={18} className="sm:w-5 sm:h-5" />
                     </button>
-                    <div>
-                        <h1 className="text-2xl font-black text-[var(--kravy-text-primary)] tracking-tight">Pricing & Tax</h1>
-                        <p className="text-xs font-mono text-[var(--kravy-text-muted)]">Control GST, discount offers · affects catalog & billing</p>
+                    <div className="min-w-0">
+                        <h1 className="text-base sm:text-lg md:text-xl lg:text-2xl font-black text-[var(--kravy-text-primary)] tracking-tight">Pricing & Tax</h1>
+                        <p className="text-[10px] sm:text-xs font-mono text-[var(--kravy-text-muted)] leading-snug">Control GST, discount offers · affects catalog & billing</p>
                     </div>
+                </div>
+                <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap shrink-0">
+                    <button
+                        onClick={copySchema}
+                        className="flex items-center gap-1.5 px-2.5 sm:px-3 md:px-3.5 py-1.5 sm:py-2 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] rounded-xl text-[11px] sm:text-xs md:text-sm font-bold hover:border-[var(--kravy-brand)] transition-all active:scale-95 shadow-sm whitespace-nowrap"
+                        title="Copy JSON Schema"
+                    >
+                        <Copy size={13} className="sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 text-[var(--kravy-text-muted)]" /> Schema
+                    </button>
+                    <button
+                        onClick={() => router.push('/dashboard/settings/tax-management')}
+                        className="flex items-center gap-1.5 px-3 sm:px-3.5 md:px-4 py-1.5 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[11px] sm:text-xs md:text-sm font-bold shadow-md shadow-blue-500/20 transition-all active:scale-95 whitespace-nowrap"
+                    >
+                        <PackageOpen size={13} className="sm:w-3.5 sm:h-3.5 md:w-4 md:h-4" /> Manage Item Taxes
+                    </button>
                 </div>
             </div>
 
-            {/* ── SECTION 1: GST SETTINGS ── */}
+            {/* ── SECTION 1: QUICK POS GST SETTINGS ── */}
             <section>
                 <div className="flex items-center gap-2 mb-4">
                     <div className="w-6 h-6 bg-[var(--kravy-brand)]/10 rounded-lg flex items-center justify-center">
                         <Percent size={14} className="text-[var(--kravy-brand)]" />
                     </div>
-                    <h2 className="text-[11px] font-black uppercase tracking-[2px] text-[var(--kravy-text-muted)]">GST / Tax Settings</h2>
+                    <h2 className="text-[11px] font-black uppercase tracking-[2px] text-[var(--kravy-text-muted)]">Quick POS Tax Settings</h2>
                 </div>
 
                 <div className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl overflow-hidden shadow-sm">
-                    {/* Toggle Row */}
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--kravy-border)]">
-                        <div className="flex items-center gap-3.5">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${taxEnabled ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                                <ShieldCheck size={20} />
+
+                    {/* Global GST Toggle Row */}
+                    <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[var(--kravy-border)] bg-[var(--kravy-brand)]/5 gap-3">
+                        <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+                            <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${taxEnabled ? 'bg-[var(--kravy-brand)]/20 text-[var(--kravy-brand)]' : 'bg-gray-100 text-gray-400'}`}>
+                                <Percent size={18} className="sm:w-5 sm:h-5" />
                             </div>
-                            <div>
-                                <div className="font-black text-[0.9rem] text-[var(--kravy-text-primary)]">Enable Global GST System</div>
-                                <div className="text-xs text-[var(--kravy-text-muted)] font-medium">
-                                    {taxEnabled ? `${taxRate}% GST will be added to every order` : "No tax will be charged to customers"}
+                            <div className="min-w-0">
+                                <div className="font-black text-xs sm:text-[0.9rem] text-[var(--kravy-text-primary)] truncate">Enable GST on Orders</div>
+                                <div className="text-[10px] sm:text-xs text-[var(--kravy-text-muted)] font-medium truncate">
+                                    {taxEnabled 
+                                        ? "GST will be calculated and printed on bills" 
+                                        : "GST calculation disabled completely"}
                                 </div>
                             </div>
                         </div>
                         <button onClick={() => setTaxEnabled(!taxEnabled)} className="shrink-0">
                             {taxEnabled
-                                ? <ToggleRight size={36} className="text-green-500" />
-                                : <ToggleLeft size={36} className="text-gray-300" />
+                                ? <ToggleRight size={32} className="sm:w-9 sm:h-9 text-[var(--kravy-brand)]" />
+                                : <ToggleLeft size={32} className="sm:w-9 sm:h-9 text-gray-300" />
                             }
                         </button>
                     </div>
-
-                    {/* Per-Product Toggle Row */}
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--kravy-border)]">
-                        <div className="flex items-center gap-3.5">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${perProductTaxEnabled ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-400'}`}>
-                                <Settings2 size={20} />
+                    
+                    {taxEnabled && (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-4 sm:px-5 py-3 border-b border-[var(--kravy-border)] bg-[var(--kravy-brand)]/5 sm:pl-[68px]">
+                            <div className="text-xs sm:text-[0.8rem] text-[var(--kravy-text-muted)] font-medium">
+                                Configure item-wise GST rates and HSN codes
                             </div>
-                            <div>
-                                <div className="font-black text-[0.9rem] text-[var(--kravy-text-primary)]">Per-Product GST</div>
-                                <div className="text-xs text-[var(--kravy-text-muted)] font-medium">
-                                    {perProductTaxEnabled ? "Priority: Product GST > Default GST" : "Always use Default GST for all products"}
-                                </div>
-                            </div>
+                            <button
+                                onClick={() => router.push('/dashboard/settings/tax-management')}
+                                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[var(--kravy-brand)]/10 text-[var(--kravy-brand)] hover:bg-[var(--kravy-brand)] hover:text-white rounded-lg text-xs font-bold transition-all w-fit"
+                            >
+                                <PackageOpen size={14} /> Manage Item Taxes
+                            </button>
                         </div>
-                        <button onClick={() => setPerProductTaxEnabled(!perProductTaxEnabled)} className="shrink-0">
-                            {perProductTaxEnabled
-                                ? <ToggleRight size={36} className="text-amber-500" />
-                                : <ToggleLeft size={36} className="text-gray-300" />
-                            }
-                        </button>
-                    </div>
+                    )}
 
-                    {/* Global Inclusive vs Exclusive Toggle Row */}
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--kravy-border)]">
-                        <div className="flex items-center gap-3.5">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${taxInclusive ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-400'}`}>
-                                <BadgePercent size={20} />
-                            </div>
-                            <div>
-                                <div className="font-black text-[0.9rem] text-[var(--kravy-text-primary)]">{taxInclusive ? "Inclusive GST (POS & Bills)" : "Exclusive GST (POS & Bills)"}</div>
-                                <div className="text-xs text-[var(--kravy-text-muted)] font-medium">
-                                    {taxInclusive 
-                                        ? "Prices entered already include GST. Bill will show backwards calculation." 
-                                        : "GST will be calculated as EXTRA on top of item prices."}
-                                </div>
-                            </div>
-                        </div>
-                        <button onClick={() => setTaxInclusive(!taxInclusive)} className="shrink-0">
-                            {taxInclusive
-                                ? <ToggleRight size={36} className="text-indigo-500" />
-                                : <ToggleLeft size={36} className="text-gray-300" />
-                            }
-                        </button>
-                    </div>
-
-                    {/* QR Menu Inclusive Toggle Row */}
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--kravy-border)]">
-                        <div className="flex items-center gap-3.5">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${qrMenuPriceInclusive ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-400'}`}>
-                                <BadgePercent size={20} />
-                            </div>
-                            <div>
-                                <div className="font-black text-[0.9rem] text-[var(--kravy-text-primary)]">{qrMenuPriceInclusive ? "Inclusive GST Pricing" : "Exclusive GST Pricing"}</div>
-                                <div className="text-xs text-[var(--kravy-text-muted)] font-medium">
-                                    {qrMenuPriceInclusive 
-                                        ? "Price shown in menu ALREADY includes tax" 
-                                        : "GST will be EXTRA on top of menu price"}
-                                </div>
-                            </div>
-                        </div>
-                        <button onClick={() => setQrMenuPriceInclusive(!qrMenuPriceInclusive)} className="shrink-0">
-                            {qrMenuPriceInclusive
-                                ? <ToggleRight size={36} className="text-indigo-500" />
-                                : <ToggleLeft size={36} className="text-gray-300" />
-                            }
-                        </button>
-                    </div>
                     {/* KOT with Bill Toggle Row */}
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--kravy-border)]">
-                        <div className="flex items-center gap-3.5">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${enableKOTWithBill ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'}`}>
-                                <ReceiptText size={20} />
+                    <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[var(--kravy-border)] gap-3">
+                        <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+                            <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${enableKOTWithBill ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'}`}>
+                                <ReceiptText size={18} className="sm:w-5 sm:h-5" />
                             </div>
-                            <div>
-                                <div className="font-black text-[0.9rem] text-[var(--kravy-text-primary)]">Auto-Print KOT with Bill</div>
-                                <div className="text-xs text-[var(--kravy-text-muted)] font-medium">
+                            <div className="min-w-0">
+                                <div className="font-black text-xs sm:text-[0.9rem] text-[var(--kravy-text-primary)] truncate">Auto-Print KOT with Bill</div>
+                                <div className="text-[10px] sm:text-xs text-[var(--kravy-text-muted)] font-medium truncate">
                                     {enableKOTWithBill 
-                                        ? "KOT will print automatically when you print a bill" 
+                                        ? "KOT will print automatically with bill" 
                                         : "Print KOT and Bill separately"}
                                 </div>
                             </div>
                         </div>
                         <button onClick={() => handleToggleKOT(!enableKOTWithBill)} className="shrink-0">
                             {enableKOTWithBill
-                                ? <ToggleRight size={36} className="text-emerald-500" />
-                                : <ToggleLeft size={36} className="text-gray-300" />
+                                ? <ToggleRight size={32} className="sm:w-9 sm:h-9 text-emerald-500" />
+                                : <ToggleLeft size={32} className="sm:w-9 sm:h-9 text-gray-300" />
                             }
                         </button>
                     </div>
 
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--kravy-border)]">
-                        <div className="flex items-center gap-3.5">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${enableMenuQRInBill ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-400'}`}>
-                                <QrCode size={20} />
+                    <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[var(--kravy-border)] gap-3">
+                        <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+                            <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${enableMenuQRInBill ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-400'}`}>
+                                <QrCode size={18} className="sm:w-5 sm:h-5" />
                             </div>
-                            <div>
-                                <div className="font-black text-[0.9rem] text-[var(--kravy-text-primary)]">Print Menu QR on Bill</div>
-                                <div className="text-xs text-[var(--kravy-text-muted)] font-medium">
+                            <div className="min-w-0">
+                                <div className="font-black text-xs sm:text-[0.9rem] text-[var(--kravy-text-primary)] truncate">Print Menu QR on Bill</div>
+                                <div className="text-[10px] sm:text-xs text-[var(--kravy-text-muted)] font-medium truncate">
                                     {enableMenuQRInBill 
-                                        ? "Digital menu QR will print at bottom of bill" 
+                                        ? "Digital menu QR will print on bill" 
                                         : "No menu QR on bills"}
                                 </div>
                             </div>
                         </div>
                         <button onClick={() => handleToggleMenuQR(!enableMenuQRInBill)} className="shrink-0">
                             {enableMenuQRInBill
-                                ? <ToggleRight size={36} className="text-indigo-500" />
-                                : <ToggleLeft size={36} className="text-gray-300" />
+                                ? <ToggleRight size={32} className="sm:w-9 sm:h-9 text-indigo-500" />
+                                : <ToggleLeft size={32} className="sm:w-9 sm:h-9 text-gray-300" />
                             }
                         </button>
                     </div>
 
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--kravy-border)]">
-                        <div className="flex items-center gap-3.5">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${syncQuickPosWithKitchen ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-400'}`}>
-                                <UtensilsCrossed size={20} />
+                    <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[var(--kravy-border)] gap-3">
+                        <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+                            <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${syncQuickPosWithKitchen ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-400'}`}>
+                                <UtensilsCrossed size={18} className="sm:w-5 sm:h-5" />
                             </div>
-                            <div>
-                                <div className="font-black text-[0.9rem] text-[var(--kravy-text-primary)]">Sync Quick POS with Kitchen</div>
-                                <div className="text-xs text-[var(--kravy-text-muted)] font-medium">
+                            <div className="min-w-0">
+                                <div className="font-black text-xs sm:text-[0.9rem] text-[var(--kravy-text-primary)] truncate">Sync Quick POS with Kitchen</div>
+                                <div className="text-[10px] sm:text-xs text-[var(--kravy-text-muted)] font-medium truncate">
                                     {syncQuickPosWithKitchen 
-                                        ? "POS orders auto-sent to Kitchen workflow" 
+                                        ? "POS orders auto-sent to Kitchen" 
                                         : "Standard POS (no kitchen sync)"}
                                 </div>
                             </div>
                         </div>
                         <button onClick={() => setSyncQuickPosWithKitchen(!syncQuickPosWithKitchen)} className="shrink-0">
                             {syncQuickPosWithKitchen
-                                ? <ToggleRight size={36} className="text-orange-500" />
-                                : <ToggleLeft size={36} className="text-gray-300" />
+                                ? <ToggleRight size={32} className="sm:w-9 sm:h-9 text-orange-500" />
+                                : <ToggleLeft size={32} className="sm:w-9 sm:h-9 text-gray-300" />
                             }
                         </button>
                     </div>
 
                     {/* Delivery Charges Toggle */}
-                    <div className="px-5 py-4 border-b border-[var(--kravy-border)] space-y-4">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3.5">
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${enableDeliveryCharges ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'}`}>
-                                    <ShieldCheck size={20} />
+                    <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[var(--kravy-border)] space-y-4">
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+                                <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${enableDeliveryCharges ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'}`}>
+                                    <ShieldCheck size={18} className="sm:w-5 sm:h-5" />
                                 </div>
-                                <div>
-                                    <div className="font-black text-[0.9rem] text-[var(--kravy-text-primary)]">Enable Delivery Charges</div>
-                                    <div className="text-xs text-[var(--kravy-text-muted)] font-medium">
+                                <div className="min-w-0">
+                                    <div className="font-black text-xs sm:text-[0.9rem] text-[var(--kravy-text-primary)] truncate">Enable Delivery Charges</div>
+                                    <div className="text-[10px] sm:text-xs text-[var(--kravy-text-muted)] font-medium truncate">
                                         Fixed charge added to delivery orders
                                     </div>
                                 </div>
                             </div>
                             <button onClick={() => setEnableDeliveryCharges(!enableDeliveryCharges)} className="shrink-0">
                                 {enableDeliveryCharges
-                                    ? <ToggleRight size={36} className="text-blue-500" />
-                                    : <ToggleLeft size={36} className="text-gray-300" />
+                                    ? <ToggleRight size={32} className="sm:w-9 sm:h-9 text-blue-500" />
+                                    : <ToggleLeft size={32} className="sm:w-9 sm:h-9 text-gray-300" />
                                 }
                             </button>
                         </div>
                         {enableDeliveryCharges && (
-                            <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="pl-[54px] pr-2 pb-2 space-y-4">
+                            <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="pl-2 sm:pl-[54px] pr-2 pb-2 space-y-4">
                                 <div>
                                     <label className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)] mb-1.5 block">Charge Amount (₹)</label>
                                     <div className="relative max-w-[150px]">
@@ -488,7 +382,7 @@ export default function PricingSettingsPage() {
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-6">
+                                <div className="flex flex-wrap items-center gap-4 sm:gap-6">
                                     <div className="flex items-center gap-3">
                                         <button 
                                             onClick={() => setDeliveryGstEnabled(!deliveryGstEnabled)}
@@ -503,7 +397,7 @@ export default function PricingSettingsPage() {
                                     </div>
 
                                     {deliveryGstEnabled && (
-                                        <div className="relative max-w-[100px]">
+                                        <div className="relative w-28 sm:max-w-[100px]">
                                             <input
                                                 type="number"
                                                 placeholder="GST %"
@@ -520,28 +414,28 @@ export default function PricingSettingsPage() {
                     </div>
 
                     {/* Packaging Charges Toggle */}
-                    <div className="px-5 py-4 border-b border-[var(--kravy-border)] space-y-4">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3.5">
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${enablePackagingCharges ? 'bg-rose-100 text-rose-600' : 'bg-gray-100 text-gray-400'}`}>
-                                    <BadgePercent size={20} />
+                    <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[var(--kravy-border)] space-y-4">
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+                                <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${enablePackagingCharges ? 'bg-rose-100 text-rose-600' : 'bg-gray-100 text-gray-400'}`}>
+                                    <BadgePercent size={18} className="sm:w-5 sm:h-5" />
                                 </div>
-                                <div>
-                                    <div className="font-black text-[0.9rem] text-[var(--kravy-text-primary)]">Enable Packaging Charges</div>
-                                    <div className="text-xs text-[var(--kravy-text-muted)] font-medium">
+                                <div className="min-w-0">
+                                    <div className="font-black text-xs sm:text-[0.9rem] text-[var(--kravy-text-primary)] truncate">Enable Packaging Charges</div>
+                                    <div className="text-[10px] sm:text-xs text-[var(--kravy-text-muted)] font-medium truncate">
                                         Fixed charge for takeaway/delivery orders
                                     </div>
                                 </div>
                             </div>
                             <button onClick={() => setEnablePackagingCharges(!enablePackagingCharges)} className="shrink-0">
                                 {enablePackagingCharges
-                                    ? <ToggleRight size={36} className="text-rose-500" />
-                                    : <ToggleLeft size={36} className="text-gray-300" />
+                                    ? <ToggleRight size={32} className="sm:w-9 sm:h-9 text-rose-500" />
+                                    : <ToggleLeft size={32} className="sm:w-9 sm:h-9 text-gray-300" />
                                 }
                             </button>
                         </div>
                         {enablePackagingCharges && (
-                            <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="pl-[54px] pr-2 pb-2 space-y-4">
+                            <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="pl-2 sm:pl-[54px] pr-2 pb-2 space-y-4">
                                 <div>
                                     <label className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)] mb-1.5 block">Charge Amount (₹)</label>
                                     <div className="relative max-w-[150px]">
@@ -555,7 +449,7 @@ export default function PricingSettingsPage() {
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-6">
+                                <div className="flex flex-wrap items-center gap-4 sm:gap-6">
                                     <div className="flex items-center gap-3">
                                         <button 
                                             onClick={() => setPackagingGstEnabled(!packagingGstEnabled)}
@@ -570,7 +464,7 @@ export default function PricingSettingsPage() {
                                     </div>
 
                                     {packagingGstEnabled && (
-                                        <div className="relative max-w-[100px]">
+                                        <div className="relative w-28 sm:max-w-[100px]">
                                             <input
                                                 type="number"
                                                 placeholder="GST %"
@@ -585,65 +479,6 @@ export default function PricingSettingsPage() {
                             </motion.div>
                         )}
                     </div>
-
-                    {/* Preset Rate Chips */}
-                    <AnimatePresence>
-                        {taxEnabled && (
-                            <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: "auto" }}
-                                exit={{ opacity: 0, height: 0 }}
-                                className="px-5 py-4 space-y-4"
-                            >
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)] mb-2 block">Quick Select Rate</label>
-                                    <div className="flex gap-2 flex-wrap">
-                                        {PRESET_RATES.map(r => (
-                                            <button
-                                                key={r}
-                                                onClick={() => setTaxRate(r)}
-                                                className={`px-4 py-2 rounded-xl text-sm font-black border-2 transition-all ${taxRate === r
-                                                    ? 'bg-[var(--kravy-brand)] text-white border-[var(--kravy-brand)] shadow-md shadow-[var(--kravy-brand)]/20'
-                                                    : 'bg-[var(--kravy-surface)] text-[var(--kravy-text-muted)] border-[var(--kravy-border)] hover:border-[var(--kravy-brand)]/40'
-                                                    }`}
-                                            >
-                                                {r}%
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)] mb-2 block">Custom Rate (%)</label>
-                                    <div className="relative max-w-[180px]">
-                                        <input
-                                            type="number"
-                                            value={taxRate}
-                                            onChange={e => setTaxRate(Number(e.target.value))}
-                                            min={0} max={100} step={0.5}
-                                            className="w-full bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] rounded-xl px-4 py-3 text-lg font-black text-[var(--kravy-text-primary)] focus:ring-2 focus:ring-[var(--kravy-brand)]/20 focus:border-[var(--kravy-brand)] transition-all outline-none pr-10"
-                                        />
-                                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--kravy-brand)] font-black text-lg">%</span>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
-
-                {/* Live Preview */}
-                <div className="mt-3 bg-[var(--kravy-brand)]/5 border border-[var(--kravy-brand)]/10 rounded-2xl p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                        <ReceiptText size={14} className="text-[var(--kravy-brand)]" />
-                        <span className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)]">Live Preview (₹1,000 order)</span>
-                    </div>
-                    <div className="space-y-1.5">
-                        <div className="flex justify-between text-sm font-bold text-[var(--kravy-text-muted)]"><span>Items Total</span><span>₹{sampleSubtotal.toFixed(2)}</span></div>
-                        {taxEnabled && <div className="flex justify-between text-sm font-bold text-[var(--kravy-brand)]"><span>GST ({taxRate}%)</span><span>+₹{sampleTax.toFixed(2)}</span></div>}
-                        {!taxEnabled && <div className="flex justify-between text-sm font-bold text-gray-400 line-through"><span>GST (disabled)</span><span>₹0.00</span></div>}
-                        <div className="h-px bg-[var(--kravy-brand)]/20 my-1" />
-                        <div className="flex justify-between text-base font-black text-[var(--kravy-text-primary)]"><span>Customer Pays</span><span>₹{sampleTotal.toFixed(2)}</span></div>
-                    </div>
                 </div>
 
                 {/* Save Tax Button */}
@@ -657,209 +492,33 @@ export default function PricingSettingsPage() {
                 </button>
             </section>
 
+
             {/* ── SECTION 2: OFFERS & DISCOUNTS ── */}
             <section>
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 bg-orange-100 rounded-lg flex items-center justify-center">
-                            <Tag size={14} className="text-orange-500" />
+                <div className="bg-orange-50/50 border border-orange-100 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-100 rounded-xl flex items-center justify-center shrink-0">
+                            <Tag size={20} className="sm:w-6 sm:h-6 text-orange-500" />
                         </div>
-                        <h2 className="text-[11px] font-black uppercase tracking-[2px] text-[var(--kravy-text-muted)]">Offers & Coupons</h2>
+                        <div className="min-w-0">
+                            <h2 className="text-xs sm:text-sm font-black text-[var(--kravy-text-primary)] truncate">Offers & Coupons</h2>
+                            <p className="text-[10px] sm:text-xs text-[var(--kravy-text-muted)] mt-0.5 truncate">Manage discounts for your QR Menu</p>
+                        </div>
                     </div>
                     <button
-                        onClick={() => setShowNewOffer(!showNewOffer)}
-                        className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-2 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors shadow-md shadow-orange-200"
+                        onClick={() => router.push('/dashboard/settings/offers')}
+                        className="px-4 py-2 sm:py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-orange-500/20 transition-all active:scale-95 whitespace-nowrap text-center"
                     >
-                        <Plus size={14} /> New Offer
+                        Manage Offers
                     </button>
                 </div>
-
-                {/* Info banner */}
-                <div className="flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-xl p-3.5 mb-4">
-                    <Info size={16} className="text-blue-500 shrink-0 mt-0.5" />
-                    <p className="text-[0.72rem] font-[600] text-blue-700 leading-relaxed">
-                        Active offers appear on the customer{"'"}s <strong>QR Menu</strong> page and in the cart. Customers can copy the code and apply it at checkout.
-                    </p>
-                </div>
-
-                {/* New Offer Form */}
-                <AnimatePresence>
-                    {showNewOffer && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            className="bg-[var(--kravy-surface)] border-2 border-orange-200 rounded-2xl p-5 mb-4 space-y-4"
-                        >
-                            <div className="flex items-center gap-2 mb-1">
-                                <Gift size={16} className="text-orange-500" />
-                                <h3 className="font-black text-sm text-[var(--kravy-text-primary)]">Create New Offer</h3>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)] mb-1 block">Offer Title *</label>
-                                    <input
-                                        value={newOffer.title}
-                                        onChange={e => setNewOffer(p => ({ ...p, title: e.target.value }))}
-                                        placeholder="e.g. Weekend Special"
-                                        className="w-full bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] rounded-xl px-4 py-2.5 text-sm font-bold outline-none focus:border-orange-400 transition"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)] mb-1 block">Coupon Code</label>
-                                    <input
-                                        value={newOffer.code}
-                                        onChange={e => setNewOffer(p => ({ ...p, code: e.target.value.toUpperCase() }))}
-                                        placeholder="e.g. SAVE20"
-                                        className="w-full bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] rounded-xl px-4 py-2.5 text-sm font-bold font-mono outline-none focus:border-orange-400 transition"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)] mb-1 block">Discount Type</label>
-                                    <div className="flex gap-2">
-                                        {[{ v: "PERCENTAGE", l: "% Off" }, { v: "FLAT", l: "₹ Flat" }].map(opt => (
-                                            <button
-                                                key={opt.v}
-                                                onClick={() => setNewOffer(p => ({ ...p, discountType: opt.v }))}
-                                                className={`flex-1 py-2.5 rounded-xl text-sm font-black border-2 transition ${newOffer.discountType === opt.v
-                                                    ? 'bg-orange-500 text-white border-orange-500'
-                                                    : 'bg-transparent text-[var(--kravy-text-muted)] border-[var(--kravy-border)]'
-                                                    }`}
-                                            >
-                                                {opt.l}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)] mb-1 block">
-                                        Discount Value {newOffer.discountType === "PERCENTAGE" ? "(%)" : "(₹)"}
-                                    </label>
-                                    <input
-                                        type="number"
-                                        value={newOffer.discountValue}
-                                        onChange={e => setNewOffer(p => ({ ...p, discountValue: Number(e.target.value) }))}
-                                        min={1}
-                                        className="w-full bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] rounded-xl px-4 py-2.5 text-sm font-bold outline-none focus:border-orange-400 transition"
-                                    />
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)] mb-1 block">Min Order Value (₹) <span className="normal-case font-normal text-gray-400">— optional</span></label>
-                                    <input
-                                        type="number"
-                                        value={newOffer.minOrderValue}
-                                        onChange={e => setNewOffer(p => ({ ...p, minOrderValue: Number(e.target.value) }))}
-                                        min={0}
-                                        placeholder="0 = no minimum"
-                                        className="w-full bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] rounded-xl px-4 py-2.5 text-sm font-bold outline-none focus:border-orange-400 transition"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Preview chip */}
-                            {newOffer.title && (
-                                <div className="bg-orange-50 border border-orange-100 rounded-xl px-4 py-3 flex items-center gap-3">
-                                    <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center text-white shrink-0">
-                                        <Tag size={16} />
-                                    </div>
-                                    <div>
-                                        <div className="font-black text-sm text-gray-800">
-                                            {newOffer.discountType === "PERCENTAGE" ? `${newOffer.discountValue}% OFF` : `₹${newOffer.discountValue} OFF`}
-                                        </div>
-                                        {newOffer.code && <div className="text-[0.65rem] font-black text-orange-600 mt-0.5">CODE: {newOffer.code}</div>}
-                                    </div>
-                                    <div className="ml-auto text-[0.65rem] text-gray-400 font-bold italic">Preview on QR Menu</div>
-                                </div>
-                            )}
-
-                            <div className="flex gap-2 pt-1">
-                                <button onClick={() => setShowNewOffer(false)} className="flex-1 py-2.5 rounded-xl border border-[var(--kravy-border)] text-sm font-black text-[var(--kravy-text-muted)] hover:bg-gray-50 transition">Cancel</button>
-                                <button
-                                    onClick={handleCreateOffer}
-                                    disabled={savingOffer}
-                                    className="flex-1 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-black hover:bg-orange-600 transition disabled:opacity-50 flex items-center justify-center gap-2"
-                                >
-                                    {savingOffer ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                                    {savingOffer ? "Creating..." : "Create Offer"}
-                                </button>
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
-                {/* Offers List */}
-                {offersLoading ? (
-                    <div className="flex justify-center py-8"><Loader2 className="animate-spin text-[var(--kravy-brand)]" /></div>
-                ) : offers.length === 0 ? (
-                    <div className="text-center py-12 bg-[var(--kravy-surface)] border border-dashed border-[var(--kravy-border)] rounded-2xl">
-                        <PackageOpen size={32} className="text-gray-300 mx-auto mb-3" />
-                        <p className="text-sm font-bold text-[var(--kravy-text-muted)]">No offers yet</p>
-                        <p className="text-xs text-gray-400 mt-1">Click {"'"}New Offer{"'"} to create your first discount</p>
-                    </div>
-                ) : (
-                    <div className="space-y-3">
-                        {offers.map((offer, i) => (
-                            <motion.div
-                                key={offer.id}
-                                initial={{ opacity: 0, y: 8 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: i * 0.05 }}
-                                className={`bg-[var(--kravy-surface)] border rounded-2xl px-4 py-4 flex items-center gap-3 transition-all ${offer.isActive ? 'border-orange-200' : 'border-[var(--kravy-border)] opacity-60'}`}
-                            >
-                                {/* Icon */}
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${offer.isActive ? 'bg-orange-100 text-orange-500' : 'bg-gray-100 text-gray-400'}`}>
-                                    <BadgePercent size={20} />
-                                </div>
-
-                                {/* Details */}
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="font-black text-[0.88rem] text-[var(--kravy-text-primary)]">{offer.title}</span>
-                                        {offer.isActive
-                                            ? <span className="text-[0.55rem] font-black bg-green-100 text-green-600 px-1.5 py-0.5 rounded-full uppercase">Live</span>
-                                            : <span className="text-[0.55rem] font-black bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full uppercase">Paused</span>
-                                        }
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                        <span className="text-[0.72rem] font-black text-orange-600">
-                                            {offer.discountType === "PERCENTAGE" ? `${offer.discountValue}% OFF` : `₹${offer.discountValue} OFF`}
-                                        </span>
-                                        {offer.code && (
-                                            <span className="text-[0.62rem] font-black bg-orange-50 border border-orange-100 px-1.5 py-0.5 rounded-md text-orange-700 font-mono">{offer.code}</span>
-                                        )}
-                                        {offer.minOrderValue && offer.minOrderValue > 0 && (
-                                            <span className="text-[0.6rem] text-gray-400 font-bold">Min ₹{offer.minOrderValue}</span>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Actions */}
-                                <div className="flex items-center gap-2 shrink-0">
-                                    <button onClick={() => handleToggleOffer(offer)} title={offer.isActive ? "Pause offer" : "Activate offer"}>
-                                        {offer.isActive
-                                            ? <ToggleRight size={28} className="text-green-500" />
-                                            : <ToggleLeft size={28} className="text-gray-300" />
-                                        }
-                                    </button>
-                                    <button
-                                        onClick={() => handleDeleteOffer(offer.id)}
-                                        className="p-1.5 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors"
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
-                                </div>
-                            </motion.div>
-                        ))}
-                    </div>
-                )}
             </section>
 
             {/* ── FOOTER NOTE ── */}
             <div className="flex items-start gap-3 bg-amber-50/60 border border-amber-100 rounded-2xl p-4 text-[0.72rem] font-[600] text-amber-700 leading-relaxed">
                 <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-500" />
                 <span>
-                    All changes above are <strong>immediately reflected on your QR Menu</strong>. GST changes apply to new orders only. Paused offers will stop showing to customers.
+                    GST changes apply to new orders only.
                 </span>
             </div>
 

@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import { Copy, Trash2, RefreshCw, ArrowRight, FileSpreadsheet, Settings2, X, Check } from "lucide-react";
 import { kravy } from "@/lib/sounds";
 import { AnimatePresence, motion } from "framer-motion";
+import { useProfileCache } from "@/hooks/useProfileCache";
 
 /* =============================
    TYPES
@@ -30,6 +31,8 @@ type StoreItem = {
   imageUrl: string | null;
   isActive: boolean;
   zones?: string[];
+  isVeg?: boolean;
+  isEgg?: boolean;
 };
 
 /* =============================
@@ -39,6 +42,7 @@ export default function StoreItemPage() {
   const { user } = useAuthContext();
   const userId = user?.businessId || user?.id;
   const router = useRouter();
+  const { profile } = useProfileCache();
 
   const [mode, setMode] = useState<"create" | "update">("create");
   const [loadingItems, setLoadingItems] = useState(false);
@@ -93,16 +97,6 @@ export default function StoreItemPage() {
       .then(data => Array.isArray(data) ? setClerks(data) : setClerks([]))
       .catch(() => setClerks([]));
 
-    fetch("/api/profile")
-      .then(r => r.json())
-      .then(data => {
-        console.log("DEBUG: StoreItemPage profile data:", data);
-        if (data && data.multiZoneMenuEnabled !== undefined) {
-          setMultiZoneMenuEnabled(!!data.multiZoneMenuEnabled);
-        }
-      })
-      .catch((err) => console.error("DEBUG: StoreItemPage profile fetch error:", err));
-
     fetch("/api/tables")
       .then(r => r.json())
       .then(data => {
@@ -113,6 +107,12 @@ export default function StoreItemPage() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (profile && profile.multiZoneMenuEnabled !== undefined) {
+      setMultiZoneMenuEnabled(!!profile.multiZoneMenuEnabled);
+    }
+  }, [profile]);
 
   /* =============================
      CLERK FILTER

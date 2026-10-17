@@ -5,37 +5,16 @@ import UnpaidDuesClient from "./UnpaidDuesClient";
 
 export const revalidate = 0;
 
-export default async function UnpaidDuesReportPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ startDate?: string; endDate?: string }>;
-}) {
+export default async function UnpaidDuesReportPage() {
   const effectiveId = await getEffectiveClerkId();
   if (!effectiveId) redirect("/auth/custom");
 
-  const params = await searchParams;
-  const { startDate, endDate } = params;
-
-  // Build date-range query filters
-  const dateFilter: any = {};
-  if (startDate) {
-    dateFilter.gte = new Date(startDate);
-  }
-  if (endDate) {
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
-    dateFilter.lte = end;
-  }
-
-  const dateQuery = Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {};
-
-  // Fetch all active unpaid/pending bills matching the date filter
+  // Fetch all active unpaid/pending bills
   const unpaidBills = await prisma.billManager.findMany({
     where: {
       clerkUserId: effectiveId,
       isDeleted: false,
       paymentStatus: { notIn: ["PAID", "Paid", "CANCELLED", "Cancelled"] },
-      ...dateQuery,
     },
     select: {
       id: true,
@@ -99,14 +78,28 @@ export default async function UnpaidDuesReportPage({
 
   // Helper structures for trends
   const dailyDuesMap = new Map<string, { date: string; amount: number; count: number }>();
-  const weeklyDuesMap = new Map<string, { week: string; amount: number; count: number }>();
+  const weeklyDuesMap = new Map<string, { week: string; amount: number; count: number; startDate: string }>();
+  const monthlyDuesMap = new Map<string, { month: string; amount: number; count: number; startDate: string }>();
 
-  const getWeekRangeString = (date: Date) => {
+  const getWeekRangeData = (date: Date) => {
     const temp = new Date(date);
     const day = temp.getDay();
     const diff = temp.getDate() - day + (day === 0 ? -6 : 1);
     const startOfWeek = new Date(temp.setDate(diff));
-    return `Week of ${startOfWeek.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}`;
+    return {
+      label: `Week of ${startOfWeek.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}`,
+      startDate: startOfWeek.toISOString()
+    };
+  };
+
+  const getMonthRangeData = (date: Date) => {
+    const temp = new Date(date);
+    const month = temp.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+    const startDate = new Date(temp.getFullYear(), temp.getMonth(), 1).toISOString();
+    return {
+      label: month,
+      startDate
+    };
   };
 
   unpaidBills.forEach((b) => {
@@ -115,6 +108,7 @@ export default async function UnpaidDuesReportPage({
 
     const due = (b.balanceDue && b.balanceDue > 0) ? b.balanceDue : (b.total - (b.amountPaid || 0));
     const pendingAmt = Math.max(0, due);
+    if (pendingAmt <= 0) return; // Skip bills with zero remaining balance
 
     // Dynamic key: registered customers grouped by phone, unregistered/walk-ins listed as unique entries
     let key = "";
@@ -169,13 +163,23 @@ export default async function UnpaidDuesReportPage({
     }
 
     // 3. Accumulate weekly trend
-    const weekStr = getWeekRangeString(b.createdAt);
-    const weekly = weeklyDuesMap.get(weekStr);
+    const weekInfo = getWeekRangeData(b.createdAt);
+    const weekly = weeklyDuesMap.get(weekInfo.label);
     if (weekly) {
       weekly.amount += pendingAmt;
       weekly.count += 1;
     } else {
-      weeklyDuesMap.set(weekStr, { week: weekStr, amount: pendingAmt, count: 1 });
+      weeklyDuesMap.set(weekInfo.label, { week: weekInfo.label, amount: pendingAmt, count: 1, startDate: weekInfo.startDate });
+    }
+
+    // 4. Accumulate monthly trend
+    const monthInfo = getMonthRangeData(b.createdAt);
+    const monthly = monthlyDuesMap.get(monthInfo.label);
+    if (monthly) {
+      monthly.amount += pendingAmt;
+      monthly.count += 1;
+    } else {
+      monthlyDuesMap.set(monthInfo.label, { month: monthInfo.label, amount: pendingAmt, count: 1, startDate: monthInfo.startDate });
     }
   });
 
@@ -231,24 +235,38 @@ export default async function UnpaidDuesReportPage({
     }
 
     // Accumulate weekly trend for wallet udhar
-    const weekStr = getWeekRangeString(party.createdAt);
-    const weekly = weeklyDuesMap.get(weekStr);
+    const weekInfo = getWeekRangeData(party.createdAt);
+    const weekly = weeklyDuesMap.get(weekInfo.label);
     if (weekly) {
       weekly.amount += pendingAmt;
       weekly.count += 1;
     } else {
-      weeklyDuesMap.set(weekStr, { week: weekStr, amount: pendingAmt, count: 1 });
+      weeklyDuesMap.set(weekInfo.label, { week: weekInfo.label, amount: pendingAmt, count: 1, startDate: weekInfo.startDate });
+    }
+
+    // Accumulate monthly trend for wallet udhar
+    const monthInfo = getMonthRangeData(party.createdAt);
+    const monthly = monthlyDuesMap.get(monthInfo.label);
+    if (monthly) {
+      monthly.amount += pendingAmt;
+      monthly.count += 1;
+    } else {
+      monthlyDuesMap.set(monthInfo.label, { month: monthInfo.label, amount: pendingAmt, count: 1, startDate: monthInfo.startDate });
     }
   });
 
   const customerUnpaidList = Array.from(customerUnpaidMap.values())
+    .filter((c) => c.totalUnpaid > 0)
     .sort((a, b) => b.totalUnpaid - a.totalUnpaid);
 
   const dailyTrend = Array.from(dailyDuesMap.values())
     .sort((a, b) => b.date.localeCompare(a.date));
 
   const weeklyTrend = Array.from(weeklyDuesMap.values())
-    .sort((a, b) => b.week.localeCompare(a.week)); // chronological sort roughly or string-based
+    .sort((a, b) => b.startDate.localeCompare(a.startDate));
+
+  const monthlyTrend = Array.from(monthlyDuesMap.values())
+    .sort((a, b) => b.startDate.localeCompare(a.startDate));
 
   return (
     <UnpaidDuesClient 
@@ -256,8 +274,7 @@ export default async function UnpaidDuesReportPage({
       businessName={businessName}
       dailyTrend={dailyTrend}
       weeklyTrend={weeklyTrend}
-      initStartDate={startDate || ""}
-      initEndDate={endDate || ""}
+      monthlyTrend={monthlyTrend}
     />
   );
 }

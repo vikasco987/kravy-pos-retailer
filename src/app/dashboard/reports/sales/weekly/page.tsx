@@ -1,3 +1,4 @@
+import { getServerCurrency } from '@/lib/server-currency';
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveClerkId } from "@/lib/auth-utils";
@@ -66,6 +67,7 @@ const Th = ({ label, isRight }: any) => (
 
 export default async function WeeklySalesReportPage() {
   const effectiveId = await getEffectiveClerkId();
+  const { sym } = await getServerCurrency();
   if (!effectiveId) redirect("/auth/custom");
 
   const now = new Date();
@@ -85,7 +87,7 @@ export default async function WeeklySalesReportPage() {
   
   // Analytics
   const topItemsMap: Record<string, { qty: number, revenue: number }> = {};
-  const orderTypes = { DELIVERY: { c: 0, r: 0 }, DINEIN: { c: 0, r: 0 }, TAKEAWAY: { c: 0, r: 0 } };
+  const orderTypes = { DELIVERY: { c: 0, r: 0 }, DINEIN: { c: 0, r: 0 }, TAKEAWAY: { c: 0, r: 0 }, COUNTER: { c: 0, r: 0 } };
   const payments = { CASH: { c: 0, r: 0 }, UPI: { c: 0, r: 0 } };
   const gstDetails = { taxable: 0, tax: 0 };
   let cancelledCount = 0;
@@ -127,6 +129,7 @@ export default async function WeeklySalesReportPage() {
       const t = (b.tableName || "POS").toUpperCase();
       if (t.includes("DELIVERY")) { orderTypes.DELIVERY.c++; orderTypes.DELIVERY.r += b.total; }
       else if (t.includes("TAKEAWAY")) { orderTypes.TAKEAWAY.c++; orderTypes.TAKEAWAY.r += b.total; }
+      else if (t.includes("POS") || t.includes("COUNTER")) { orderTypes.COUNTER.c++; orderTypes.COUNTER.r += b.total; }
       else { orderTypes.DINEIN.c++; orderTypes.DINEIN.r += b.total; }
 
       // Payment
@@ -150,10 +153,11 @@ export default async function WeeklySalesReportPage() {
   const bestDay = bestDayObj.day;
   const bestDayRev = bestDayObj.revenue;
 
-  const totalTypesRevenue = orderTypes.DELIVERY.r + orderTypes.DINEIN.r + orderTypes.TAKEAWAY.r;
+  const totalTypesRevenue = orderTypes.DELIVERY.r + orderTypes.DINEIN.r + orderTypes.TAKEAWAY.r + orderTypes.COUNTER.r;
   const delPct = totalTypesRevenue > 0 ? (orderTypes.DELIVERY.r / totalTypesRevenue) * 100 : 0;
   const dinePct = totalTypesRevenue > 0 ? (orderTypes.DINEIN.r / totalTypesRevenue) * 100 : 0;
   const takePct = totalTypesRevenue > 0 ? (orderTypes.TAKEAWAY.r / totalTypesRevenue) * 100 : 0;
+  const counterPct = totalTypesRevenue > 0 ? (orderTypes.COUNTER.r / totalTypesRevenue) * 100 : 0;
 
   const totalPaymentsRevenue = payments.CASH.r + payments.UPI.r;
   const cashPct = totalPaymentsRevenue > 0 ? (payments.CASH.r / totalPaymentsRevenue) * 100 : 0;
@@ -210,14 +214,14 @@ export default async function WeeklySalesReportPage() {
             <div>
                <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "#7C3AED", textTransform: "uppercase", letterSpacing: "1.5px" }}>Current Run Rate</div>
                <div style={{ fontSize: "1.25rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>
-                  You are generating an average of <span style={{ color: "#8B5CF6" }}>₹{format(avgDaily)}</span> per day this week.
+                  You are generating an average of <span style={{ color: "#8B5CF6" }}>{sym}{format(avgDaily)}</span> per day this week.
                </div>
             </div>
          </div>
          <div style={{ display: "flex", gap: "32px" }}>
             <div style={{ textAlign: "right" }}>
                <div style={{ fontSize: "0.7rem", fontWeight: 800, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "1px" }}>Total Volume</div>
-               <div style={{ fontSize: "1.4rem", fontWeight: 950, color: "var(--kravy-text-primary)" }}>₹{format(totalRevenue)}</div>
+               <div style={{ fontSize: "1.4rem", fontWeight: 950, color: "var(--kravy-text-primary)" }}>{sym}{format(totalRevenue)}</div>
             </div>
             <div style={{ width: "1px", height: "40px", background: "var(--kravy-border)" }} />
             <div style={{ textAlign: "right" }}>
@@ -231,14 +235,14 @@ export default async function WeeklySalesReportPage() {
       <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "28px", padding: "32px", display: "flex", flexDirection: "column", boxShadow: "var(--kravy-shadow-md)" }}>
         <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--kravy-text-primary)", marginBottom: "20px" }}>Daily revenue — Mon to Sun</h3>
         <div style={{ display: "flex", gap: "24px", marginBottom: "32px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", color: "var(--kravy-text-muted)", fontWeight: 800 }}><div style={{ width: "12px", height: "12px", background: "#3B82F6", borderRadius: "3px" }}/> Revenue (₹)</div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", color: "var(--kravy-text-muted)", fontWeight: 800 }}><div style={{ width: "12px", height: "12px", background: "#3B82F6", borderRadius: "3px" }}/> Revenue ({sym})</div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", color: "var(--kravy-text-muted)", fontWeight: 800 }}><div style={{ width: "12px", height: "12px", background: "#10B981", borderRadius: "3px" }}/> Orders</div>
         </div>
         <div style={{ display: "flex", alignItems: "flex-end", height: "240px", gap: "12px", position: "relative" }}>
            <div style={{ position: "absolute", left: 0, top: 0, right: 0, bottom: "30px", display: "flex", flexDirection: "column", justifyContent: "space-between", zIndex: 0 }}>
              {[5,4,3,2,1,0].map(n => (
                 <div key={n} style={{ borderBottom: "1px solid var(--kravy-border)", display: "flex", justifyContent: "space-between", alignItems: "flex-end", height: "100%" }}>
-                  <span style={{ fontSize: "0.7rem", color: "var(--kravy-text-faint)", position: "relative", top: "10px" }}>₹{format((maxRevenue / 5) * n)}</span>
+                  <span style={{ fontSize: "0.7rem", color: "var(--kravy-text-faint)", position: "relative", top: "10px" }}>{sym}{format((maxRevenue / 5) * n)}</span>
                   <span style={{ fontSize: "0.7rem", color: "var(--kravy-text-faint)", position: "relative", top: "10px" }}>{Math.round((maxOrders / 5) * n)}</span>
                 </div>
              ))}
@@ -273,7 +277,7 @@ export default async function WeeklySalesReportPage() {
                   <div style={{ width: "60px", height: "6px", background: "var(--kravy-bg-2)", borderRadius: "4px", overflow: "hidden" }}>
                     <div style={{ width: `${(data.qty / maxTopItemQty) * 100}%`, height: "100%", background: "#3B82F6" }} />
                   </div>
-                  <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--kravy-text-primary)", width: "70px", textAlign: "right" }}>₹{format(data.revenue)}</div>
+                  <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--kravy-text-primary)", width: "70px", textAlign: "right" }}>{sym}{format(data.revenue)}</div>
                 </div>
               </div>
             ))}
@@ -285,14 +289,15 @@ export default async function WeeklySalesReportPage() {
           <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--kravy-text-primary)", marginBottom: "32px" }}>Order type breakdown</h3>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: "40px" }}>
              {/* Fake Donut */}
-             <div style={{ width: "160px", height: "160px", borderRadius: "50%", background: `conic-gradient(#3B82F6 0% ${delPct}%, #10B981 ${delPct}% ${delPct + dinePct}%, #F59E0B ${delPct + dinePct}% 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+             <div style={{ width: "160px", height: "160px", borderRadius: "50%", background: `conic-gradient(#EF4444 0% ${delPct}%, #10B981 ${delPct}% ${delPct + dinePct}%, #F59E0B ${delPct + dinePct}% ${delPct + dinePct + takePct}%, #3B82F6 ${delPct + dinePct + takePct}% 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                <div style={{ width: "110px", height: "110px", borderRadius: "50%", background: "var(--kravy-surface)" }} />
              </div>
              {/* Legends */}
              <div style={{ display: "flex", gap: "24px", flexWrap: "wrap", justifyContent: "center" }}>
-               <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", color: "var(--kravy-text-muted)", fontWeight: 800 }}><div style={{ width: "12px", height: "12px", background: "#3B82F6", borderRadius: "3px" }}/> Delivery {delPct.toFixed(0)}%</div>
+               <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", color: "var(--kravy-text-muted)", fontWeight: 800 }}><div style={{ width: "12px", height: "12px", background: "#3B82F6", borderRadius: "3px" }}/> Counter / POS {counterPct.toFixed(0)}%</div>
                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", color: "var(--kravy-text-muted)", fontWeight: 800 }}><div style={{ width: "12px", height: "12px", background: "#10B981", borderRadius: "3px" }}/> Dine-in {dinePct.toFixed(0)}%</div>
                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", color: "var(--kravy-text-muted)", fontWeight: 800 }}><div style={{ width: "12px", height: "12px", background: "#F59E0B", borderRadius: "3px" }}/> Takeaway {takePct.toFixed(0)}%</div>
+               <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", color: "var(--kravy-text-muted)", fontWeight: 800 }}><div style={{ width: "12px", height: "12px", background: "#EF4444", borderRadius: "3px" }}/> Home Delivery {delPct.toFixed(0)}%</div>
              </div>
           </div>
         </div>
@@ -308,14 +313,14 @@ export default async function WeeklySalesReportPage() {
               <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.95rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>
                 <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10B981" }} /> Cash
               </div>
-              <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>{cashPct.toFixed(0)}% — ₹{format(payments.CASH.r)}</div>
+              <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>{cashPct.toFixed(0)}% — {sym}{format(payments.CASH.r)}</div>
             </div>
             <div style={{ height: "1px", background: "var(--kravy-border)" }} />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.95rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>
                 <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#8B5CF6" }} /> UPI
               </div>
-              <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>{upiPct.toFixed(0)}% — ₹{format(payments.UPI.r)}</div>
+              <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>{upiPct.toFixed(0)}% — {sym}{format(payments.UPI.r)}</div>
             </div>
           </div>
         </div>
@@ -331,12 +336,12 @@ export default async function WeeklySalesReportPage() {
             <div style={{ height: "1px", background: "var(--kravy-border)" }} />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>Cancelled value</div>
-              <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#EF4444" }}>-₹{format(cancelledValue)}</div>
+              <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#EF4444" }}>-{sym}{format(cancelledValue)}</div>
             </div>
             <div style={{ height: "1px", background: "var(--kravy-border)" }} />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ fontSize: "1rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>Net revenue</div>
-              <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>₹{format(totalRevenue)}</div>
+              <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>{sym}{format(totalRevenue)}</div>
             </div>
           </div>
         </div>
@@ -358,17 +363,17 @@ export default async function WeeklySalesReportPage() {
           <tbody>
             <tr>
               <td style={{ padding: "16px", fontWeight: 800, color: "var(--kravy-text-primary)", fontSize: "0.95rem" }}>Computed GST</td>
-              <td style={{ padding: "16px", fontWeight: 800, color: "var(--kravy-text-primary)", fontSize: "0.95rem" }}>₹{format(gstDetails.taxable)}</td>
-              <td style={{ padding: "16px", fontWeight: 800, color: "var(--kravy-text-primary)", fontSize: "0.95rem" }}>₹{format(gstDetails.tax / 2)}</td>
-              <td style={{ padding: "16px", fontWeight: 800, color: "var(--kravy-text-primary)", fontSize: "0.95rem" }}>₹{format(gstDetails.tax / 2)}</td>
-              <td style={{ padding: "16px", fontWeight: 800, color: "var(--kravy-text-primary)", fontSize: "0.95rem" }}>₹{format(gstDetails.tax)}</td>
+              <td style={{ padding: "16px", fontWeight: 800, color: "var(--kravy-text-primary)", fontSize: "0.95rem" }}>{sym}{format(gstDetails.taxable)}</td>
+              <td style={{ padding: "16px", fontWeight: 800, color: "var(--kravy-text-primary)", fontSize: "0.95rem" }}>{sym}{format(gstDetails.tax / 2)}</td>
+              <td style={{ padding: "16px", fontWeight: 800, color: "var(--kravy-text-primary)", fontSize: "0.95rem" }}>{sym}{format(gstDetails.tax / 2)}</td>
+              <td style={{ padding: "16px", fontWeight: 800, color: "var(--kravy-text-primary)", fontSize: "0.95rem" }}>{sym}{format(gstDetails.tax)}</td>
             </tr>
             <tr>
               <td style={{ padding: "16px", fontWeight: 950, color: "var(--kravy-text-primary)", fontSize: "1rem" }}>Total</td>
-              <td style={{ padding: "16px", fontWeight: 950, color: "var(--kravy-text-primary)", fontSize: "1rem" }}>₹{format(gstDetails.taxable)}</td>
-              <td style={{ padding: "16px", fontWeight: 950, color: "var(--kravy-text-primary)", fontSize: "1rem" }}>₹{format(gstDetails.tax / 2)}</td>
-              <td style={{ padding: "16px", fontWeight: 950, color: "var(--kravy-text-primary)", fontSize: "1rem" }}>₹{format(gstDetails.tax / 2)}</td>
-              <td style={{ padding: "16px", fontWeight: 950, color: "var(--kravy-text-primary)", fontSize: "1rem" }}>₹{format(gstDetails.tax)}</td>
+              <td style={{ padding: "16px", fontWeight: 950, color: "var(--kravy-text-primary)", fontSize: "1rem" }}>{sym}{format(gstDetails.taxable)}</td>
+              <td style={{ padding: "16px", fontWeight: 950, color: "var(--kravy-text-primary)", fontSize: "1rem" }}>{sym}{format(gstDetails.tax / 2)}</td>
+              <td style={{ padding: "16px", fontWeight: 950, color: "var(--kravy-text-primary)", fontSize: "1rem" }}>{sym}{format(gstDetails.tax / 2)}</td>
+              <td style={{ padding: "16px", fontWeight: 950, color: "var(--kravy-text-primary)", fontSize: "1rem" }}>{sym}{format(gstDetails.tax)}</td>
             </tr>
           </tbody>
         </table>

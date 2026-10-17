@@ -1,5 +1,5 @@
 "use client";
-
+import { useCurrency } from "@/lib/currency-context";
 import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -32,6 +32,8 @@ type MenuItem = {
 };
 
 export default function MenuEditPage() {
+  const { currencySymbol: sym } = useCurrency();
+
   const { confirm } = useConfirm();
     const [items, setItems] = useState<MenuItem[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -189,8 +191,8 @@ export default function MenuEditPage() {
         <div className="max-w-6xl mx-auto space-y-8 p-6 transition-colors duration-300">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-extrabold text-[var(--kravy-text-primary)] tracking-tight">Catalog Manager</h1>
-                    <p className="text-[var(--kravy-text-muted)] mt-1 font-medium">Add, edit, and organize your digital catalog items.</p>
+                    <h1 className="text-3xl font-extrabold text-[var(--kravy-text-primary)] tracking-tight">Menu Manager</h1>
+                    <p className="text-[var(--kravy-text-muted)] mt-1 font-medium">Add, edit, and organize your digital menu items.</p>
                 </div>
                 <Button
                     onClick={openAddModal}
@@ -249,7 +251,7 @@ export default function MenuEditPage() {
                                             </div>
                                         </td>
                                         <td className="py-4 px-6 text-right">
-                                            <span className="font-black text-[var(--kravy-text-primary)]">₹{item.price || 0}</span>
+                                            <span className="font-black text-[var(--kravy-text-primary)]">{sym}{item.price || 0}</span>
                                         </td>
                                         <td className="py-4 px-6">
                                             <div className="flex items-center justify-center gap-2">
@@ -317,7 +319,7 @@ export default function MenuEditPage() {
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-[10px] font-black text-[var(--kravy-text-muted)] mb-1.5 uppercase tracking-widest">Price (₹) *</label>
+                                        <label className="block text-[10px] font-black text-[var(--kravy-text-muted)] mb-1.5 uppercase tracking-widest">Price ({sym}) *</label>
                                         <input
                                             type="number"
                                             required
@@ -482,7 +484,7 @@ export default function MenuEditPage() {
                                                                 }}
                                                             />
                                                             <div className="relative w-20">
-                                                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-emerald-500">₹</span>
+                                                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-emerald-500">{sym}</span>
                                                                 <input 
                                                                     type="number"
                                                                     className="w-full bg-white border border-gray-100 rounded-lg pl-5 pr-2 py-1.5 text-xs font-black text-emerald-600 outline-none"

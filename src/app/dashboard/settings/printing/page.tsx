@@ -10,6 +10,7 @@ import {
     ChevronDown, ChevronUp, RefreshCw
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import { kravy } from "@/lib/sounds";
 import { useProfileCache } from "@/hooks/useProfileCache";
@@ -33,11 +34,18 @@ const defaults: any = {
     showAmountInWords: true,
     showPaymentStatus: true,
     showFoodTypeSuffix: true,
+    showSubtotal: true,
+    showItemDivider: true,
     // KOT Settings
     showKOTToken: true,
     showKOTCustomer: true,
     showKOTBillNo: true,
     showKOTInstructions: true,
+    showKOTItemDivider: true,
+    sepKOTTop: true,
+    sepKOTCustomer: true,
+    sepKOTItemsHeader: true,
+    sepKOTFooter: true,
     // QR Settings
     showReviewQR: false,
     
@@ -66,6 +74,7 @@ const defaults: any = {
     kotQtyWeight: "",
     allowWalletEditDelete: true,
     logoHeight: 50,
+    logoBottomMargin: 0,
     businessNameSize: 18,
     businessAddressSize: 11,
     taglineSize: 11,
@@ -226,6 +235,7 @@ const fontWeights = [
 ];
 
 export default function PrintingSettings() {
+    const router = useRouter();
     const { profile: cachedProfile, loading: profileLoading, updateProfile } = useProfileCache();
     const [saving, setSaving] = useState(false);
     const [business, setBusiness] = useState<any>(null);
@@ -267,7 +277,7 @@ export default function PrintingSettings() {
             if (res.ok) {
                 const data = await res.json();
                 if (data) {
-                    updateProfile(data);
+                    updateProfile(data, false);
                     setBusiness(data);
                     const merged = {
                         ...defaults,
@@ -444,9 +454,13 @@ export default function PrintingSettings() {
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-4">
                 <div className="flex items-center gap-5">
-                    <Link href="/dashboard/settings" className="w-12 h-12 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center hover:scale-110 transition-all shadow-sm">
+                    <button 
+                        onClick={() => router.back()}
+                        className="w-12 h-12 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center hover:scale-110 transition-all shadow-sm cursor-pointer"
+                        title="Back"
+                    >
                         <ArrowLeft size={20} className="text-slate-600 dark:text-white" />
-                    </Link>
+                    </button>
                     <div>
                         <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter">Print Customizer</h1>
                         <p className="text-xs text-slate-400 dark:text-white/40 font-bold uppercase tracking-[0.2em] mt-1">Design your Bill & KOT layout</p>
@@ -491,6 +505,43 @@ export default function PrintingSettings() {
                 {/* Left: Controls */}
                 <div className={`xl:col-span-8 space-y-10 ${activeTab === 'configure' ? 'block' : 'hidden xl:block'}`}>
                     
+                    {/* Auto-Connect Web Bluetooth Guide */}
+                    <div className="space-y-6">
+                        <div className="flex items-center gap-3 px-4">
+                            <div className="w-2 h-2 rounded-full bg-blue-500" />
+                            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">Web Bluetooth Auto-Connect Guide</h2>
+                        </div>
+                        <div className="mx-4 p-6 rounded-3xl bg-blue-500/5 border border-blue-500/10 space-y-4">
+                            <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                                <Zap size={18} className="text-blue-500" /> 
+                                Stop Bluetooth connection popups on every refresh
+                            </h3>
+                            <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 leading-relaxed">
+                                Google Chrome forgets Bluetooth devices on page reload for security reasons. To allow Kravy POS to automatically reconnect to your thermal printer in the background without asking you every time, please follow <b>ONE</b> of the steps below:
+                            </p>
+                            <div className="space-y-3 mt-2">
+                                <div className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10">
+                                    <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest mb-2">Option 1: Enable Chrome Flag (Recommended for Desktop)</h4>
+                                    <ol className="text-xs font-semibold text-slate-500 list-decimal pl-4 space-y-1">
+                                        <li>Copy this link: <code className="bg-slate-100 dark:bg-black/20 px-1 py-0.5 rounded text-blue-500 select-all">chrome://flags/#enable-web-bluetooth-new-permissions-backend</code></li>
+                                        <li>Paste it in a new Chrome tab and hit Enter.</li>
+                                        <li>You will see a setting named <b className="text-slate-800 dark:text-slate-300">"Use the new permissions backend for Web Bluetooth"</b> highlighted in yellow.</li>
+                                        <li>Click on the dropdown next to it and change the setting from <b>Default</b> to <b>Enabled</b>.</li>
+                                        <li>Click the <b>Relaunch</b> button that appears at the bottom of the Chrome window.</li>
+                                    </ol>
+                                </div>
+                                <div className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10">
+                                    <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest mb-2">Option 2: Install App (Recommended for Mobile/Tablet)</h4>
+                                    <ol className="text-xs font-semibold text-slate-500 list-decimal pl-4 space-y-1">
+                                        <li>Click the <b>3 dots (⋮)</b> in the top right corner of Chrome.</li>
+                                        <li>Click on <b>Install Kravy POS</b> or <b>Add to Home Screen</b>.</li>
+                                        <li>Open the installed POS app from your home screen.</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Header & Business Info */}
                     <div className="space-y-6">
                         <div className="flex items-center gap-3 px-4">
@@ -601,6 +652,7 @@ export default function PrintingSettings() {
                             <SettingToggle icon={MoreVertical} label="Top Header Line" sKey="sepTop" desc="Divider at the very top" color="bg-slate-500" />
                             <SettingToggle icon={MoreVertical} label="Customer Divider" sKey="sepCustomer" desc="Line after customer info" color="bg-slate-400" />
                             <SettingToggle icon={MoreVertical} label="Items Header Line" sKey="sepItemsHeader" desc="Divider for item column names" color="bg-slate-500" />
+                            <SettingToggle icon={MoreVertical} label="Item Divider Line" sKey="showItemDivider" desc="Line after each food item" color="bg-slate-600" />
                             <SettingToggle icon={MoreVertical} label="Total Top Line" sKey="sepTotalTop" desc="Divider before Grand Total" color="bg-slate-600" />
                             <SettingToggle icon={MoreVertical} label="Total Bottom Line" sKey="sepTotalBottom" desc="Divider after Grand Total" color="bg-slate-700" />
                             <SettingToggle icon={MoreVertical} label="Payment Divider" sKey="sepPayment" desc="Line before payment mode" color="bg-slate-500" />
@@ -621,6 +673,21 @@ export default function PrintingSettings() {
                             <SettingToggle icon={Receipt} label="Bill Reference" sKey="showKOTBillNo" desc="Invoice # on KOT" color="bg-indigo-500" />
                             <SettingToggle icon={Clock} label="Print Time" sKey="showKOTTime" desc="Current time on KOT" color="bg-blue-500" />
                             <SettingToggle icon={ChefHat} label="Instructions" sKey="showKOTInstructions" desc="Chef notes & modifications" color="bg-emerald-500" />
+                        </div>
+                    </div>
+
+                    {/* KOT Separators */}
+                    <div className="space-y-6 pt-4">
+                        <div className="flex items-center gap-3 px-4">
+                            <div className="w-2 h-2 rounded-full bg-slate-500" />
+                            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">KOT Separators / Lines</h2>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <SettingToggle icon={MoreVertical} label="KOT Top Line" sKey="sepKOTTop" desc="Line below K.O.T title" color="bg-slate-500" />
+                            <SettingToggle icon={MoreVertical} label="KOT Customer Line" sKey="sepKOTCustomer" desc="Lines around Customer info" color="bg-slate-600" />
+                            <SettingToggle icon={MoreVertical} label="KOT Header Line" sKey="sepKOTItemsHeader" desc="Line below Item/Qty headers" color="bg-slate-500" />
+                            <SettingToggle icon={MoreVertical} label="KOT Item Dividers" sKey="showKOTItemDivider" desc="Line below each item" color="bg-slate-600" />
+                            <SettingToggle icon={MoreVertical} label="KOT Footer Line" sKey="sepKOTFooter" desc="Line at the bottom" color="bg-slate-500" />
                         </div>
                     </div>
 
@@ -912,6 +979,14 @@ export default function PrintingSettings() {
                                             min={20} 
                                             max={90} 
                                             descMap={{ 20: "20mm (Small)", 35: "35mm (Medium)", 50: "50mm (Large)", 70: "70mm (Extra Large)", 90: "90mm (Max Width)" }} 
+                                        />
+                                        <Sizer 
+                                            label="Logo Bottom Space" 
+                                            icon={ImageIcon} 
+                                            sKey="logoBottomMargin" 
+                                            min={-20} 
+                                            max={20} 
+                                            descMap={{ "-20": "-20 (Tight)", 0: "0 (Default)", 20: "20 (Wide)" }} 
                                         />
                                         <Sizer 
                                             label="Business Name Font Size" 
@@ -1207,7 +1282,7 @@ export default function PrintingSettings() {
                             >
                                 {/* Bill Preview with Smooth Transform Scale */}
                                 <div className="w-full origin-top transition-transform duration-200" style={{ transform: `scale(${previewZoom})` }}>
-                                   <PrintTemplates {...dummyProps} />
+                                   <PrintTemplates {...(dummyProps as any)} isPreviewMode={true} />
                                    
                                    {/* Advanced Receipt Mockup CSS Overrides */}
                                    <style dangerouslySetInnerHTML={{ __html: `

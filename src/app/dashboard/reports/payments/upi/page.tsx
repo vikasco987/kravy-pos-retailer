@@ -1,3 +1,4 @@
+import { getServerCurrency } from '@/lib/server-currency';
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveClerkId } from "@/lib/auth-utils";
@@ -13,6 +14,7 @@ export default async function UPIReportPage({
   searchParams: Promise<{ range?: string }>;
 }) {
   const effectiveId = await getEffectiveClerkId();
+  const { sym } = await getServerCurrency();
   if (!effectiveId) redirect("/auth/custom");
 
   const { range: rangeParam } = await searchParams;
@@ -73,7 +75,7 @@ export default async function UPIReportPage({
            <div style={{ position: "absolute", top: "-30px", right: "-30px", opacity: 0.15 }}><Zap size={240} /></div>
            <div style={{ position: "relative", zIndex: 1 }}>
               <div style={{ fontSize: "0.85rem", fontWeight: 800, opacity: 0.8, textTransform: "uppercase", letterSpacing: "3px", marginBottom: "16px" }}>NET DIGITAL WORTH</div>
-              <div style={{ fontSize: "5rem", fontWeight: 950, margin: "16px 0", letterSpacing: "-4px", lineHeight: 0.82 }}>₹{format(totalUPI)}</div>
+              <div style={{ fontSize: "5rem", fontWeight: 950, margin: "16px 0", letterSpacing: "-4px", lineHeight: 0.82 }}>{sym}{format(totalUPI)}</div>
               <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "0.9rem", fontWeight: 700, marginTop: "24px" }}>
                  <ShieldCheck size={18} /> End-to-end encrypted digital settlement log
               </div>
@@ -91,7 +93,7 @@ export default async function UPIReportPage({
            <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "32px", padding: "32px", display: "flex", alignItems: "center", gap: "28px", boxShadow: "var(--kravy-card-shadow)" }}>
               <div style={{ width: "64px", height: "64px", borderRadius: "20px", background: "rgba(14, 165, 233, 0.1)", color: "#0EA5E9", display: "flex", alignItems: "center", justifyContent: "center" }}><CreditCard size={32} /></div>
               <div>
-                 <div style={{ fontSize: "2rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1px" }}>₹{format(avgUPI)}</div>
+                 <div style={{ fontSize: "2rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1px" }}>{sym}{format(avgUPI)}</div>
                  <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "1px" }}>Avg Digital Ticket</div>
               </div>
            </div>
@@ -141,7 +143,7 @@ export default async function UPIReportPage({
                           <div style={{ fontSize: "0.75rem", color: "var(--kravy-text-faint)", marginTop: "4px" }}>SECURED AT {new Date(b.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                        </td>
                        <td style={{ padding: "28px 52px", textAlign: "right" }}>
-                          <div style={{ fontSize: "1.65rem", fontWeight: 950, color: "#8B5CF6", letterSpacing: "-1.8px" }}>₹{format(b.total)}</div>
+                          <div style={{ fontSize: "1.65rem", fontWeight: 950, color: "#8B5CF6", letterSpacing: "-1.8px" }}>{sym}{format(b.total)}</div>
                           <div style={{ fontSize: "0.65rem", fontWeight: 900, color: "#8B5CF6", marginTop: "4px" }}>INSTANT SETTLEMENT</div>
                        </td>
                     </tr>

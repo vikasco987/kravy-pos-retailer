@@ -164,7 +164,7 @@ export default function ReportExportDropdown({
         jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
       };
 
-      await html2pdf().set(opt).from(container).save();
+      await html2pdf().set(opt as any).from(container).save();
       
       // Cleanup
       document.body.removeChild(container);

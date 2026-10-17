@@ -1,3 +1,4 @@
+import { getServerCurrency } from '@/lib/server-currency';
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveClerkId } from "@/lib/auth-utils";
@@ -13,6 +14,7 @@ export default async function AdvancedAnalyticsPage({
   searchParams: Promise<{ range?: string }>;
 }) {
   const effectiveId = await getEffectiveClerkId();
+  const { sym } = await getServerCurrency();
   if (!effectiveId) redirect("/auth/custom");
 
   const { range: rangeParam } = await searchParams;
@@ -121,7 +123,7 @@ export default async function AdvancedAnalyticsPage({
             <div style={{ position: "absolute", bottom: "-30px", right: "-30px", opacity: 0.15 }}><BarChart3 size={200} /></div>
             <div style={{ position: "relative", zIndex: 1 }}>
                <div style={{ fontSize: "0.75rem", fontWeight: 800, opacity: 0.6, textTransform: "uppercase", letterSpacing: "3px", marginBottom: "16px" }}>AVERAGE BILL YIELD</div>
-               <div style={{ fontSize: "5rem", fontWeight: 950, letterSpacing: "-4px", lineHeight: 0.82, marginBottom: "24px" }}>₹{format(avgOrderValue)}</div>
+               <div style={{ fontSize: "5rem", fontWeight: 950, letterSpacing: "-4px", lineHeight: 0.82, marginBottom: "24px" }}>{sym}{format(avgOrderValue)}</div>
                <p style={{ fontSize: "1rem", fontWeight: 700, opacity: 0.8 }}>Average revenue recognized per guest session in this {rangeStr}-day cycle.</p>
             </div>
          </div>
@@ -157,7 +159,7 @@ export default async function AdvancedAnalyticsPage({
                            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: `hsl(${i * 60}, 70%, 50%)` }} />
                            <span style={{ fontWeight: 850, fontSize: "1.1rem", color: "var(--kravy-text-primary)" }}>{cat}</span>
                         </div>
-                        <div style={{ fontWeight: 900, color: "var(--kravy-text-primary)" }}>₹{format(stats.revenue)}</div>
+                        <div style={{ fontWeight: 900, color: "var(--kravy-text-primary)" }}>{sym}{format(stats.revenue)}</div>
                      </div>
                      <div style={{ width: "100%", height: "8px", background: "var(--kravy-bg-2)", borderRadius: "10px" }}>
                         <div style={{ 
@@ -221,7 +223,7 @@ export default async function AdvancedAnalyticsPage({
                            <div style={{ fontSize: "0.75rem", color: "var(--kravy-text-faint)" }}>{new Date(b.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</div>
                         </td>
                         <td style={{ padding: "28px 52px" }}>
-                           <div style={{ fontSize: "1.5rem", fontWeight: 950, color: "var(--kravy-text-primary)" }}>₹{format(b.total)}</div>
+                           <div style={{ fontSize: "1.5rem", fontWeight: 950, color: "var(--kravy-text-primary)" }}>{sym}{format(b.total)}</div>
                         </td>
                         <td style={{ padding: "28px 52px", textAlign: "right" }}>
                            <span style={{ 

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "./SidebarContext";
 import { useTheme } from "./ThemeProvider";
+import { useProfileCache } from "@/hooks/useProfileCache";
+import { performLogout } from "@/lib/logout";
 
 import {
   LayoutGrid,
@@ -12,7 +14,6 @@ import {
   ClipboardList,
   QrCode,
   UtensilsCrossed,
-  Store,
   Package,
   Users,
   CreditCard,
@@ -21,6 +22,7 @@ import {
   TrendingUp,
   ShieldCheck,
   Building,
+  ChefHat,
   Settings,
   Bell,
   LogOut,
@@ -123,7 +125,9 @@ import {
   Fuel,
   Smartphone,
   CalendarDays,
-  CheckCircle2
+  CheckCircle2,
+  Bluetooth,
+  Sliders
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { kravy } from "@/lib/sounds";
@@ -136,26 +140,26 @@ const navGroups = [
     items: [
       { icon: <Home size={18} />, label: "Store Dashboard", href: "/dashboard" },
       { icon: <ShoppingCart size={18} />, label: "Quick POS Billing", href: "/dashboard/billing/checkout" },
-
-
-
-      { icon: <Fuel size={18} />, label: "Fuel Billing", href: "/dashboard/fuel", badge: "Fuel", badgeColor: "#FF6B35" },
+      { icon: <LayoutDashboard size={18} />, label: "Floor Management", href: "/dashboard/terminal" },
+      { icon: <Activity size={18} />, label: "Kitchen Workflow", href: "/dashboard/kitchen" },
+      { icon: <ChefHat size={18} />, label: "Kitchen Display (KDS)", href: "/dashboard/kds" },
       { icon: <Receipt size={18} />, label: "Past Bills / History", href: "/dashboard/billing" },
-      { icon: <Zap size={18} />, label: "Go to Billing Panel", href: "https://billing.kravy.in", external: true },
+      { icon: <LayoutGrid size={18} />, label: "Table Status", href: "/dashboard/tables" },
+      { icon: <Building size={18} />, label: "Hotel Room Stay", href: "/dashboard/rooms" },
+      { icon: <Fuel size={18} />, label: "Fuel Billing", href: "/dashboard/fuel" },
     ]
   },
   {
     group: "STORE CATALOG",
     items: [
-      { icon: <Store size={18} />, label: "Browse Products", href: "/dashboard/menu/view" },
-      { icon: <Printer size={18} />, label: "PDF Catalog Studio", href: "/dashboard/menu/pdf", badge: "PDF", badgeColor: "#EC4899" },
-
-      { icon: <Sparkles size={18} />, label: "Catalog Editor", href: "/dashboard/menu-editor", badge: "New", badgeColor: "#8B5CF6" },
-      { icon: <Layers size={18} />, label: "Add-on clusters", href: "/dashboard/menu/addons", badge: "Setup", badgeColor: "#10B981" },
-      { icon: <Zap size={18} />, label: "AI Product Scraper", href: "/dashboard/ai-scraper", badge: "AI", badgeColor: "#F59E0B", roles: ["ADMIN", "SELLER", "STAFF"] },
-      { icon: <Sparkles size={18} />, label: "Auto Apply Images", href: "/dashboard/auto-apply", badge: "AI OCR", badgeColor: "#8B5CF6", roles: ["ADMIN"] },
+      { icon: <UtensilsCrossed size={18} />, label: "Browse Products", href: "/dashboard/menu/view" },
+      { icon: <Sparkles size={18} />, label: "Quotation AI", href: "/dashboard/quotation" },
+      { icon: <Sparkles size={18} />, label: "Interactive Editor", href: "/dashboard/menu-editor" },
+      { icon: <Layers size={18} />, label: "Add-on clusters", href: "/dashboard/menu/addons" },
+      { icon: <Zap size={18} />, label: "AI Menu Scraper", href: "/dashboard/ai-scraper", roles: ["ADMIN", "SELLER", "STAFF"] },
+      { icon: <Sparkles size={18} />, label: "Auto Apply Images", href: "/dashboard/auto-apply", roles: ["ADMIN"] },
       { icon: <PlusCircle size={18} />, label: "Add Single Item", href: "/dashboard/menu/upload" },
-      { icon: <Upload size={18} />, label: "Excel Bulk Import", href: "/dashboard/store-item-upload", badge: "Import", badgeColor: "#FF6B35", roles: ["ADMIN", "SELLER", "STAFF"] },
+      { icon: <Upload size={18} />, label: "Excel Bulk Import", href: "/dashboard/store-item-upload", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <Settings size={18} />, label: "Category & Editor", href: "/dashboard/menu/edit" },
     ]
   },
@@ -164,25 +168,32 @@ const navGroups = [
     items: [
       { icon: <Users size={18} />, label: "Customer Parties", href: "/dashboard/parties" },
       { icon: <UserPlus size={18} />, label: "Staff Management", href: "/dashboard/staff", roles: ["ADMIN", "SELLER", "STAFF"] },
-      { icon: <Package size={18} />, label: "Inventory Stock", href: "/dashboard/inventory", roles: ["ADMIN", "SELLER", "STAFF"] },
+      { icon: <Package size={18} />, label: "Inventory Stock", href: "/dashboard/inventory", roles: ["ADMIN", "SELLER", "STAFF"], subItems: [
+        { label: "Stock Overview", href: "/dashboard/inventory" },
+        { label: "Add / Update Stock", href: "/dashboard/inventory/add-stock" },
+        { label: "Inventory Reports", href: "/dashboard/inventory/reports" },
+      ]},
       { icon: <IndianRupee size={18} />, label: "Restaurant Expenses", href: "/dashboard/expenses", roles: ["ADMIN", "SELLER", "STAFF"] },
+      { icon: <QrCode size={18} />, label: "QR Order Terminal", href: "/dashboard/qr-orders" },
     ]
   },
   {
     group: "MARKETING",
     items: [
-      { icon: <Sparkles size={18} />, label: "Marketing Hub", href: "/dashboard/combos", badge: "Live", badgeColor: "#8B5CF6", showHorizontalGroup: true },
+      { icon: <Sparkles size={18} />, label: "Marketing Hub", href: "/dashboard/combos", showHorizontalGroup: true },
+      { icon: <Camera size={18} />, label: "Gallery Manager", href: "/dashboard/gallery" },
     ]
   },
   {
     group: "REPORTS & ANALYTICS",
     items: [
-      { icon: <TrendingUp size={18} />, label: "Daily Sales Report", href: "/dashboard/reports/sales/daily", badge: "Live", badgeColor: "#10B981" },
-      { icon: <BarChart3 size={18} />, label: "Sales Analytics", href: "/dashboard/reports/sales/drilldown", badge: "BI", badgeColor: "#6366F1" },
-      { icon: <AlertCircle size={18} />, label: "Customer Dues / Udhaar", href: "/dashboard/reports/unpaid", badge: "Dues", badgeColor: "#EF4444" },
-      { icon: <CreditCard size={18} />, label: "Wallet Deposits", href: "/dashboard/reports/wallet-deposits", badge: "New", badgeColor: "#8B5CF6" },
-      { icon: <PieChart size={18} />, label: "GST Reports", href: "/dashboard/reports/gst", badge: "GST", badgeColor: "#F59E0B" },
-      { icon: <FileText size={18} />, label: "Manual Invoice", href: "/dashboard/admin/invoice-generator", badge: "PDF", badgeColor: "#8B5CF6", roles: ["ADMIN"] },
+      { icon: <TrendingUp size={18} />, label: "Daily Sales Report", href: "/dashboard/reports/sales/daily" },
+      { icon: <History size={18} />, label: "Bill Edit History", href: "/dashboard/billing/history" },
+      { icon: <BarChart3 size={18} />, label: "Sales Analytics", href: "/dashboard/reports/sales/drilldown" },
+      { icon: <AlertCircle size={18} />, label: "Customer Dues / Udhaar", href: "/dashboard/reports/unpaid" },
+      { icon: <CreditCard size={18} />, label: "Wallet Deposits", href: "/dashboard/reports/wallet-deposits" },
+      { icon: <PieChart size={18} />, label: "GST Reports", href: "/dashboard/reports/gst" },
+      { icon: <FileText size={18} />, label: "Manual Invoice", href: "/dashboard/admin/invoice-generator", roles: ["ADMIN"] },
     ]
   },
   {
@@ -198,23 +209,26 @@ const navGroups = [
     group: "ADMINISTRATION",
     items: [
       { icon: <UserCircle size={18} />, label: "Business Profile", href: "/dashboard/profile", roles: ["ADMIN", "SELLER", "STAFF"] },
-
+      { icon: <Mail size={18} />, label: "Gmail Integration", href: "/dashboard/integration/gmail", roles: ["ADMIN", "SELLER"] },
       { icon: <Settings size={18} />, label: "POS Settings", href: "/dashboard/settings", roles: ["ADMIN", "SELLER", "STAFF"] },
-      { icon: <Printer size={18} />, label: "Printing Setup", href: "/dashboard/settings/printing", roles: ["ADMIN", "SELLER", "STAFF"], badge: "New", badgeColor: "#8B5CF6" },
+      { icon: <Sliders size={18} />, label: "Sidebar Menu Layout", href: "/dashboard/settings/sidebar", roles: ["ADMIN", "SELLER", "STAFF"] },
+      { icon: <Printer size={18} />, label: "Printing Setup", href: "/dashboard/settings/printing", roles: ["ADMIN", "SELLER", "STAFF"] },
+      { icon: <Smartphone size={18} />, label: "Android APK Printer", href: "/dashboard/printer", roles: ["ADMIN", "SELLER", "STAFF"] },
+      { icon: <Bluetooth size={18} />, label: "Direct Web Print", href: "/dashboard/web-printer", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <Smartphone size={18} />, label: "App Settings", href: "/dashboard/admin/app-settings", roles: ["ADMIN"] },
       { icon: <Database size={18} />, label: "Backups", href: "/dashboard/admin/backup", roles: ["ADMIN"] },
-      { icon: <QrCode size={18} />, label: "Google Review QR", href: "/dashboard/admin/qr-manager", badge: "New", badgeColor: "#8B5CF6", roles: ["ADMIN"] },
-      { icon: <Zap size={18} />, label: "Advanced Controls", href: "/dashboard/settings/advanced", roles: ["ADMIN", "SELLER", "STAFF"], badge: "Setup", badgeColor: "#8B5CF6" },
-      { icon: <Percent size={18} />, label: "Tax Management", href: "/dashboard/settings/tax", badge: "GST", badgeColor: "#F59E0B", roles: ["ADMIN", "SELLER", "STAFF"] },
-      { icon: <Lock size={18} />, label: "Access Control", href: "/admin/users", badge: "Roles", badgeColor: "#EF4444", roles: ["ADMIN"] },
+      { icon: <QrCode size={18} />, label: "Google Review QR", href: "/dashboard/admin/qr-manager", roles: ["ADMIN"] },
+      { icon: <Zap size={18} />, label: "Advanced Controls", href: "/dashboard/settings/advanced", roles: ["ADMIN", "SELLER", "STAFF"] },
+      { icon: <Percent size={18} />, label: "Tax Management", href: "/dashboard/settings/tax", roles: ["ADMIN", "SELLER", "STAFF"] },
+      { icon: <Lock size={18} />, label: "Access Control", href: "/admin/users", roles: ["ADMIN"] },
       { 
         icon: <Shield size={18} />, 
         label: "Manage Platform", 
         href: "/admin/dashboard", 
         roles: ["ADMIN"],
         subItems: [
-          { label: "System Funnel", href: "/admin/dashboard", badge: "Live" },
-          { label: "Merchant Data", href: "/admin/merchants", badge: "Report" },
+          { label: "System Funnel", href: "/admin/dashboard" },
+          { label: "Merchant Data", href: "/admin/merchants" },
           { label: "Onboard Dealer", href: "/admin/onboarding" },
           { label: "Custom Auth", href: "/admin/onboarding-custom" },
         ]
@@ -255,7 +269,7 @@ const hiddenNavGroups = [
       { icon: <Smartphone size={18} />, label: "UPI Reports", href: "/dashboard/reports/payments/upi", roles: ["ADMIN", "SELLER"] },
       
       { icon: <HelpCircle size={18} />, label: "Documentation - GST Billing", href: "/dashboard/docs/gst-billing", roles: ["ADMIN", "SELLER", "STAFF"] },
-      { icon: <HelpCircle size={18} />, label: "Documentation - Catalog Management", href: "/dashboard/docs/menu-management", roles: ["ADMIN", "SELLER", "STAFF"] },
+      { icon: <HelpCircle size={18} />, label: "Documentation - Menu Management", href: "/dashboard/docs/menu-management", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <HelpCircle size={18} />, label: "Documentation - Staff Access", href: "/dashboard/docs/staff-access", roles: ["ADMIN"] },
       { icon: <HelpCircle size={18} />, label: "Documentation - Workflow", href: "/dashboard/docs/workflow", roles: ["ADMIN", "SELLER", "STAFF"] },
             { icon: <HelpCircle size={18} />, label: "Documentation - Auto Backup", href: "/dashboard/docs/auto-backup", roles: ["ADMIN"] },
@@ -309,6 +323,7 @@ function SidebarItem({ item, index, isActive, collapsed, isDark, pathname }: any
           onClick={(e) => { 
             if(item.subItems) e.preventDefault();
             if(item.href !== '#' && !item.subItems) {
+              console.log(`[KRAVY-PERF] SIDEBAR CLICK: Navigation started to ${item.href}`);
               kravy.click();
               if (item.href !== pathname) setIsPending(true);
             }
@@ -499,14 +514,32 @@ function SidebarItem({ item, index, isActive, collapsed, isDark, pathname }: any
               <span style={{ fontSize: '0.65rem', fontWeight: 800, color: pathname.startsWith('/dashboard/offers') ? '#10B981' : '#64748B' }}>OFFERS</span>
             </motion.div>
           </Link>
-
+          <Link href="/dashboard/gallery" style={{ textDecoration: 'none', flex: 1 }} prefetch={false} onClick={() => { kravy.click(); }}>
+            <motion.div
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              style={{
+                padding: '10px',
+                background: pathname === '/dashboard/gallery' ? 'rgba(124,58,237,0.15)' : 'rgba(255,255,255,0.03)',
+                borderRadius: '12px',
+                border: `1px solid ${pathname === '/dashboard/gallery' ? 'rgba(124,58,237,0.3)' : 'rgba(255,255,255,0.05)'}`,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <Camera size={16} color={pathname === '/dashboard/gallery' ? '#7C3AED' : '#64748B'} />
+              <span style={{ fontSize: '0.65rem', fontWeight: 800, color: pathname === '/dashboard/gallery' ? '#7C3AED' : '#64748B' }}>GALLERY</span>
+            </motion.div>
+          </Link>
         </div>
       )}
     </motion.div>
   );
 }
 
-export default function Sidebar({ profile }: { profile?: any }) {
+export default function Sidebar({ profile, isMobile = false }: { profile?: any; isMobile?: boolean }) {
   const { collapsed, setCollapsed } = useSidebar();
   const { resolvedTheme } = useTheme();
   const pathname = usePathname();
@@ -517,40 +550,51 @@ export default function Sidebar({ profile }: { profile?: any }) {
   const [aiScraperEnabled, setAiScraperEnabled] = useState(false);
   const [excelImportEnabled, setExcelImportEnabled] = useState(false);
   const [fuelBillingEnabled, setFuelBillingEnabled] = useState(false);
-
+  const [hotelManagementEnabled, setHotelManagementEnabled] = useState(false);
   const { tablesList } = useTerminalContext();
-  const activeTablesCount = tablesList ? tablesList.filter(t => t.activeCount > 0).length : null;
+  const activeTablesCount = tablesList ? tablesList.filter(t => (t.activeCount || 0) > 0).length : null;
   const [searchQuery, setSearchQuery] = useState("");
   const [hiddenSidebarItems, setHiddenSidebarItems] = useState<string[]>([]);
+  const [customSidebarOrder, setCustomSidebarOrder] = useState<Record<string, string[]>>({});
 
   // Derive from AuthContext
   const userRole = authUser?.type || "USER";
-  const allowedPaths = authUser?.permissions || [];
-  const loadingRole = authLoading;
+  const allowedPaths = Array.isArray(authUser?.permissions) ? authUser.permissions : [];
+  const loadingRole = authLoading;  const { profile: cachedProfile } = useProfileCache();
+
+  useEffect(() => {
+    // Prefer the prop if passed, otherwise fallback to cache
+    const activeProfile = profile || cachedProfile;
+    if (activeProfile) {
+      if (activeProfile.taxEnabled) setTaxEnabled(true);
+      if (activeProfile.aiScraperEnabled) setAiScraperEnabled(true);
+      if (activeProfile.excelImportEnabled) setExcelImportEnabled(true);
+      setFuelBillingEnabled(!!activeProfile.enableFuelBilling);
+      setHotelManagementEnabled(!!activeProfile.enableHotelManagement);
+    }
+  }, [profile, cachedProfile]);
 
   useEffect(() => {
     setMounted(true);
 
-    // Fetch profile to check tax status & hidden sidebar items
-    fetch(`/api/profile?_t=${Date.now()}`, { cache: 'no-store' })
-      .then(res => res.json())
-      .then(data => {
-        if (data) {
-          if (data.taxEnabled || data.perProductTaxEnabled) setTaxEnabled(true);
-          if (data.aiScraperEnabled) setAiScraperEnabled(true);
-          if (data.excelImportEnabled) setExcelImportEnabled(true);
-          setFuelBillingEnabled(!!data.enableFuelBilling);
-
-
-        }
-      })
-      .catch(() => {});
+    try {
+      const savedOrder = localStorage.getItem("kravy_sidebar_custom_order");
+      if (savedOrder) setCustomSidebarOrder(JSON.parse(savedOrder));
+      const savedHidden = localStorage.getItem("kravy_hidden_sidebar_items");
+      if (savedHidden) setHiddenSidebarItems(JSON.parse(savedHidden));
+    } catch (e) {}
 
     const handleStorage = (e: StorageEvent) => {
       if (e.key === "kravy_hidden_sidebar_items") {
         try {
           const newVal = e.newValue ? JSON.parse(e.newValue) : [];
           setHiddenSidebarItems(newVal);
+        } catch (err) {}
+      }
+      if (e.key === "kravy_sidebar_custom_order") {
+        try {
+          const newVal = e.newValue ? JSON.parse(e.newValue) : {};
+          setCustomSidebarOrder(newVal);
         } catch (err) {}
       }
     };
@@ -561,7 +605,7 @@ export default function Sidebar({ profile }: { profile?: any }) {
     };
   }, []);
 
-  // Update hidden items when authUser changes
+  // Update hidden items and custom order when authUser changes
   useEffect(() => {
     if (authLoading) return;
     if (authUser && authUser.hiddenSidebarItems) {
@@ -573,15 +617,25 @@ export default function Sidebar({ profile }: { profile?: any }) {
         if (local) setHiddenSidebarItems(JSON.parse(local));
       } catch (e) {}
     }
+
+    if (authUser && authUser.sidebarOrder) {
+      setCustomSidebarOrder(authUser.sidebarOrder);
+      localStorage.setItem("kravy_sidebar_custom_order", JSON.stringify(authUser.sidebarOrder));
+    } else {
+      try {
+        const local = localStorage.getItem("kravy_sidebar_custom_order");
+        if (local) setCustomSidebarOrder(JSON.parse(local));
+      } catch (e) {}
+    }
   }, [authUser, authLoading]);
 
   if (!mounted) return null;
 
   return (
     <div style={{
-      width: collapsed ? "72px" : "260px",
-      minWidth: collapsed ? "72px" : "260px",
-      height: "100vh",
+      width: isMobile ? "100%" : (collapsed ? "72px" : "260px"),
+      minWidth: isMobile ? "100%" : (collapsed ? "72px" : "260px"),
+      height: "100%",
       background: isDark
         ? "linear-gradient(145deg, #0F0F23 0%, #1A1A2E 50%, #16213E 100%)"
         : "linear-gradient(145deg, #F8FAFC 0%, #F1F5F9 50%, #E2E8F0 100%)",
@@ -758,7 +812,14 @@ export default function Sidebar({ profile }: { profile?: any }) {
         <motion.button
           whileHover={{ scale: 1.1, backgroundColor: "rgba(139,92,246,0.15)", borderColor: "rgba(139,92,246,0.3)" }}
           whileTap={{ scale: 0.9 }}
-          onClick={() => { kravy.toggle(); setCollapsed(!collapsed); }}
+          onClick={() => {
+            kravy.toggle();
+            if (isMobile) {
+              window.dispatchEvent(new CustomEvent("kravy-toggle-sidebar"));
+            } else {
+              setCollapsed(!collapsed);
+            }
+          }}
           style={{
             background: "rgba(139,92,246,0.08)",
             border: "1px solid rgba(139,92,246,0.2)",
@@ -768,30 +829,35 @@ export default function Sidebar({ profile }: { profile?: any }) {
             flexShrink: 0, transition: "all 0.3s",
             position: "relative", zIndex: 5
           }}
+          title={isMobile ? "Close Menu" : (collapsed ? "Expand Sidebar" : "Collapse Sidebar")}
         >
-          <AnimatePresence mode="wait">
-            {collapsed ? (
-              <motion.div
-                key="expand"
-                initial={{ rotate: -180, opacity: 0 }}
-                animate={{ rotate: 0, opacity: 1 }}
-                exit={{ rotate: 180, opacity: 0 }}
-                transition={{ duration: 0.4, ease: "easeInOut" }}
-              >
-                <ChevronRight size={18} />
-              </motion.div>
-            ) : (
-              <motion.div
-                key="collapse"
-                initial={{ rotate: 180, opacity: 0 }}
-                animate={{ rotate: 0, opacity: 1 }}
-                exit={{ rotate: -180, opacity: 0 }}
-                transition={{ duration: 0.4, ease: "easeInOut" }}
-              >
-                <ChevronLeft size={18} />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {isMobile ? (
+            <X size={18} />
+          ) : (
+            <AnimatePresence mode="wait">
+              {collapsed ? (
+                <motion.div
+                  key="expand"
+                  initial={{ rotate: -180, opacity: 0 }}
+                  animate={{ rotate: 0, opacity: 1 }}
+                  exit={{ rotate: 180, opacity: 0 }}
+                  transition={{ duration: 0.4, ease: "easeInOut" }}
+                >
+                  <ChevronRight size={18} />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="collapse"
+                  initial={{ rotate: 180, opacity: 0 }}
+                  animate={{ rotate: 0, opacity: 1 }}
+                  exit={{ rotate: -180, opacity: 0 }}
+                  transition={{ duration: 0.4, ease: "easeInOut" }}
+                >
+                  <ChevronLeft size={18} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          )}
         </motion.button>
       </div>
 
@@ -864,7 +930,7 @@ export default function Sidebar({ profile }: { profile?: any }) {
             <Search size={14} style={{ position: "absolute", left: "12px", color: "var(--kravy-text-muted)" }} />
             <input
               type="text"
-              placeholder="Search..."
+              placeholder="Search menus..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -892,7 +958,7 @@ export default function Sidebar({ profile }: { profile?: any }) {
 
       <div style={{
         flex: 1, overflowY: "auto", overflowX: "hidden", padding: "16px 12px",
-      }} className="hide-scrollbar">
+      }} className="hide-scrollbar pb-[120px] lg:pb-6">
                 {(() => {
           const allGroups = searchQuery ? [...navGroups, ...hiddenNavGroups] : navGroups;
           return allGroups.map((group, groupIndex) => {
@@ -908,17 +974,17 @@ export default function Sidebar({ profile }: { profile?: any }) {
 
             // 0. User custom hidden items check (except critical settings link)
             if (item.href !== "/dashboard/settings" && item.href !== "/dashboard/profile") {
-              if (hiddenSidebarItems.includes(item.href) || hiddenSidebarItems.includes(item.label)) {
+              if (Array.isArray(hiddenSidebarItems) && (hiddenSidebarItems.includes(item.href) || hiddenSidebarItems.includes(item.label))) {
                 return false;
               }
             }
 
             // 1. Application-wide Feature Flags (Controlled by profile settings)
             if (item.label === "GST Reports" && !taxEnabled) return false;
-            if (item.label === "AI Product Scraper" && !aiScraperEnabled) return false;
+            if (item.label === "AI Menu Scraper" && !aiScraperEnabled) return false;
             if (item.label === "Excel Bulk Import" && !excelImportEnabled) return false;
             if (item.label === "Fuel Billing" && !fuelBillingEnabled) return false;
-
+            if (item.label === "Hotel Room Stay" && !hotelManagementEnabled) return false;
 
             // 2. Global Admin Bypass - Show everything else to administrators
             if (userRole === "ADMIN") return true;
@@ -927,9 +993,11 @@ export default function Sidebar({ profile }: { profile?: any }) {
             // If the current user has this specific path in their allowed list, grant access
             const baseHref = item.href.split("?")[0];
             const hasLegacyWorkflow = allowedPaths.includes("/dashboard/workflow");
-            const isNewPath = baseHref === "/dashboard/terminal" || baseHref === "/dashboard/kitchen";
+            const isNewPath = baseHref === "/dashboard/terminal" || baseHref === "/dashboard/kitchen" || baseHref === "/dashboard/kds";
             const isExpensePath = baseHref === "/dashboard/expenses";
             const isRoomPath = baseHref === "/dashboard/rooms";
+            const isFuelPath = baseHref === "/dashboard/fuel";
+            const isKdsPath = baseHref === "/dashboard/kds";
             
             if (
               allowedPaths.includes("*") || 
@@ -937,6 +1005,8 @@ export default function Sidebar({ profile }: { profile?: any }) {
               allowedPaths.includes(baseHref) || 
               (hasLegacyWorkflow && isNewPath) ||
               (isExpensePath && (userRole === "ADMIN" || userRole === "SELLER")) ||
+              (isFuelPath && (userRole === "ADMIN" || userRole === "SELLER" || userRole === "USER")) ||
+              (isKdsPath && (userRole === "ADMIN" || userRole === "SELLER" || userRole === "OWNER")) ||
               isRoomPath
             ) return true;
 
@@ -947,14 +1017,25 @@ export default function Sidebar({ profile }: { profile?: any }) {
             if (allowedPaths.length > 0) return false;
 
             // 5. Legacy Role-based Fallback (used when allowedPaths is empty)
-            const effectiveRole = userRole === "USER" ? "SELLER" : userRole;
-            const hasRoleAccess = allowedPaths.length === 0 && item.roles ? item.roles.includes(effectiveRole) : (allowedPaths.length === 0);
+            const hasRoleAccess = allowedPaths.length === 0 && Array.isArray(item.roles) ? item.roles.includes(userRole) : (allowedPaths.length === 0);
               
             return hasRoleAccess;
           });
 
           // 2. If no items are allowed in this group, don't show the group at all
           if (visibleItems.length === 0) return null;
+
+          // 3. Apply custom user ordering if defined for this group
+          const groupOrder = customSidebarOrder[group.group];
+          const sortedItems = [...visibleItems].sort((a: any, b: any) => {
+            if (!groupOrder) return 0;
+            const idxA = groupOrder.indexOf(a.href);
+            const idxB = groupOrder.indexOf(b.href);
+            if (idxA === -1 && idxB === -1) return 0;
+            if (idxA === -1) return 1;
+            if (idxB === -1) return -1;
+            return idxA - idxB;
+          });
 
           return (
             <div key={group.group || `group-${groupIndex}`} style={{ marginBottom: "20px" }}>
@@ -967,7 +1048,7 @@ export default function Sidebar({ profile }: { profile?: any }) {
                   opacity: isDark ? 1 : 0.7,
                 }}>{group.group}</div>
               )}
-              {visibleItems.map((item: any, index) => (
+              {sortedItems.map((item: any, index) => (
                 <SidebarItem 
                   key={item.label} 
                   item={item} 
@@ -982,31 +1063,32 @@ export default function Sidebar({ profile }: { profile?: any }) {
         );
       });
         })()}
-    </div>
 
-      {/* USER SECTION AT BOTTOM */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.8 }}
-        style={{
-          padding: collapsed ? "12px 0" : "16px 14px",
-          borderTop: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(0,0,0,0.08)",
-          display: "flex", alignItems: "center",
-          justifyContent: collapsed ? "center" : "flex-start",
-          gap: "12px",
-          marginTop: "auto",
-          background: "linear-gradient(135deg, rgba(255,107,53,0.02), transparent)",
-          backdropFilter: "blur(10px)",
-        }}
-      >
+        {/* USER SECTION AT BOTTOM INSIDE SCROLLER */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8 }}
+          className="pb-4"
+          style={{
+            padding: collapsed ? "12px 0" : "16px 14px",
+            borderTop: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(0,0,0,0.08)",
+            display: "flex", alignItems: "center",
+            justifyContent: collapsed ? "center" : "flex-start",
+            gap: "12px",
+            marginTop: "16px",
+            background: "linear-gradient(135deg, rgba(255,107,53,0.02), transparent)",
+            backdropFilter: "blur(10px)",
+            borderRadius: "16px"
+          }}
+        >
         <motion.div
           whileHover={{ scale: 1.05, rotate: 5 }}
           whileTap={{ scale: 0.95 }}
         >
-          {authUser?.imageUrl ? (
+          {(authUser as any)?.imageUrl ? (
             <motion.img
-              src={authUser.imageUrl}
+              src={(authUser as any).imageUrl}
               style={{
                 width: "38px", height: "38px", borderRadius: "50%",
                 border: "2px solid #FF6B35", flexShrink: 0,
@@ -1022,7 +1104,7 @@ export default function Sidebar({ profile }: { profile?: any }) {
               style={{
                 width: "38px", height: "38px", borderRadius: "50%",
                 background: "linear-gradient(135deg, #FF6B35, #F59E0B)",
-                display: "flex", alignItems: "center", justifyCenter: "center",
+                display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: "0.9rem", fontWeight: 800, color: "#fff",
                 flexShrink: 0, boxShadow: "0 4px 16px rgba(255,107,53,0.3)",
               }}
@@ -1071,34 +1153,54 @@ export default function Sidebar({ profile }: { profile?: any }) {
           </motion.div>
         )}
         {!collapsed && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 1.0 }}
-          >
-            <motion.button
-                whileHover={{ scale: 1.1, backgroundColor: "rgba(255,107,53,0.1)", color: "#FF6B35" }}
+          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            <Link
+              href="/dashboard/settings/sidebar"
+              title="Sidebar Layout & Order Settings"
+              onClick={() => kravy.click?.()}
+              style={{
+                textDecoration: "none",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <motion.div
+                whileHover={{ scale: 1.15, backgroundColor: "rgba(139,92,246,0.2)", color: "#8B5CF6" }}
                 whileTap={{ scale: 0.9 }}
-                onClick={() => {
-                   kravy.close();
-                   // Clear all possible auth cookies
-                   document.cookie = "staff_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
-                   document.cookie = "kravy_auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
-                   // Hard refresh to clear state and go home
-                   window.location.href = "/";
-                }}
                 style={{
-                  background: "none", border: "none",
-                  color: isDark ? "#6B7280" : "var(--kravy-text-muted)",
-                  cursor: "pointer", display: "flex", alignItems: "center",
-                  padding: "6px", borderRadius: "8px", transition: "all 0.3s",
+                  color: isDark ? "#A78BFA" : "#7C3AED",
+                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                  padding: "7px", borderRadius: "9px", transition: "all 0.25s",
+                  background: isDark ? "rgba(139,92,246,0.1)" : "rgba(139,92,246,0.08)",
+                  border: isDark ? "1px solid rgba(139,92,246,0.25)" : "1px solid rgba(139,92,246,0.2)"
                 }}
               >
-                <LogOut size={18} />
-              </motion.button>
-          </motion.div>
+                <Sliders size={17} />
+              </motion.div>
+            </Link>
+
+            <motion.button
+              whileHover={{ scale: 1.1, backgroundColor: "rgba(255,107,53,0.1)", color: "#FF6B35" }}
+              whileTap={{ scale: 0.9 }}
+              title="Logout"
+              onClick={() => {
+                 kravy.close();
+                 performLogout("/auth/custom?mode=login");
+              }}
+              style={{
+                background: "none", border: "none",
+                color: isDark ? "#6B7280" : "var(--kravy-text-muted)",
+                cursor: "pointer", display: "flex", alignItems: "center",
+                padding: "6px", borderRadius: "8px", transition: "all 0.3s",
+              }}
+            >
+              <LogOut size={18} />
+            </motion.button>
+          </div>
         )}
       </motion.div>
     </div>
+  </div>
   );
 }

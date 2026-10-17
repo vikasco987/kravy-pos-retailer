@@ -1,5 +1,5 @@
 "use client";
-
+import { useCurrency } from "@/lib/currency-context";
 import React, { useState, useEffect } from "react";
 import { 
   FileText, 
@@ -18,7 +18,10 @@ import {
   Grid,
   Check,
   Settings,
-  LayoutDashboard
+  LayoutDashboard,
+  Copy,
+  Eye,
+  X
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
@@ -39,6 +42,8 @@ type GSTReportData = {
 };
 
 export default function GSTReportPage() {
+  const { currencySymbol: sym } = useCurrency();
+
   const [activeTab, setActiveTab] = useState<"GSTR-1" | "GSTR-3B" | "HSN" | "Daily">("GSTR-1");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -47,8 +52,9 @@ export default function GSTReportPage() {
   const [data, setData] = useState<GSTReportData | null>(null);
   const [gstEnabled, setGstEnabled] = useState<boolean | null>(null);
   const [showColumnToggle, setShowColumnToggle] = useState(false);
+  const [selectedJson, setSelectedJson] = useState<any>(null);
   const [visibleColumns, setVisibleColumns] = useState<string[]>([
-    "billNumber", "date", "customerName", "buyerGSTIN", "rates", "hsns", "taxable", "cgst", "sgst", "igst", "grandTotal", "type"
+    "billNumber", "date", "customerName", "buyerGSTIN", "rates", "hsns", "taxable", "cgst", "sgst", "igst", "grandTotal", "type", "actions"
   ]);
 
   useEffect(() => {
@@ -65,12 +71,13 @@ export default function GSTReportPage() {
     { key: "placeOfSupply", label: "Place of Supply" },
     { key: "rates", label: "Rate %" },
     { key: "hsns", label: "HSN Code" },
-    { key: "taxable", label: "Taxable (₹)" },
-    { key: "cgst", label: "CGST (₹)" },
-    { key: "sgst", label: "SGST (₹)" },
-    { key: "igst", label: "IGST (₹)" },
-    { key: "grandTotal", label: "Total (₹)" },
+    { key: "taxable", label: "Taxable ({sym})" },
+    { key: "cgst", label: "CGST ({sym})" },
+    { key: "sgst", label: "SGST ({sym})" },
+    { key: "igst", label: "IGST ({sym})" },
+    { key: "grandTotal", label: "Total ({sym})" },
     { key: "type", label: "Type" },
+    { key: "actions", label: "JSON" },
   ];
 
   const toggleColumn = (key: string) => {
@@ -252,6 +259,18 @@ export default function GSTReportPage() {
               </AnimatePresence>
             </div>
           )}
+          
+          {activeTab === "GSTR-1" && data?.gstr1 && (
+            <button 
+              onClick={() => {
+                navigator.clipboard.writeText(JSON.stringify(data.gstr1, null, 2));
+                toast.success("Full JSON Copied!");
+              }}
+              className="flex items-center gap-2 px-4 py-3 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all"
+            >
+              <Copy size={14} /> Full JSON
+            </button>
+          )}
         </div>
       </div>
 
@@ -345,23 +364,29 @@ export default function GSTReportPage() {
                               className += " font-mono";
                               break;
                             case "taxable":
-                              content = `₹${bill.taxable.toFixed(2)}`;
+                              content = `${sym}${bill.taxable.toFixed(2)}`;
                               className += " text-right";
                               break;
                             case "cgst":
-                              content = `₹${bill.cgst.toFixed(2)}`;
+                              content = (
+                                <span>{sym}{bill.cgst.toFixed(2)} <span className="text-[9px] opacity-60">({bill.taxType || "Exc"})</span></span>
+                              );
                               className += " text-right text-indigo-600/70";
                               break;
                             case "sgst":
-                              content = `₹${bill.sgst.toFixed(2)}`;
+                              content = (
+                                <span>{sym}{bill.sgst.toFixed(2)} <span className="text-[9px] opacity-60">({bill.taxType || "Exc"})</span></span>
+                              );
                               className += " text-right text-emerald-600/70";
                               break;
                             case "igst":
-                              content = `₹${bill.igst.toFixed(2)}`;
+                              content = (
+                                <span>{sym}{bill.igst.toFixed(2)} <span className="text-[9px] opacity-60">({bill.taxType || "Exc"})</span></span>
+                              );
                               className += " text-right text-rose-600/70";
                               break;
                             case "grandTotal":
-                              content = `₹${bill.grandTotal.toFixed(2)}`;
+                              content = `${sym}${bill.grandTotal.toFixed(2)}`;
                               className += " text-sm font-black text-right text-[var(--kravy-text-primary)]";
                               break;
                             case "type":
@@ -369,6 +394,22 @@ export default function GSTReportPage() {
                                 <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${bill.type === "B2B" ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20" : "bg-slate-100 dark:bg-white/10 text-[var(--kravy-text-muted)]"}`}>
                                   {bill.type}
                                 </span>
+                              );
+                              className += " text-center";
+                              break;
+                            case "actions":
+                              content = (
+                                <div className="flex gap-2 justify-center">
+                                  <button onClick={() => setSelectedJson(bill)} className="p-1.5 bg-slate-100 dark:bg-white/10 rounded-lg text-[var(--kravy-text-secondary)] hover:text-indigo-600 transition-all">
+                                    <Eye size={14} />
+                                  </button>
+                                  <button onClick={() => {
+                                    navigator.clipboard.writeText(JSON.stringify(bill, null, 2));
+                                    toast.success("Row JSON Copied!");
+                                  }} className="p-1.5 bg-slate-100 dark:bg-white/10 rounded-lg text-[var(--kravy-text-secondary)] hover:text-indigo-600 transition-all">
+                                    <Copy size={14} />
+                                  </button>
+                                </div>
                               );
                               className += " text-center";
                               break;
@@ -393,7 +434,7 @@ export default function GSTReportPage() {
                       ].map((card, i) => (
                         <div key={i} className={`p-8 rounded-3xl bg-${card.color}-500/5 border border-${card.color}-500/20`}>
                            <div className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)] mb-3">{card.label}</div>
-                           <div className={`text-3xl font-black text-${card.color}-600 tracking-tighter`}>₹{card.value.toFixed(2)}</div>
+                           <div className={`text-3xl font-black text-${card.color}-600 tracking-tighter`}>{sym}{card.value.toFixed(2)}</div>
                         </div>
                       ))}
                    </div>
@@ -403,18 +444,18 @@ export default function GSTReportPage() {
                       <div className="grid md:grid-cols-2 gap-10">
                          <div className="space-y-4">
                             <p className="text-sm font-medium text-[var(--kravy-text-muted)] leading-relaxed underline decoration-indigo-500/30 decoration-4 underline-offset-4">
-                               During this period, you generated a total taxable value of <span className="text-[var(--kravy-text-primary)] font-black">₹{data.gstr3b.taxable.toFixed(2)}</span> with a net GST liability of <span className="text-[var(--kravy-text-primary)] font-black">₹{data.gstr3b.totalGst.toFixed(2)}</span>.
+                               During this period, you generated a total taxable value of <span className="text-[var(--kravy-text-primary)] font-black">{sym}{data.gstr3b.taxable.toFixed(2)}</span> with a net GST liability of <span className="text-[var(--kravy-text-primary)] font-black">{sym}{data.gstr3b.totalGst.toFixed(2)}</span>.
                             </p>
                             <div className="p-6 bg-white dark:bg-black/20 rounded-2xl border border-[var(--kravy-border)]">
                                <div className="text-[10px] font-black uppercase text-[var(--kravy-text-muted)] mb-4">Tax Division (50/50 Internal split)</div>
                                <div className="flex items-center gap-6">
                                   <div className="flex-1">
                                      <div className="h-2 bg-indigo-500 rounded-full" style={{ width: '100%' }}></div>
-                                     <div className="mt-2 text-[10px] font-bold">CENTRAL (CGST): ₹{data.gstr3b.cgst.toFixed(2)}</div>
+                                     <div className="mt-2 text-[10px] font-bold">CENTRAL (CGST): {sym}{data.gstr3b.cgst.toFixed(2)}</div>
                                   </div>
                                   <div className="flex-1">
                                      <div className="h-2 bg-emerald-500 rounded-full" style={{ width: '100%' }}></div>
-                                     <div className="mt-2 text-[10px] font-bold">STATE (SGST): ₹{data.gstr3b.sgst.toFixed(2)}</div>
+                                     <div className="mt-2 text-[10px] font-bold">STATE (SGST): {sym}{data.gstr3b.sgst.toFixed(2)}</div>
                                   </div>
                                </div>
                             </div>
@@ -449,10 +490,10 @@ export default function GSTReportPage() {
                       <tr key={idx} className="hover:bg-indigo-50/10 transition-all">
                         <td className="px-6 py-4 text-xs font-black text-[var(--kravy-text-primary)]">Code: {hsn.hsn}</td>
                         <td className="px-6 py-4 text-xs font-bold text-center">{hsn.qty}</td>
-                        <td className="px-6 py-4 text-xs font-bold text-right">₹{hsn.taxable.toFixed(2)}</td>
-                        <td className="px-6 py-4 text-xs font-bold text-right">₹{hsn.cgst.toFixed(2)}</td>
-                        <td className="px-6 py-4 text-xs font-bold text-right">₹{hsn.sgst.toFixed(2)}</td>
-                        <td className="px-6 py-4 text-sm font-black text-right text-indigo-600">₹{hsn.totalGst.toFixed(2)}</td>
+                        <td className="px-6 py-4 text-xs font-bold text-right">{sym}{hsn.taxable.toFixed(2)}</td>
+                        <td className="px-6 py-4 text-xs font-bold text-right">{sym}{hsn.cgst.toFixed(2)}</td>
+                        <td className="px-6 py-4 text-xs font-bold text-right">{sym}{hsn.sgst.toFixed(2)}</td>
+                        <td className="px-6 py-4 text-sm font-black text-right text-indigo-600">{sym}{hsn.totalGst.toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -479,9 +520,9 @@ export default function GSTReportPage() {
                             {day.bills} Invoices
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-xs font-bold text-right">₹{day.gross.toFixed(2)}</td>
-                        <td className="px-6 py-4 text-xs font-bold text-right">₹{day.taxable.toFixed(2)}</td>
-                        <td className="px-6 py-4 text-sm font-black text-right text-emerald-600">₹{day.totalGst.toFixed(2)}</td>
+                        <td className="px-6 py-4 text-xs font-bold text-right">{sym}{day.gross.toFixed(2)}</td>
+                        <td className="px-6 py-4 text-xs font-bold text-right">{sym}{day.taxable.toFixed(2)}</td>
+                        <td className="px-6 py-4 text-sm font-black text-right text-emerald-600">{sym}{day.totalGst.toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -495,6 +536,40 @@ export default function GSTReportPage() {
                   <div className="text-xl font-black text-[var(--kravy-text-muted)] uppercase tracking-widest italic opacity-50">No Data Found for this Range</div>
                </div>
             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {selectedJson && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-3xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col"
+            >
+              <div className="flex justify-between items-center p-6 border-b border-[var(--kravy-border)]">
+                <h3 className="text-xl font-black text-[var(--kravy-text-primary)]">JSON Preview (Invoice: {selectedJson.billNumber})</h3>
+                <div className="flex gap-4">
+                  <button onClick={() => {
+                    navigator.clipboard.writeText(JSON.stringify(selectedJson, null, 2));
+                    toast.success("Copied!");
+                  }} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-xs">
+                    <Copy size={14} /> Copy
+                  </button>
+                  <button onClick={() => setSelectedJson(null)} className="p-2 bg-rose-50 text-rose-600 rounded-xl">
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 overflow-y-auto no-scrollbar bg-slate-50 dark:bg-black/30 rounded-b-3xl">
+                <pre className="text-xs font-mono text-[var(--kravy-text-secondary)]">
+                  {JSON.stringify(selectedJson, null, 2)}
+                </pre>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

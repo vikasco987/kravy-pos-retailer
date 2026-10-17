@@ -1,3 +1,4 @@
+import { getServerCurrency } from '@/lib/server-currency';
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveClerkId } from "@/lib/auth-utils";
@@ -13,6 +14,7 @@ export default async function BillsReportPage({
   searchParams: Promise<{ range?: string; status?: string }>;
 }) {
   const effectiveId = await getEffectiveClerkId();
+  const { sym } = await getServerCurrency();
   if (!effectiveId) redirect("/auth/custom");
 
   const { range: rangeParam, status = "Active" } = await searchParams;
@@ -102,7 +104,7 @@ export default async function BillsReportPage({
                <IndianRupee size={32} />
             </div>
             <div>
-               <div style={{ fontSize: "2.5rem", fontWeight: 950, color: "var(--kravy-text-primary)", lineHeight: 1 }}>₹{format(totalAmount)}</div>
+               <div style={{ fontSize: "2.5rem", fontWeight: 950, color: "var(--kravy-text-primary)", lineHeight: 1 }}>{sym}{format(totalAmount)}</div>
                <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "1px", marginTop: "4px" }}>Combined Value</div>
             </div>
          </div>
@@ -187,7 +189,7 @@ export default async function BillsReportPage({
                           </div>
                        </td>
                        <td style={{ padding: "28px 52px", textAlign: "right" }}>
-                          <div style={{ fontSize: "1.75rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1.8px" }}>₹{format(b.total)}</div>
+                          <div style={{ fontSize: "1.75rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1.8px" }}>{sym}{format(b.total)}</div>
                           {isDeletedView && b.deletedAt && (
                              <div style={{ fontSize: "0.7rem", color: "#EF4444", fontWeight: 900, marginTop: "6px", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "6px" }}>
                                 <BadgeCheck size={12} /> AUDIT TIMESTAMP: {new Date(b.deletedAt).toLocaleDateString()}

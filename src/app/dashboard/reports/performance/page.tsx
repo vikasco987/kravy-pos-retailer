@@ -1,3 +1,4 @@
+import { getServerCurrency } from '@/lib/server-currency';
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveClerkId } from "@/lib/auth-utils";
@@ -12,6 +13,7 @@ export default async function PerformanceHistoryPage({
   searchParams: Promise<{ view?: string }>;
 }) {
   const effectiveId = await getEffectiveClerkId();
+  const { sym } = await getServerCurrency();
   if (!effectiveId) redirect("/auth/custom");
 
   const { view = "daily" } = await searchParams;
@@ -207,7 +209,7 @@ export default async function PerformanceHistoryPage({
                               </div>
                            </td>
                            <td style={{ padding: "32px 52px", textAlign: "right" }}>
-                              <div style={{ fontSize: "2.5rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-3px", lineHeight: 1 }}>₹{format(revenue)}</div>
+                              <div style={{ fontSize: "2.5rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-3px", lineHeight: 1 }}>{sym}{format(revenue)}</div>
                               <div style={{ fontSize: "0.8rem", fontWeight: 900, color: "#10B981", marginTop: "8px", display: "flex", alignItems: "center", gap: "6px", justifyContent: "flex-end" }}>
                                  <Zap size={14} /> FUNDS CLEARED
                               </div>

@@ -1,9 +1,11 @@
 
 "use client";
 
+import { useCurrency } from '@/lib/currency-context';
 import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { useProfileCache } from "@/hooks/useProfileCache";
 import { 
   User, 
   Phone, 
@@ -52,6 +54,8 @@ type Bill = {
   paymentStatus: string;
   paymentMode: string;
   createdAt: string;
+  amountPaid?: number;
+  balanceDue?: number;
 };
 
 function formatDate(d?: string | null) {
@@ -71,9 +75,10 @@ function formatDate(d?: string | null) {
 }
 
 export default function PartiesPage() {
+  const { currencySymbol: sym } = useCurrency();
     const { confirm } = useConfirm();
   const receiptRef = React.useRef<HTMLDivElement>(null);
-  const [business, setBusiness] = useState<any>(null);
+  const { profile: business } = useProfileCache();
   const [parties, setParties] = useState<Party[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -128,20 +133,7 @@ export default function PartiesPage() {
     setMounted(true);
     fetchParties();
     fetchUserPrefs();
-    fetchBusiness();
   }, []);
-
-  async function fetchBusiness() {
-    try {
-      const res = await fetch('/api/profile');
-      if (res.ok) {
-        const data = await res.json();
-        setBusiness(data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch business profile:", err);
-    }
-  }
 
   useEffect(() => {
     if (modalOpen || historyOpen) {
@@ -193,13 +185,13 @@ export default function PartiesPage() {
       const data = await res.json();
       
       const normalized = (Array.isArray(data) ? data : data.parties || []).map((p: any) => ({
+        ...p,
         id: p.id || p._id,
         name: p.name || "Unnamed",
         phone: p.phone || "—",
         address: p.address || "",
         dob: p.dob || null,
         loyaltyPoints: p.loyaltyPoints || 0,
-        ...p
       }));
 
       setParties(normalized);
@@ -526,82 +518,94 @@ export default function PartiesPage() {
 
   return (
     <>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 pt-12 space-y-3 animate-in fade-in duration-700">
+      <div className="w-full space-y-4 animate-in fade-in duration-700">
         
         {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-3">
             <div className="w-10 h-10 bg-[var(--kravy-brand)] rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/30 flex-shrink-0">
               <User className="text-white" size={20} />
             </div>
             <div>
-              <h1 className="text-2xl font-black text-[var(--kravy-text-primary)] tracking-tight">Customer CRM</h1>
-              <p className="text-[10px] font-bold text-[var(--kravy-text-muted)] uppercase tracking-widest">Database & Loyalty Management</p>
+              <h1 className="text-xl sm:text-2xl font-black text-[var(--kravy-text-primary)] tracking-tight">
+                Customer CRM
+              </h1>
+              <p className="text-[10px] font-bold text-[var(--kravy-text-muted)] uppercase tracking-wider">
+                Database & Loyalty Management
+              </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex bg-[var(--kravy-surface)] border border-[var(--kravy-border)] p-1 rounded-2xl shadow-sm mr-2">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+            <div className="flex bg-[var(--kravy-surface)] border border-[var(--kravy-border)] p-1 rounded-xl shadow-sm">
               <button 
                 onClick={() => saveViewPreference("grid")}
-                className={`p-2 rounded-xl transition-all ${viewMode === "grid" ? "bg-[var(--kravy-brand)] text-white shadow-md" : "text-[var(--kravy-text-muted)] hover:bg-[var(--kravy-bg-2)]"}`}
+                className={`p-2 rounded-lg transition-all ${viewMode === "grid" ? "bg-[var(--kravy-brand)] text-white shadow-md" : "text-[var(--kravy-text-muted)] hover:bg-[var(--kravy-bg-2)]"}`}
                 title="Grid View"
               >
-                <LayoutGrid size={20} />
+                <LayoutGrid size={16} />
               </button>
               <button 
                 onClick={() => saveViewPreference("table")}
-                className={`p-2 rounded-xl transition-all ${viewMode === "table" ? "bg-[var(--kravy-brand)] text-white shadow-md" : "text-[var(--kravy-text-muted)] hover:bg-[var(--kravy-bg-2)]"}`}
+                className={`p-2 rounded-lg transition-all ${viewMode === "table" ? "bg-[var(--kravy-brand)] text-white shadow-md" : "text-[var(--kravy-text-muted)] hover:bg-[var(--kravy-bg-2)]"}`}
                 title="Table View"
               >
-                <List size={20} />
+                <List size={16} />
               </button>
             </div>
             <button 
               onClick={exportCSV}
-              className="flex items-center gap-2 px-4 py-2 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] rounded-xl font-black text-[10px] uppercase tracking-wider hover:bg-[var(--kravy-bg-2)] transition-all shadow-sm"
+              className="flex items-center gap-1.5 px-3.5 py-2 sm:py-2.5 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] rounded-xl font-black text-[10px] uppercase tracking-wider hover:bg-[var(--kravy-bg-2)] transition-all shadow-sm"
             >
               <Download size={14} /> Export
             </button>
             <button 
               onClick={() => { setEditing({ id: "new", name: "", phone: "", address: "", loyaltyPoints: 0 }); setModalOpen(true); }}
-              className="flex items-center gap-2 px-5 py-2.5 bg-[var(--kravy-brand)] text-white rounded-xl font-black text-[10px] uppercase tracking-wider hover:shadow-xl hover:shadow-indigo-500/20 transition-all active:scale-95"
+              className="flex items-center gap-1.5 px-4 py-2 sm:py-2.5 bg-[var(--kravy-brand)] text-white rounded-xl font-black text-[10px] uppercase tracking-wider hover:shadow-xl hover:shadow-indigo-500/20 transition-all active:scale-95"
             >
               <Plus size={16} /> Add Party
             </button>
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard 
-            icon={<User className="text-blue-500" size={24} />} 
-            label="Total Customers" 
-            value={parties.length} 
-            sub="Loyal active base"
-          />
-          <StatCard 
-            icon={<Award className="text-amber-500" size={24} />} 
-            label="Top Tier" 
-            value={parties.filter(p => (p.loyaltyPoints || 0) > 500).length} 
-            sub="Above 500 points"
-          />
-          <StatCard 
-            icon={<CreditCard className="text-emerald-500" size={24} />} 
-            label="Recent Activity" 
-            value={parties.filter(p => new Date(p.createdAt) > new Date(Date.now() - 7*24*60*60*1000)).length} 
-            sub="Last 7 days"
-          />
-          <StatCard 
-            icon={<MapPin className="text-rose-500" size={20} />} 
-            label="Local Network" 
-            value={new Set(parties.map(p => p.address?.split(',')[0])).size} 
-            sub="Locations covered"
-          />
+        {/* Stats Cards (Scrollable on < 1024px, 4-column Grid on >= 1024px) */}
+        <div className="flex lg:grid lg:grid-cols-4 gap-4 sm:gap-6 overflow-x-auto no-scrollbar py-2 px-1 snap-x">
+          <div className="min-w-[260px] sm:min-w-[280px] lg:min-w-0 flex-1 snap-start">
+            <StatCard 
+              icon={<User className="text-blue-500" size={24} />} 
+              label="Total Customers" 
+              value={parties.length} 
+              sub="Loyal active base"
+            />
+          </div>
+          <div className="min-w-[260px] sm:min-w-[280px] lg:min-w-0 flex-1 snap-start">
+            <StatCard 
+              icon={<Award className="text-amber-500" size={24} />} 
+              label="Top Tier" 
+              value={parties.filter(p => (p.loyaltyPoints || 0) > 500).length} 
+              sub="Above 500 points"
+            />
+          </div>
+          <div className="min-w-[260px] sm:min-w-[280px] lg:min-w-0 flex-1 snap-start">
+            <StatCard 
+              icon={<CreditCard className="text-emerald-500" size={24} />} 
+              label="Recent Activity" 
+              value={parties.filter(p => new Date(p.createdAt) > new Date(Date.now() - 7*24*60*60*1000)).length} 
+              sub="Last 7 days"
+            />
+          </div>
+          <div className="min-w-[260px] sm:min-w-[280px] lg:min-w-0 flex-1 snap-start">
+            <StatCard 
+              icon={<MapPin className="text-rose-500" size={20} />} 
+              label="Local Network" 
+              value={new Set(parties.map(p => p.address?.split(',')[0])).size} 
+              sub="Locations covered"
+            />
+          </div>
         </div>
 
         {/* Search & Filters */}
-        <div className="sticky top-16 z-10 bg-[rgba(var(--kravy-bg-rgb),0.9)] backdrop-blur-xl p-3 border border-[var(--kravy-border)] rounded-2xl shadow-lg flex flex-col md:flex-row items-center gap-3 transition-all">
+        <div className="sticky top-0 z-10 bg-[rgba(var(--kravy-bg-rgb),0.92)] backdrop-blur-xl p-2.5 sm:p-3 border border-[var(--kravy-border)] rounded-2xl shadow-md flex flex-col md:flex-row items-center gap-3 transition-all">
           <div className="relative flex-1 w-full">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--kravy-text-muted)]" size={18} />
             <input 
@@ -711,8 +715,8 @@ export default function PartiesPage() {
                             <span className="px-2 py-0.5 bg-[var(--kravy-bg-2)] text-[var(--kravy-text-muted)] rounded-md text-[8px] font-black tracking-widest uppercase tracking-tight">SILVER</span>
                           )}
                         </td>
-                        <td className="px-6 py-3 text-right">
-                          <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <td className="px-6 py-3 text-right min-w-[320px]">
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
                             <button 
                               onClick={() => { setDepositingParty(p); setDepositType("deposit"); setDepositOpen(true); }}
                               className="px-2.5 py-1.5 bg-amber-50 text-amber-700 border border-amber-200/60 rounded-lg text-[9px] font-black uppercase tracking-wider hover:bg-amber-500 hover:text-white transition-all shadow-sm"
@@ -845,7 +849,7 @@ export default function PartiesPage() {
                         <div className="text-[10px] font-black uppercase text-[var(--kravy-text-muted)]">Total Bills</div>
                       </div>
                       <div>
-                        <div className="text-2xl font-black text-emerald-500">₹{partyBills.reduce((s, b) => s + b.total, 0).toFixed(0)}</div>
+                        <div className="text-2xl font-black text-emerald-500">{sym}{partyBills.reduce((s, b) => s + b.total, 0).toFixed(0)}</div>
                         <div className="text-[10px] font-black uppercase text-[var(--kravy-text-muted)]">Lifetime Value</div>
                       </div>
                     </div>
@@ -881,11 +885,11 @@ export default function PartiesPage() {
                                  <div className="text-[10px] font-bold text-[var(--kravy-text-muted)]">{formatDate(bill.createdAt)}</div>
                                </div>
                                <div className="text-right">
-                                 <div className="text-sm font-black text-indigo-500">₹{bill.total.toFixed(2)}</div>
+                                 <div className="text-sm font-black text-indigo-500">{sym}{bill.total.toFixed(2)}</div>
                                  <div className={`text-[10px] font-black uppercase ${bill.paymentStatus === 'Paid' || bill.paymentStatus === 'PAID' ? 'text-emerald-500' : 'text-amber-500'}`}>{bill.paymentStatus}</div>
                                  {bill.paymentStatus === 'PARTIAL' && (
                                    <div className="text-[9px] text-amber-500/80 font-bold mt-0.5">
-                                      Paid: ₹{(bill.amountPaid || 0).toFixed(2)}<br/>Due: ₹{(bill.balanceDue || 0).toFixed(2)}
+                                      Paid: {sym}{(bill.amountPaid || 0).toFixed(2)}<br/>Due: {sym}{(bill.balanceDue || 0).toFixed(2)}
                                    </div>
                                  )}
                                </div>
@@ -924,7 +928,7 @@ export default function PartiesPage() {
                     <div className="space-y-3">
                       <div className="flex justify-between items-center pl-2">
                          <h4 className="text-xs font-black uppercase tracking-widest text-[var(--kravy-text-muted)]">Transaction History</h4>
-                         <span className="text-[10px] font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-lg">Wallet Balance: ₹{(selectedParty.walletBalance || 0).toFixed(2)}</span>
+                         <span className="text-[10px] font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-lg">Wallet Balance: {sym}{(selectedParty.walletBalance || 0).toFixed(2)}</span>
                       </div>
                       {loadingWallet ? (
                         <div className="py-20 text-center animate-pulse text-[var(--kravy-text-muted)] font-black text-sm tracking-widest">Loading Transactions...</div>
@@ -944,7 +948,7 @@ export default function PartiesPage() {
                             </div>
                             <div className="flex flex-col items-end gap-1">
                               <div className={`font-black text-sm ${tx.type === 'CREDIT' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                 {tx.type === 'CREDIT' ? '+' : '-'} ₹{tx.amount.toFixed(2)}
+                                 {tx.type === 'CREDIT' ? '+' : '-'} {sym}{tx.amount.toFixed(2)}
                               </div>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <button 
@@ -1113,7 +1117,7 @@ export default function PartiesPage() {
                 }`}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Current Wallet Balance</span>
-                    <span className="text-2xl font-black">₹{(depositingParty.walletBalance || 0).toFixed(2)}</span>
+                    <span className="text-2xl font-black">{sym}{(depositingParty.walletBalance || 0).toFixed(2)}</span>
                   </div>
                   <div className="text-[9px] font-bold opacity-75 uppercase leading-relaxed">
                     {depositType === "deposit" 
@@ -1128,7 +1132,7 @@ export default function PartiesPage() {
                 <div className="space-y-2">
                   <div className="flex justify-between items-center ml-2">
                     <label className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)]">
-                      {depositType === "deposit" ? "Deposit Amount" : depositType === "withdraw" ? "Withdrawal Amount" : "Udhar Amount"} (₹)
+                      {depositType === "deposit" ? "Deposit Amount" : depositType === "withdraw" ? "Withdrawal Amount" : "Udhar Amount"} ({sym})
                     </label>
                     <span className="text-[9px] font-bold text-[var(--kravy-brand)] uppercase tracking-wider">Quick Presets</span>
                   </div>
@@ -1146,7 +1150,7 @@ export default function PartiesPage() {
                             : 'bg-[var(--kravy-bg-2)] text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-border)]'
                         }`}
                       >
-                        +₹{amt.toLocaleString('en-IN')}
+                        +{sym}{amt.toLocaleString('en-IN')}
                       </button>
                     ))}
                   </div>
@@ -1292,7 +1296,7 @@ export default function PartiesPage() {
                 {/* Amount Input */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)] ml-2">
-                    Amount (₹)
+                    Amount ({sym})
                   </label>
                   <input 
                     type="number"
@@ -1359,8 +1363,8 @@ export default function PartiesPage() {
           {printData && (() => {
             const isBill = !!printData.billNumber;
             const taxActive = business?.taxEnabled ?? true;
-            const perProductEnabled = business?.perProductTaxEnabled ?? false;
-            const globalRate = business?.taxRate ?? 5.0;
+            const perProductEnabled = true;
+            const globalRate = 0;
             
             const items = Array.isArray(printData.items) ? printData.items : [];
             let subtotal = 0;
@@ -1449,11 +1453,11 @@ export default function PartiesPage() {
                       })}
                     </div>
                     <div className="mt-2 pt-1 space-y-1">
-                      <div className="flex justify-between text-[10px] font-bold"><span>SUBTOTAL</span><span>₹{subtotal.toFixed(2)}</span></div>
+                      <div className="flex justify-between text-[10px] font-bold"><span>SUBTOTAL</span><span>{sym}{subtotal.toFixed(2)}</span></div>
                       {Object.entries(taxMap).map(([rate, vals]: any) => (
                         <div key={rate} className="flex justify-between text-[8px] font-medium italic">
-                          <span>GST ({rate}%) on ₹{vals.taxable.toFixed(2)}</span>
-                          <span>₹{vals.tax.toFixed(2)}</span>
+                          <span>GST ({rate}%) on {sym}{vals.taxable.toFixed(2)}</span>
+                          <span>{sym}{vals.tax.toFixed(2)}</span>
                         </div>
                       ))}
                     </div>
@@ -1461,14 +1465,14 @@ export default function PartiesPage() {
                 ) : (
                   <div className="py-4 text-center border-y border-dashed border-black">
                     <div className="text-[12px] font-black uppercase mb-1">DEPOSIT AMOUNT</div>
-                    <div className="text-[24px] font-black">₹{total.toFixed(2)}</div>
+                    <div className="text-[24px] font-black">{sym}{total.toFixed(2)}</div>
                     <div className="text-[9px] font-bold mt-1">Manual Cash Deposit</div>
                   </div>
                 )}
 
                 <div className="flex justify-between font-black text-[16px] border-y-2 border-black py-2 my-2 uppercase bg-white px-1">
                   <span>{isBill ? "BILL TOTAL" : "NET AMOUNT"}</span>
-                  <span>₹{total.toFixed(2)}</span>
+                  <span>{sym}{total.toFixed(2)}</span>
                 </div>
 
                 <div className="mt-3 text-center">
@@ -1481,7 +1485,7 @@ export default function PartiesPage() {
                   <div className="mt-4 pt-2 border-t-2 border-dashed border-black">
                     <div className="flex justify-between text-[10px] font-black uppercase px-1">
                       <span>WALLET BALANCE</span>
-                      <span>₹{(selectedParty.walletBalance || 0).toFixed(2)}</span>
+                      <span>{sym}{(selectedParty.walletBalance || 0).toFixed(2)}</span>
                     </div>
                   </div>
                 )}
@@ -1505,7 +1509,7 @@ export default function PartiesPage() {
 
 function StatCard({ icon, label, value, sub }: { icon: any, label: string, value: number | string, subText?: string, sub?: string }) {
   return (
-    <div className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl p-4 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
+    <div className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
       <div className="absolute -right-2 -top-2 w-16 h-16 bg-[var(--kravy-bg-2)] rounded-full opacity-50 group-hover:scale-110 transition-transform" />
       <div className="relative z-[1]">
         <div className="w-10 h-10 bg-[var(--kravy-bg-2)] rounded-xl flex items-center justify-center mb-3">{icon}</div>

@@ -1,7 +1,6 @@
-
-// src/components/ResponsiveHeader.tsx
 "use client";
 
+// src/components/ResponsiveHeader.tsx
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import ReactDOM from "react-dom";
@@ -11,6 +10,7 @@ import { HiOutlineMoon, HiOutlineSun } from "react-icons/hi";
 
 import { useAuthContext } from "./AuthContext";
 import { kravy } from "@/lib/sounds";
+import { performLogout } from "@/lib/logout";
 
 export default function ResponsiveHeader() {
   const { user: authUser, loading: authLoading } = useAuthContext();
@@ -75,25 +75,7 @@ export default function ResponsiveHeader() {
 
   const handleLogout = async () => {
     kravy.close();
-    try {
-      // 1. Call server-side logout to clear HttpOnly cookies
-      await fetch("/api/auth/logout", { method: "POST" });
-    } catch (err) {
-      console.error("Logout API failed:", err);
-    }
-    
-    // 2. Clear all local/session storage just in case
-    if (typeof window !== "undefined") {
-      localStorage.clear();
-      sessionStorage.clear();
-      
-      // 3. Fallback: Clear custom auth cookies (only works if not HttpOnly)
-      document.cookie = "kravy_auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
-      document.cookie = "staff_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
-      
-      // 4. Redirect to home and force a reload
-      window.location.replace("/");
-    }
+    await performLogout("/auth/custom?mode=login");
   };
 
   const profileMenu = (
@@ -120,10 +102,7 @@ export default function ResponsiveHeader() {
 
   return (
     <>
-      <header
-        className={`fixed top-0 left-0 right-0 z-50 transition-shadow bg-white/90 dark:bg-slate-900/80 backdrop-blur-sm ${scrolled ? "shadow-md" : ""
-          }`}
-      >
+      <header className={`fixed top-0 left-0 right-0 z-50 transition-shadow bg-white/95 dark:bg-slate-900/95 ${scrolled ? "shadow-md" : ""}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* left - logo */}

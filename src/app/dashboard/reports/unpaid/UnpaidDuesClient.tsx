@@ -1,6 +1,6 @@
 "use client";
-
-import { useState } from "react";
+import { useCurrency } from "@/lib/currency-context";
+import { useState, useMemo } from "react";
 import { ChevronLeft, AlertCircle, Search, Check, Clock, User, Phone, Calendar, ArrowRight, UserCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -31,8 +31,10 @@ interface CustomerDue {
 interface TrendItem {
   date?: string;
   week?: string;
+  month?: string;
   amount: number;
   count: number;
+  startDate?: string;
 }
 
 interface Props {
@@ -40,8 +42,7 @@ interface Props {
   businessName: string;
   dailyTrend: TrendItem[];
   weeklyTrend: TrendItem[];
-  initStartDate: string;
-  initEndDate: string;
+  monthlyTrend: TrendItem[];
 }
 
 export default function UnpaidDuesClient({ 
@@ -49,49 +50,128 @@ export default function UnpaidDuesClient({
   businessName,
   dailyTrend,
   weeklyTrend,
-  initStartDate,
-  initEndDate,
+  monthlyTrend,
 }: Props) {
-    const { confirm } = useConfirm();
+  const { confirm } = useConfirm();
+  const { currencySymbol: sym } = useCurrency();
   const router = useRouter();
   const [duesList, setDuesList] = useState<CustomerDue[]>(initialDuesList);
   const [searchQuery, setSearchQuery] = useState("");
   const [settlingBillId, setSettlingBillId] = useState<string | null>(null);
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
 
+  // Calculate min and max dates from data once
+  const [minDateStr, maxDateStr] = useMemo(() => {
+    const dts = initialDuesList.flatMap(c => c.bills.map(b => new Date(b.createdAt).getTime()));
+    const minT = dts.length > 0 ? Math.min(...dts) : Date.now();
+    const maxT = dts.length > 0 ? Math.max(...dts) : Date.now();
+    return [new Date(minT).toISOString().split('T')[0], new Date(maxT).toISOString().split('T')[0]];
+  }, [initialDuesList]);
+
   // Date states
-  const [startDate, setStartDate] = useState(initStartDate);
-  const [endDate, setEndDate] = useState(initEndDate);
+  const [cardsStartDate, setCardsStartDate] = useState(minDateStr);
+  const [cardsEndDate, setCardsEndDate] = useState(maxDateStr);
+  const [tempCardsStartDate, setTempCardsStartDate] = useState(minDateStr);
+  const [tempCardsEndDate, setTempCardsEndDate] = useState(maxDateStr);
+  const [isCardsLoading, setIsCardsLoading] = useState(false);
+
+  const [dailyStartDate, setDailyStartDate] = useState(minDateStr);
+  const [dailyEndDate, setDailyEndDate] = useState(maxDateStr);
+  const [tempDailyStartDate, setTempDailyStartDate] = useState(minDateStr);
+  const [tempDailyEndDate, setTempDailyEndDate] = useState(maxDateStr);
+  const [isDailyLoading, setIsDailyLoading] = useState(false);
+
+  const [weeklyStartDate, setWeeklyStartDate] = useState(minDateStr);
+  const [weeklyEndDate, setWeeklyEndDate] = useState(maxDateStr);
+  const [tempWeeklyStartDate, setTempWeeklyStartDate] = useState(minDateStr);
+  const [tempWeeklyEndDate, setTempWeeklyEndDate] = useState(maxDateStr);
+  const [isWeeklyLoading, setIsWeeklyLoading] = useState(false);
+
+  const [monthlyStartDate, setMonthlyStartDate] = useState(minDateStr);
+  const [monthlyEndDate, setMonthlyEndDate] = useState(maxDateStr);
+  const [tempMonthlyStartDate, setTempMonthlyStartDate] = useState(minDateStr);
+  const [tempMonthlyEndDate, setTempMonthlyEndDate] = useState(maxDateStr);
+  const [isMonthlyLoading, setIsMonthlyLoading] = useState(false);
+
+  const [ledgerStartDate, setLedgerStartDate] = useState(minDateStr);
+  const [ledgerEndDate, setLedgerEndDate] = useState(maxDateStr);
+  const [tempLedgerStartDate, setTempLedgerStartDate] = useState(minDateStr);
+  const [tempLedgerEndDate, setTempLedgerEndDate] = useState(maxDateStr);
+  const [isLedgerLoading, setIsLedgerLoading] = useState(false);
 
   const fmt = (n: number) => new Intl.NumberFormat("en-IN").format(Math.round(n));
 
-  // Compute metrics dynamically
-  const totalOutstanding = duesList.reduce((sum, c) => sum + c.totalUnpaid, 0);
-  const totalDebtors = duesList.length;
-  const totalPendingBills = duesList.reduce((sum, c) => sum + c.billsCount, 0);
+  const applyFilterWithAnimation = (
+    start: string, end: string,
+    setStart: (v: string) => void, setEnd: (v: string) => void,
+    setLoading: (v: boolean) => void
+  ) => {
+    kravy.click();
+    setLoading(true);
+    setTimeout(() => {
+      setStart(start);
+      setEnd(end);
+      setLoading(false);
+      kravy.success?.();
+    }, 800);
+  };
 
-  const filteredDues = duesList.filter((c) => {
+  const renderLoadingOverlay = (isLoading: boolean) => {
+    if (!isLoading) return null;
+    return (
+      <div style={{
+        position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+        background: "rgba(10, 10, 10, 0.5)", backdropFilter: "blur(6px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        borderRadius: "inherit", zIndex: 10,
+        flexDirection: "column", gap: "12px", animation: "fadeIn 0.2s ease"
+      }}>
+        <div style={{ width: "36px", height: "36px", border: "4px solid rgba(255,255,255,0.1)", borderTopColor: "#EF4444", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+        <span style={{ color: "var(--kravy-surface)", fontWeight: 800, fontSize: "1rem", letterSpacing: "0.5px", animation: "pulse 1.5s infinite" }}>Fetching Data...</span>
+      </div>
+    );
+  };
+
+  const isDateInRange = (dateStr: string | Date, start: string, end: string) => {
+    if (!start && !end) return true;
+    const d = new Date(dateStr).getTime();
+    const s = start ? new Date(start).getTime() : -Infinity;
+    const e = end ? new Date(end).setHours(23, 59, 59, 999) : Infinity;
+    return d >= s && d <= e;
+  };
+
+  // 1. Cards filtered data
+  const cardsFilteredDues = duesList.map(c => {
+    const validBills = c.bills.filter(b => isDateInRange(b.createdAt, cardsStartDate, cardsEndDate));
+    return { ...c, validBills, billsCount: validBills.length, totalUnpaid: validBills.reduce((s,b)=>s+b.balanceDue, 0) };
+  }).filter(c => c.billsCount > 0 && c.totalUnpaid > 0);
+  
+  const totalOutstanding = cardsFilteredDues.reduce((sum, c) => sum + c.totalUnpaid, 0);
+  const totalDebtors = cardsFilteredDues.length;
+  const totalPendingBills = cardsFilteredDues.reduce((sum, c) => sum + c.billsCount, 0);
+
+  // 2. Day-on-Day Dues Created
+  const filteredDailyTrend = dailyTrend.filter(d => isDateInRange(d.date!, dailyStartDate, dailyEndDate));
+
+  // 3. Week-on-Week Dues Funnel
+  const filteredWeeklyTrend = weeklyTrend.filter(w => isDateInRange(w.startDate!, weeklyStartDate, weeklyEndDate));
+
+  // 4. Month-on-Month Dues Funnel
+  const filteredMonthlyTrend = monthlyTrend.filter(m => isDateInRange(m.startDate!, monthlyStartDate, monthlyEndDate));
+
+  // 5. Ledger filtered data
+  const ledgerFilteredDuesList = duesList.map(c => {
+    const validBills = c.bills.filter(b => isDateInRange(b.createdAt, ledgerStartDate, ledgerEndDate));
+    return { ...c, bills: validBills, billsCount: validBills.length, totalUnpaid: validBills.reduce((s,b)=>s+b.balanceDue, 0) };
+  }).filter(c => c.billsCount > 0 && c.totalUnpaid > 0);
+
+  const filteredDues = ledgerFilteredDuesList.filter((c) => {
     const q = searchQuery.toLowerCase();
     return (
       c.customerName.toLowerCase().includes(q) ||
       c.customerPhone.toLowerCase().includes(q)
     );
   });
-
-  const applyDateRange = () => {
-    kravy.click();
-    const q = new URLSearchParams();
-    if (startDate) q.set("startDate", startDate);
-    if (endDate) q.set("endDate", endDate);
-    router.push(`/dashboard/reports/unpaid?${q.toString()}`);
-  };
-
-  const clearDateRange = () => {
-    kravy.click();
-    setStartDate("");
-    setEndDate("");
-    router.push("/dashboard/reports/unpaid");
-  };
 
   const handleSettleBill = async (billId: string, customerKey: string) => {
     kravy.click();
@@ -231,7 +311,7 @@ export default function UnpaidDuesClient({
             columns={[
               { key: "customerName", label: "Customer Name" },
               { key: "customerPhone", label: "Phone" },
-              { key: "totalUnpaid", label: "Total Unpaid (₹)", format: (val) => val ? val.toString() : "0" },
+              { key: "totalUnpaid", label: "Total Unpaid ({sym})", format: (val) => val ? val.toString() : "0" },
               { key: "billsCount", label: "Pending Bills" },
               { key: "lastBillDate", label: "Last Bill Date", format: (val) => new Date(val).toLocaleDateString() },
             ]}
@@ -245,10 +325,29 @@ export default function UnpaidDuesClient({
       </div>
 
       {/* ── Metrics Cards ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "24px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "16px" }}>
+        <h2 style={{ fontSize: "1.2rem", fontWeight: 900, color: "var(--kravy-text-primary)", margin: 0 }}>Overview</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "14px", padding: "6px 12px", gap: "8px" }}>
+              <Calendar size={14} style={{ color: "var(--kravy-text-muted)" }} />
+              <input type="date" value={tempCardsStartDate} onChange={(e) => setTempCardsStartDate(e.target.value)} style={{ background: "transparent", border: "none", outline: "none", fontSize: "0.75rem", fontWeight: 700, color: "var(--kravy-text-primary)", cursor: "pointer" }} />
+              <span style={{ color: "var(--kravy-text-muted)", fontSize: "0.75rem" }}>to</span>
+              <input type="date" value={tempCardsEndDate} onChange={(e) => setTempCardsEndDate(e.target.value)} style={{ background: "transparent", border: "none", outline: "none", fontSize: "0.75rem", fontWeight: 700, color: "var(--kravy-text-primary)", cursor: "pointer" }} />
+            </div>
+            <button 
+              onClick={() => applyFilterWithAnimation(tempCardsStartDate, tempCardsEndDate, setCardsStartDate, setCardsEndDate, setIsCardsLoading)}
+              style={{ padding: "6px 16px", borderRadius: "10px", background: "var(--kravy-text-primary)", color: "var(--kravy-bg)", fontSize: "0.75rem", fontWeight: 850, border: "none", cursor: "pointer" }}
+            >
+              Load
+            </button>
+            {(tempCardsStartDate || tempCardsEndDate || cardsStartDate || cardsEndDate) && <button onClick={() => { setTempCardsStartDate(minDateStr); setTempCardsEndDate(maxDateStr); applyFilterWithAnimation(minDateStr, maxDateStr, setCardsStartDate, setCardsEndDate, setIsCardsLoading); }} style={{ padding: "6px 12px", borderRadius: "10px", background: "transparent", border: "1px solid var(--kravy-border)", color: "#EF4444", fontSize: "0.75rem", fontWeight: 850, cursor: "pointer" }}>Clear</button>}
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "24px", position: "relative" }}>
+        {renderLoadingOverlay(isCardsLoading)}
         <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "24px", padding: "28px" }}>
           <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>Total Outstanding dues</div>
-          <div style={{ fontSize: "2.25rem", fontWeight: 950, color: "#EF4444", lineHeight: 1 }}>₹{fmt(totalOutstanding)}</div>
+          <div style={{ fontSize: "2.25rem", fontWeight: 950, color: "#EF4444", lineHeight: 1 }}>{sym}{fmt(totalOutstanding)}</div>
         </div>
         <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "24px", padding: "28px" }}>
           <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>Debtors Count</div>
@@ -263,15 +362,35 @@ export default function UnpaidDuesClient({
       {/* ── Dues Trend Funnel Dashboard ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "24px" }}>
         {/* Daily Trend */}
-        <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "28px", padding: "28px" }}>
-          <h3 style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--kravy-text-primary)", marginBottom: "4px" }}>Day-on-Day Dues Created</h3>
-          <p style={{ fontSize: "0.75rem", color: "var(--kravy-text-muted)", marginBottom: "20px" }}>New outstanding balances generated daily</p>
+        <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "28px", padding: "28px", position: "relative" }}>
+          {renderLoadingOverlay(isDailyLoading)}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px", marginBottom: "20px" }}>
+            <div>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--kravy-text-primary)", marginBottom: "4px" }}>Day-on-Day Dues Created</h3>
+              <p style={{ fontSize: "0.75rem", color: "var(--kravy-text-muted)", margin: 0 }}>New outstanding balances generated daily</p>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ display: "flex", alignItems: "center", background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "14px", padding: "6px 12px", gap: "8px" }}>
+                <Calendar size={14} style={{ color: "var(--kravy-text-muted)" }} />
+                <input type="date" value={tempDailyStartDate} onChange={(e) => setTempDailyStartDate(e.target.value)} style={{ background: "transparent", border: "none", outline: "none", fontSize: "0.75rem", fontWeight: 700, color: "var(--kravy-text-primary)", cursor: "pointer" }} />
+                <span style={{ color: "var(--kravy-text-muted)", fontSize: "0.75rem" }}>to</span>
+                <input type="date" value={tempDailyEndDate} onChange={(e) => setTempDailyEndDate(e.target.value)} style={{ background: "transparent", border: "none", outline: "none", fontSize: "0.75rem", fontWeight: 700, color: "var(--kravy-text-primary)", cursor: "pointer" }} />
+              </div>
+              <button 
+                onClick={() => applyFilterWithAnimation(tempDailyStartDate, tempDailyEndDate, setDailyStartDate, setDailyEndDate, setIsDailyLoading)}
+                style={{ padding: "6px 16px", borderRadius: "10px", background: "var(--kravy-text-primary)", color: "var(--kravy-bg)", fontSize: "0.75rem", fontWeight: 850, border: "none", cursor: "pointer" }}
+              >
+                Load
+              </button>
+              {(tempDailyStartDate || tempDailyEndDate || dailyStartDate || dailyEndDate) && <button onClick={() => { setTempDailyStartDate(minDateStr); setTempDailyEndDate(maxDateStr); applyFilterWithAnimation(minDateStr, maxDateStr, setDailyStartDate, setDailyEndDate, setIsDailyLoading); }} style={{ padding: "6px 12px", borderRadius: "10px", background: "transparent", border: "1px solid var(--kravy-border)", color: "#EF4444", fontSize: "0.75rem", fontWeight: 850, cursor: "pointer" }}>Clear</button>}
+            </div>
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "16px", maxHeight: "250px", overflowY: "auto" }} className="no-scrollbar">
-            {dailyTrend.length === 0 ? (
+            {filteredDailyTrend.length === 0 ? (
               <div style={{ fontSize: "0.75rem", color: "var(--kravy-text-muted)", fontStyle: "italic", textAlign: "center", padding: "20px" }}>No dues trend data in this period.</div>
             ) : (
-              dailyTrend.map((d, i) => {
-                const maxVal = Math.max(...dailyTrend.map(x => x.amount), 1);
+              filteredDailyTrend.map((d, i) => {
+                const maxVal = Math.max(...filteredDailyTrend.map(x => x.amount), 1);
                 const pct = (d.amount / maxVal) * 100;
                 return (
                   <div key={i} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -279,7 +398,7 @@ export default function UnpaidDuesClient({
                       <span style={{ fontWeight: 800, color: "var(--kravy-text-secondary)" }}>
                         {new Date(d.date!).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                       </span>
-                      <span style={{ fontWeight: 900, color: "#EF4444" }}>₹{fmt(d.amount)} <span style={{ color: "var(--kravy-text-muted)", fontWeight: 500 }}>({d.count} bill{d.count > 1 ? "s" : ""})</span></span>
+                      <span style={{ fontWeight: 900, color: "#EF4444" }}>{sym}{fmt(d.amount)} <span style={{ color: "var(--kravy-text-muted)", fontWeight: 500 }}>({d.count} bill{d.count > 1 ? "s" : ""})</span></span>
                     </div>
                     <div style={{ height: "8px", background: "var(--kravy-bg-2)", borderRadius: "999px", overflow: "hidden" }}>
                       <div style={{ width: `${pct}%`, height: "100%", background: "linear-gradient(90deg, #EF4444 0%, #DC2626 100%)", borderRadius: "999px" }} />
@@ -292,24 +411,91 @@ export default function UnpaidDuesClient({
         </div>
 
         {/* Weekly Trend */}
-        <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "28px", padding: "28px" }}>
-          <h3 style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--kravy-text-primary)", marginBottom: "4px" }}>Week-on-Week Dues Funnel</h3>
-          <p style={{ fontSize: "0.75rem", color: "var(--kravy-text-muted)", marginBottom: "20px" }}>Cumulative dues aggregated week-by-week</p>
+        <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "28px", padding: "28px", position: "relative" }}>
+          {renderLoadingOverlay(isWeeklyLoading)}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px", marginBottom: "20px" }}>
+            <div>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--kravy-text-primary)", marginBottom: "4px" }}>Week-on-Week Dues Funnel</h3>
+              <p style={{ fontSize: "0.75rem", color: "var(--kravy-text-muted)", margin: 0 }}>Cumulative dues aggregated week-by-week</p>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ display: "flex", alignItems: "center", background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "14px", padding: "6px 12px", gap: "8px" }}>
+                <Calendar size={14} style={{ color: "var(--kravy-text-muted)" }} />
+                <input type="date" value={tempWeeklyStartDate} onChange={(e) => setTempWeeklyStartDate(e.target.value)} style={{ background: "transparent", border: "none", outline: "none", fontSize: "0.75rem", fontWeight: 700, color: "var(--kravy-text-primary)", cursor: "pointer" }} />
+                <span style={{ color: "var(--kravy-text-muted)", fontSize: "0.75rem" }}>to</span>
+                <input type="date" value={tempWeeklyEndDate} onChange={(e) => setTempWeeklyEndDate(e.target.value)} style={{ background: "transparent", border: "none", outline: "none", fontSize: "0.75rem", fontWeight: 700, color: "var(--kravy-text-primary)", cursor: "pointer" }} />
+              </div>
+              <button 
+                onClick={() => applyFilterWithAnimation(tempWeeklyStartDate, tempWeeklyEndDate, setWeeklyStartDate, setWeeklyEndDate, setIsWeeklyLoading)}
+                style={{ padding: "6px 16px", borderRadius: "10px", background: "var(--kravy-text-primary)", color: "var(--kravy-bg)", fontSize: "0.75rem", fontWeight: 850, border: "none", cursor: "pointer" }}
+              >
+                Load
+              </button>
+              {(tempWeeklyStartDate || tempWeeklyEndDate || weeklyStartDate || weeklyEndDate) && <button onClick={() => { setTempWeeklyStartDate(minDateStr); setTempWeeklyEndDate(maxDateStr); applyFilterWithAnimation(minDateStr, maxDateStr, setWeeklyStartDate, setWeeklyEndDate, setIsWeeklyLoading); }} style={{ padding: "6px 12px", borderRadius: "10px", background: "transparent", border: "1px solid var(--kravy-border)", color: "#EF4444", fontSize: "0.75rem", fontWeight: 850, cursor: "pointer" }}>Clear</button>}
+            </div>
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "16px", maxHeight: "250px", overflowY: "auto" }} className="no-scrollbar">
-            {weeklyTrend.length === 0 ? (
+            {filteredWeeklyTrend.length === 0 ? (
               <div style={{ fontSize: "0.75rem", color: "var(--kravy-text-muted)", fontStyle: "italic", textAlign: "center", padding: "20px" }}>No weekly trend data.</div>
             ) : (
-              weeklyTrend.map((w, i) => {
-                const maxVal = Math.max(...weeklyTrend.map(x => x.amount), 1);
+              filteredWeeklyTrend.map((w, i) => {
+                const maxVal = Math.max(...filteredWeeklyTrend.map(x => x.amount), 1);
                 const pct = (w.amount / maxVal) * 100;
                 return (
                   <div key={i} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.75rem" }}>
                       <span style={{ fontWeight: 800, color: "var(--kravy-text-secondary)" }}>{w.week}</span>
-                      <span style={{ fontWeight: 900, color: "#EF4444" }}>₹{fmt(w.amount)} <span style={{ color: "var(--kravy-text-muted)", fontWeight: 500 }}>({w.count} bill{w.count > 1 ? "s" : ""})</span></span>
+                      <span style={{ fontWeight: 900, color: "#EF4444" }}>{sym}{fmt(w.amount)} <span style={{ color: "var(--kravy-text-muted)", fontWeight: 500 }}>({w.count} bill{w.count > 1 ? "s" : ""})</span></span>
                     </div>
                     <div style={{ height: "8px", background: "var(--kravy-bg-2)", borderRadius: "999px", overflow: "hidden" }}>
                       <div style={{ width: `${pct}%`, height: "100%", background: "linear-gradient(90deg, #8B5CF6 0%, #7C3AED 100%)", borderRadius: "999px" }} />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Monthly Trend */}
+        <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "28px", padding: "28px", position: "relative" }}>
+          {renderLoadingOverlay(isMonthlyLoading)}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px", marginBottom: "20px" }}>
+            <div>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--kravy-text-primary)", marginBottom: "4px" }}>Month-on-Month Dues</h3>
+              <p style={{ fontSize: "0.75rem", color: "var(--kravy-text-muted)", margin: 0 }}>Cumulative dues aggregated month-by-month</p>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ display: "flex", alignItems: "center", background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "14px", padding: "6px 12px", gap: "8px" }}>
+                <Calendar size={14} style={{ color: "var(--kravy-text-muted)" }} />
+                <input type="date" value={tempMonthlyStartDate} onChange={(e) => setTempMonthlyStartDate(e.target.value)} style={{ background: "transparent", border: "none", outline: "none", fontSize: "0.75rem", fontWeight: 700, color: "var(--kravy-text-primary)", cursor: "pointer" }} />
+                <span style={{ color: "var(--kravy-text-muted)", fontSize: "0.75rem" }}>to</span>
+                <input type="date" value={tempMonthlyEndDate} onChange={(e) => setTempMonthlyEndDate(e.target.value)} style={{ background: "transparent", border: "none", outline: "none", fontSize: "0.75rem", fontWeight: 700, color: "var(--kravy-text-primary)", cursor: "pointer" }} />
+              </div>
+              <button 
+                onClick={() => applyFilterWithAnimation(tempMonthlyStartDate, tempMonthlyEndDate, setMonthlyStartDate, setMonthlyEndDate, setIsMonthlyLoading)}
+                style={{ padding: "6px 16px", borderRadius: "10px", background: "var(--kravy-text-primary)", color: "var(--kravy-bg)", fontSize: "0.75rem", fontWeight: 850, border: "none", cursor: "pointer" }}
+              >
+                Load
+              </button>
+              {(tempMonthlyStartDate || tempMonthlyEndDate || monthlyStartDate || monthlyEndDate) && <button onClick={() => { setTempMonthlyStartDate(minDateStr); setTempMonthlyEndDate(maxDateStr); applyFilterWithAnimation(minDateStr, maxDateStr, setMonthlyStartDate, setMonthlyEndDate, setIsMonthlyLoading); }} style={{ padding: "6px 12px", borderRadius: "10px", background: "transparent", border: "1px solid var(--kravy-border)", color: "#EF4444", fontSize: "0.75rem", fontWeight: 850, cursor: "pointer" }}>Clear</button>}
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px", maxHeight: "250px", overflowY: "auto" }} className="no-scrollbar">
+            {filteredMonthlyTrend.length === 0 ? (
+              <div style={{ fontSize: "0.75rem", color: "var(--kravy-text-muted)", fontStyle: "italic", textAlign: "center", padding: "20px" }}>No monthly trend data.</div>
+            ) : (
+              filteredMonthlyTrend.map((m, i) => {
+                const maxVal = Math.max(...filteredMonthlyTrend.map(x => x.amount), 1);
+                const pct = (m.amount / maxVal) * 100;
+                return (
+                  <div key={i} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.75rem" }}>
+                      <span style={{ fontWeight: 800, color: "var(--kravy-text-secondary)" }}>{m.month}</span>
+                      <span style={{ fontWeight: 900, color: "#EF4444" }}>{sym}{fmt(m.amount)} <span style={{ color: "var(--kravy-text-muted)", fontWeight: 500 }}>({m.count} bill{m.count > 1 ? "s" : ""})</span></span>
+                    </div>
+                    <div style={{ height: "8px", background: "var(--kravy-bg-2)", borderRadius: "999px", overflow: "hidden" }}>
+                      <div style={{ width: `${pct}%`, height: "100%", background: "linear-gradient(90deg, #F59E0B 0%, #D97706 100%)", borderRadius: "999px" }} />
                     </div>
                   </div>
                 );
@@ -345,43 +531,41 @@ export default function UnpaidDuesClient({
             <Calendar size={14} style={{ color: "var(--kravy-text-muted)" }} />
             <input 
               type="date" 
-              value={startDate} 
-              onChange={(e) => setStartDate(e.target.value)}
-              style={{ background: "transparent", border: "none", outline: "none", fontSize: "0.75rem", fontWeight: 700, color: "var(--kravy-text-primary)" }}
+              value={tempLedgerStartDate} 
+              onChange={(e) => setTempLedgerStartDate(e.target.value)}
+              style={{ background: "transparent", border: "none", outline: "none", fontSize: "0.75rem", fontWeight: 700, color: "var(--kravy-text-primary)", cursor: "pointer" }}
             />
             <span style={{ color: "var(--kravy-text-muted)", fontSize: "0.75rem" }}>to</span>
             <input 
               type="date" 
-              value={endDate} 
-              onChange={(e) => setEndDate(e.target.value)}
-              style={{ background: "transparent", border: "none", outline: "none", fontSize: "0.75rem", fontWeight: 700, color: "var(--kravy-text-primary)" }}
+              value={tempLedgerEndDate} 
+              onChange={(e) => setTempLedgerEndDate(e.target.value)}
+              style={{ background: "transparent", border: "none", outline: "none", fontSize: "0.75rem", fontWeight: 700, color: "var(--kravy-text-primary)", cursor: "pointer" }}
             />
           </div>
-          <button
-            onClick={applyDateRange}
-            style={{
-              padding: "10px 18px", borderRadius: "14px", background: "var(--kravy-text-primary)", color: "var(--kravy-surface)",
-              fontSize: "0.75rem", fontWeight: 850, border: "none", cursor: "pointer"
-            }}
+          <button 
+            onClick={() => applyFilterWithAnimation(tempLedgerStartDate, tempLedgerEndDate, setLedgerStartDate, setLedgerEndDate, setIsLedgerLoading)}
+            style={{ padding: "10px 18px", borderRadius: "14px", background: "var(--kravy-text-primary)", color: "var(--kravy-bg)", fontSize: "0.75rem", fontWeight: 850, border: "none", cursor: "pointer" }}
           >
-            Apply Filter
+            Load Data
           </button>
-          {(initStartDate || initEndDate) && (
+          {(tempLedgerStartDate || tempLedgerEndDate || ledgerStartDate || ledgerEndDate) && (
             <button
-              onClick={clearDateRange}
+              onClick={() => { setTempLedgerStartDate(minDateStr); setTempLedgerEndDate(maxDateStr); applyFilterWithAnimation(minDateStr, maxDateStr, setLedgerStartDate, setLedgerEndDate, setIsLedgerLoading); }}
               style={{
                 padding: "10px 18px", borderRadius: "14px", background: "transparent", border: "1px solid var(--kravy-border)", color: "#EF4444",
                 fontSize: "0.75rem", fontWeight: 850, cursor: "pointer"
               }}
             >
-              Clear
+              Clear Filter
             </button>
           )}
         </div>
       </div>
 
       {/* ── Ledger Section ── */}
-      <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "32px", overflow: "hidden", boxShadow: "0 10px 30px rgba(0,0,0,0.03)" }}>
+      <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "32px", overflow: "hidden", boxShadow: "0 10px 30px rgba(0,0,0,0.03)", position: "relative" }}>
+        {renderLoadingOverlay(isLedgerLoading)}
         <div style={{ padding: "24px 32px", borderBottom: "1px solid var(--kravy-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2 style={{ fontSize: "1.2rem", fontWeight: 900, color: "var(--kravy-text-primary)", margin: 0 }}>Debtor Accounts Ledger</h2>
           <span style={{ fontSize: "0.8rem", color: "var(--kravy-text-muted)", fontWeight: 700 }}>{filteredDues.length} entries matching</span>
@@ -437,7 +621,7 @@ export default function UnpaidDuesClient({
 
                     <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
                       <div style={{ textAlign: "right" }}>
-                        <div style={{ fontSize: "1.25rem", fontWeight: 950, color: "#EF4444" }}>₹{fmt(customer.totalUnpaid)}</div>
+                        <div style={{ fontSize: "1.25rem", fontWeight: 950, color: "#EF4444" }}>{sym}{fmt(customer.totalUnpaid)}</div>
                         <div style={{ fontSize: "0.7rem", color: "var(--kravy-text-muted)", fontWeight: 700, textTransform: "uppercase" }}>{customer.billsCount} unpaid bill{customer.billsCount > 1 ? "s" : ""}</div>
                       </div>
                       <div style={{ display: "flex", gap: "8px" }}>
@@ -493,9 +677,9 @@ export default function UnpaidDuesClient({
                                 <td style={{ padding: "14px 8px", fontSize: "0.75rem" }}>
                                   <span style={{ padding: "3px 8px", background: "var(--kravy-bg-2)", borderRadius: "6px" }}>{bill.tableName}</span>
                                 </td>
-                                <td style={{ padding: "14px 8px", fontSize: "0.8rem", fontWeight: 700 }}>₹{fmt(bill.total)}</td>
-                                <td style={{ padding: "14px 8px", fontSize: "0.8rem", color: "#10B981" }}>₹{fmt(bill.amountPaid)}</td>
-                                <td style={{ padding: "14px 8px", fontSize: "0.85rem", fontWeight: 900, color: "#EF4444" }}>₹{fmt(bill.balanceDue)}</td>
+                                <td style={{ padding: "14px 8px", fontSize: "0.8rem", fontWeight: 700 }}>{sym}{fmt(bill.total)}</td>
+                                <td style={{ padding: "14px 8px", fontSize: "0.8rem", color: "#10B981" }}>{sym}{fmt(bill.amountPaid)}</td>
+                                <td style={{ padding: "14px 8px", fontSize: "0.85rem", fontWeight: 900, color: "#EF4444" }}>{sym}{fmt(bill.balanceDue)}</td>
                                 <td style={{ padding: "14px 8px", textAlign: "right" }}>
                                   <button
                                     onClick={() => handleSettleBill(bill.id, cKey)}
@@ -539,6 +723,14 @@ export default function UnpaidDuesClient({
         @keyframes slideDown {
           from { opacity: 0; transform: translateY(-5px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
         }
       `}</style>
     </div>

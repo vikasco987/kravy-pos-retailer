@@ -28,7 +28,7 @@ export default function ItemModal({ item, addonGroups = [], onSave, onClose, cat
         ...item
     };
 
-    const [local, setLocal] = useState(defaultItem);
+    const [local, setLocal] = useState<any>(defaultItem);
     const [tab, setTab] = useState("basic");
     const [uploading, setUploading] = useState(false);
     const [mounted, setMounted] = useState(false);

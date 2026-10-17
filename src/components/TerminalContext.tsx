@@ -2,6 +2,8 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { useSmartPolling } from "@/hooks/useSmartPolling";
+import { useSocket } from "@/components/SocketContext";
+import { kravy } from "@/lib/sounds";
 
 export type OrderStatus = "PENDING" | "ACCEPTED" | "PREPARING" | "READY" | "COMPLETED";
 
@@ -17,11 +19,24 @@ export interface Order {
     customerPhone?: string;
     customerAddress?: string;
     createdAt: string;
+    updatedAt?: string;
     isDeleted?: boolean;
     kotNumbers?: string[];
     billNumber?: string;
     tokenNumber?: string | number;
+    caseType?: string;
+    zoneName?: string;
+    notes?: string;
+    isBillPrinted?: boolean;
+    isKotPrinted?: boolean;
+    isMerged?: boolean;
+    parentOrderId?: string;
+    preferences?: any;
+    deliveryCharges?: number;
+    packagingCharges?: number;
 }
+
+
 
 export interface Table {
     id: string;
@@ -29,6 +44,7 @@ export interface Table {
     status: "FREE" | "PENDING" | "ACCEPTED" | "PREPARING" | "READY";
     activeOrderId?: string;
     zone?: string;
+    floor?: string;
     isOccupied?: boolean;
     activeCount?: number;
     startTime?: string;
@@ -44,11 +60,12 @@ interface TerminalContextType {
     setSelectedProfileId: (id: string) => void;
     isLoading: boolean;
     lastUpdated: number | null;
-    fetchData: (showLoading?: boolean) => any;
+    fetchData: (showLoading?: boolean, force?: boolean) => any;
     updateTableStatus: (tableId: string, updates: Partial<Table>) => void;
     setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
     isSyncing: boolean;
     manualSync: () => void;
+    emitUpdate: (customData?: any) => void;
 }
 
 const TerminalContext = createContext<TerminalContextType | undefined>(undefined);
@@ -61,6 +78,7 @@ export const TerminalProvider = ({ children }: { children: React.ReactNode }) =>
     const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+    const { socket, isConnected } = useSocket();
 
     const business = React.useMemo(() => {
         if (!allProfiles.length) return null;
@@ -74,6 +92,7 @@ export const TerminalProvider = ({ children }: { children: React.ReactNode }) =>
     // Stable references to prevent infinite callback recreation loops
     const lastUpdatedRef = React.useRef<number | null>(null);
     const rawTablesLengthRef = React.useRef<number>(0);
+    const fetchPromiseRef = React.useRef<Promise<void> | null>(null);
 
     // Keep length ref in sync
     useEffect(() => {
@@ -112,6 +131,30 @@ export const TerminalProvider = ({ children }: { children: React.ReactNode }) =>
         });
     }, [rawTables, ordersByTableId]);
 
+    // ✅ Phase 2.2: Separate profiles fetch — profiles are static during a POS session
+    const profilesLoadedRef = React.useRef<boolean>(false);
+
+    const fetchProfiles = useCallback(async () => {
+        try {
+            const profilesRes = await fetch(`/api/profiles`, { cache: 'no-store' });
+            if (profilesRes?.ok) {
+                const pData = await profilesRes.json();
+                if (pData.profiles && Array.isArray(pData.profiles)) {
+                    setAllProfiles(pData.profiles);
+                    setEnableMultipleProfiles(pData.enableMultipleProfiles || false);
+                }
+                profilesLoadedRef.current = true;
+            }
+        } catch (err) {
+            console.error("Failed to fetch profiles:", err);
+        }
+    }, []);
+
+    // Fetch profiles once on mount (not on every polling cycle)
+    useEffect(() => {
+        fetchProfiles();
+    }, [fetchProfiles]);
+
     const fetchData = useCallback(async (showLoading = true, force = false) => {
         const currentLastUpdated = lastUpdatedRef.current;
         // ✅ Stale-time logic: Avoid fetching if data is recent (< 30s) unless forced
@@ -120,13 +163,21 @@ export const TerminalProvider = ({ children }: { children: React.ReactNode }) =>
             return;
         }
 
+        // ✅ Deduplication logic: If a fetch is already in flight, wait for it instead of starting a new one
+        if (fetchPromiseRef.current) {
+            console.log("[TerminalContext] Fetch already in progress, awaiting existing promise");
+            return fetchPromiseRef.current;
+        }
+
         if (showLoading && rawTablesLengthRef.current === 0) setIsLoading(true);
         
-        try {
-            const [tablesRes, ordersRes, profilesRes] = await Promise.all([
-                fetch(`/api/tables`, { cache: 'no-store' }).catch(() => null),
-                fetch(`/api/orders?active=true`, { cache: 'no-store' }).catch(() => null),
-                fetch(`/api/profiles`, { cache: 'no-store' }).catch(() => null)
+        const fetchWork = async () => {
+            try {
+                // ✅ Phase 2.2: Only fetch tables + orders in the polling loop (profiles removed)
+                // ✅ Phase 2.3: Use lightweight /api/tables/summary (only id, name, zone)
+                const [tablesRes, ordersRes] = await Promise.all([
+                fetch(`/api/tables/summary`, { cache: 'no-store' }).catch(() => null),
+                fetch(`/api/orders/active-summary`, { cache: 'no-store' }).catch(() => null)
             ]);
 
             if (tablesRes?.ok) {
@@ -151,15 +202,8 @@ export const TerminalProvider = ({ children }: { children: React.ReactNode }) =>
                     });
                 });
             }
-            if (profilesRes?.ok) {
-                const pData = await profilesRes.json();
-                if (pData.profiles && Array.isArray(pData.profiles)) {
-                    setAllProfiles(pData.profiles);
-                    setEnableMultipleProfiles(pData.enableMultipleProfiles || false);
-                }
-            }
             
-            if (tablesRes?.ok || ordersRes?.ok || profilesRes?.ok) {
+            if (tablesRes?.ok || ordersRes?.ok) {
                 const now = Date.now();
                 lastUpdatedRef.current = now;
                 setLastUpdated(now);
@@ -168,8 +212,13 @@ export const TerminalProvider = ({ children }: { children: React.ReactNode }) =>
             console.error("Failed to fetch terminal data:", err);
         } finally {
             setIsLoading(false);
+            fetchPromiseRef.current = null;
         }
-    }, []);
+    };
+
+    fetchPromiseRef.current = fetchWork();
+    return fetchPromiseRef.current;
+}, []);
 
     const updateTableStatus = useCallback((tableId: string, updates: Partial<Table>) => {
         // Optional: Manual override if needed
@@ -180,7 +229,114 @@ export const TerminalProvider = ({ children }: { children: React.ReactNode }) =>
         return fetchData(false);
     }, [fetchData]);
 
-    const { isSyncing, manualSync } = useSmartPolling(pollCallback, 30000, true);
+    // ✅ Phase 2.2: Manual sync also refreshes profiles (for the refresh button)
+    const { isSyncing, manualSync: _rawManualSync } = useSmartPolling(pollCallback, 30000, true);
+    const manualSync = useCallback(() => {
+        fetchProfiles(); // Refresh profiles on manual sync
+        _rawManualSync();
+    }, [fetchProfiles, _rawManualSync]);
+
+    const emitUpdate = useCallback((customData?: any) => {
+        if (socket && isConnected) {
+            const bId = business?.id;
+            const uId = business?.userId;
+            const payload = {
+                businessId: bId || uId,
+                userId: uId,
+                timestamp: Date.now(),
+                ...(customData || {})
+            };
+            if (bId) {
+                socket.emit("pos_update", payload);
+            }
+            if (uId && uId !== bId) {
+                socket.emit("pos_update", { ...payload, businessId: uId });
+            }
+            if (customData?.order) {
+                const kotPayload = {
+                    businessId: bId || uId,
+                    userId: uId,
+                    type: "NEW_KOT",
+                    order: customData.order,
+                    orderId: customData.order.id,
+                    timestamp: Date.now()
+                };
+                if (bId) socket.emit("kds_order_event", kotPayload);
+                if (uId && uId !== bId) socket.emit("kds_order_event", { ...kotPayload, businessId: uId });
+            }
+        }
+    }, [socket, isConnected, business]);
+
+    // Listen to realtime socket events and update local state instantly + background reconciliation
+    useEffect(() => {
+        if (!socket) return;
+
+        const handleKdsOrderUpdate = (eventData: any) => {
+            console.log("Realtime kds_order_update received in TerminalContext:", eventData);
+            if (!eventData || !eventData.orderId) {
+                fetchData(false, true);
+                return;
+            }
+
+            const { orderId, status, items } = eventData;
+            if (eventData.type === "ITEM_PREPARED_UPDATE") {
+                kravy.ping();
+            }
+
+            // 1. Instant targeted in-memory status update (0ms UI latency, 0 extra DB load)
+            setOrders(prevOrders => {
+                const target = prevOrders.find(o => o.id === orderId);
+                if (!target) return prevOrders;
+
+                return prevOrders.map(o => {
+                    if (o.id !== orderId) return o;
+                    return {
+                        ...o,
+                        status: status || o.status,
+                        items: items || o.items,
+                        updatedAt: new Date().toISOString()
+                    };
+                });
+            });
+
+            // 2. Background verify & reconcile without blocking UI
+            fetchData(false, true);
+        };
+
+        const handleDashboardUpdate = (data: any) => {
+            console.log("Realtime dashboard_update received in TerminalContext:", data);
+            fetchData(false, true);
+        };
+
+        socket.on("dashboard_update", handleDashboardUpdate);
+        socket.on("kds_order_update", handleKdsOrderUpdate);
+
+        return () => {
+            socket.off("dashboard_update", handleDashboardUpdate);
+            socket.off("kds_order_update", handleKdsOrderUpdate);
+        };
+    }, [socket, fetchData]);
+
+    // Robust room subscription on mount, profile change, and reconnects
+    useEffect(() => {
+        if (!socket || !isConnected) return;
+
+        const joinRooms = () => {
+            if (business?.id) {
+                socket.emit("join_business", business.id);
+            }
+            if (business?.userId && business.userId !== business?.id) {
+                socket.emit("join_business", business.userId);
+            }
+        };
+
+        joinRooms();
+        socket.on("connect", joinRooms);
+
+        return () => {
+            socket.off("connect", joinRooms);
+        };
+    }, [socket, isConnected, business?.id, business?.userId]);
 
     return (
         <TerminalContext.Provider value={{
@@ -197,7 +353,8 @@ export const TerminalProvider = ({ children }: { children: React.ReactNode }) =>
             updateTableStatus,
             setOrders,
             isSyncing,
-            manualSync
+            manualSync,
+            emitUpdate
         }}>
             {children}
         </TerminalContext.Provider>

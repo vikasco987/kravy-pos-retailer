@@ -1,3 +1,4 @@
+import { getServerCurrency } from '@/lib/server-currency';
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveClerkId } from "@/lib/auth-utils";
@@ -66,6 +67,7 @@ const Th = ({ label, isRight }: any) => (
 
 export default async function MonthlySalesReportPage() {
   const effectiveId = await getEffectiveClerkId();
+  const { sym } = await getServerCurrency();
   if (!effectiveId) redirect("/auth/custom");
 
   // 🇮🇳 IST Timezone calculations
@@ -141,14 +143,14 @@ export default async function MonthlySalesReportPage() {
             <div>
                <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "#0369A1", textTransform: "uppercase", letterSpacing: "1.5px" }}>Performance Forecast</div>
                <div style={{ fontSize: "1.25rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>
-                  Projected Revenue for {now.toLocaleString('en-IN', { month: 'short', timeZone: 'Asia/Kolkata' })}: <span style={{ color: "#0EA5E9" }}>₹{format(projectedRevenue)}</span>
+                  Projected Revenue for {now.toLocaleString('en-IN', { month: 'short', timeZone: 'Asia/Kolkata' })}: <span style={{ color: "#0EA5E9" }}>{sym}{format(projectedRevenue)}</span>
                </div>
             </div>
          </div>
          <div style={{ display: "flex", gap: "32px" }}>
             <div style={{ textAlign: "right" }}>
                <div style={{ fontSize: "0.7rem", fontWeight: 800, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "1px" }}>Accumulated</div>
-               <div style={{ fontSize: "1.4rem", fontWeight: 950, color: "var(--kravy-text-primary)" }}>₹{format(totalRevenue)}</div>
+               <div style={{ fontSize: "1.4rem", fontWeight: 950, color: "var(--kravy-text-primary)" }}>{sym}{format(totalRevenue)}</div>
             </div>
             <div style={{ width: "1px", height: "40px", background: "var(--kravy-border)" }} />
             <div style={{ textAlign: "right" }}>
@@ -216,7 +218,7 @@ export default async function MonthlySalesReportPage() {
                     <div style={{ fontSize: "0.75rem", fontFamily: "monospace", color: "var(--kravy-text-faint)", marginTop: "4px" }}>{b.customerPhone || "NO CONTACT"}</div>
                   </td>
                   <td style={{ padding: "24px", textAlign: "right" }}>
-                    <div style={{ fontSize: "1.6rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1.5px" }}>₹{format(b.total)}</div>
+                    <div style={{ fontSize: "1.6rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1.5px" }}>{sym}{format(b.total)}</div>
                     <div style={{ fontSize: "0.65rem", fontWeight: 850, color: "#10B981", marginTop: "2px", textTransform: "uppercase" }}>Validated</div>
                   </td>
                   <td style={{ padding: "24px" }}>

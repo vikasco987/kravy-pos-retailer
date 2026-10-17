@@ -6,11 +6,13 @@ import { toast } from "react-hot-toast";
 import { Fuel, Car, IndianRupee, Printer, Save, FileText, Droplet, Settings, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
+import { useProfileCache } from "@/hooks/useProfileCache";
 
 export default function FuelBillingPage() {
   const { user } = useAuthContext();
   const [loading, setLoading] = useState(false);
-  const [profile, setProfile] = useState<any>(null);
+  const { profile, updateProfile } = useProfileCache();
+  const [hasInitProfile, setHasInitProfile] = useState(false);
   
   // Form State
   const [fuelType, setFuelType] = useState<"PETROL" | "DIESEL">("DIESEL");
@@ -32,19 +34,16 @@ export default function FuelBillingPage() {
   const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
-    fetch("/api/profile")
-      .then(res => res.json())
-      .then(data => {
-        setProfile(data);
-        if (data?.printSettings) {
-          if (data.printSettings.fuelLogoSize) setFuelLogoSize(data.printSettings.fuelLogoSize);
-          if (data.printSettings.fuelAddressSize) setFuelAddressSize(data.printSettings.fuelAddressSize);
-          if (data.printSettings.fuelTextSize) setFuelTextSize(data.printSettings.fuelTextSize);
-          if (data.printSettings.fuelTextWeight) setFuelTextWeight(data.printSettings.fuelTextWeight);
-        }
-      })
-      .catch(() => {});
-  }, []);
+    if (profile && !hasInitProfile) {
+      if (profile.printSettings) {
+        if (profile.printSettings.fuelLogoSize) setFuelLogoSize(profile.printSettings.fuelLogoSize);
+        if (profile.printSettings.fuelAddressSize) setFuelAddressSize(profile.printSettings.fuelAddressSize);
+        if (profile.printSettings.fuelTextSize) setFuelTextSize(profile.printSettings.fuelTextSize);
+        if (profile.printSettings.fuelTextWeight) setFuelTextWeight(profile.printSettings.fuelTextWeight);
+      }
+      setHasInitProfile(true);
+    }
+  }, [profile, hasInitProfile]);
 
   // Auto-calculate volume when sale or rate changes
   useEffect(() => {
@@ -117,7 +116,7 @@ export default function FuelBillingPage() {
       });
       
       if (res.ok) {
-        setProfile((prev: any) => ({ ...prev, printSettings: updatedPrintSettings }));
+        updateProfile({ printSettings: updatedPrintSettings }, false);
         toast.success("Print settings saved!");
         setShowSettings(false);
       } else {

@@ -1,4 +1,5 @@
 "use client";
+import { useCurrency } from '@/lib/currency-context';
 
 import { Receipt, History, User, Banknote, Smartphone, Maximize2, Clock, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -28,6 +29,7 @@ export default function RecentBills({
   deletedBills = [],
   range = 30,
 }: Props) {
+  const { currencySymbol: sym } = useCurrency();
   const router = useRouter();
   const format = (num: number) =>
     new Intl.NumberFormat("en-IN").format(Math.round(num));
@@ -35,22 +37,13 @@ export default function RecentBills({
   const PaymentBadge = ({ mode }: { mode: string }) => {
     const lower = mode?.toLowerCase() || "";
     const isUPI = lower.includes("upi");
-    const color = isUPI ? "#6366F1" : "#10B981";
     const Icon = isUPI ? Smartphone : Banknote;
+    const colorClass = isUPI 
+      ? "text-indigo-500 bg-indigo-500/10 border-indigo-500/20" 
+      : "text-emerald-500 bg-emerald-500/10 border-emerald-500/20";
 
     return (
-      <span style={{
-        fontSize: "0.6rem",
-        fontWeight: 800,
-        padding: "3px 8px",
-        borderRadius: "20px",
-        background: isUPI ? "rgba(99, 102, 241, 0.1)" : "rgba(16, 185, 129, 0.1)",
-        color: color,
-        border: `1px solid ${isUPI ? "rgba(99, 102, 241, 0.2)" : "rgba(16, 185, 129, 0.2)"}`,
-        display: "flex",
-        alignItems: "center",
-        gap: "4px"
-      }}>
+      <span className={`text-[0.6rem] font-extrabold px-2 py-[3px] rounded-full border flex items-center gap-1 ${colorClass}`}>
         <Icon size={10} />
         {mode.toUpperCase()}
       </span>
@@ -70,36 +63,19 @@ export default function RecentBills({
     accentColor: string;
     deleted?: boolean;
   }) => (
-    <div style={{
-      background: "var(--kravy-surface)",
-      border: "1px solid var(--kravy-border)",
-      borderRadius: "24px",
-      padding: "24px",
-      display: "flex",
-      flexDirection: "column",
-      gap: "16px",
-      boxShadow: "var(--kravy-card-shadow)",
-      position: "relative",
-      overflow: "hidden"
-    }}>
+    <div className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-[24px] p-6 flex flex-col gap-4 shadow-[var(--kravy-card-shadow)] relative overflow-hidden">
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={{
-            width: "40px",
-            height: "40px",
-            borderRadius: "12px",
-            background: `${accentColor}15`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: accentColor
-          }}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div 
+            className="w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{ background: `${accentColor}15`, color: accentColor }}
+          >
             {icon}
           </div>
           <div>
-            <h3 style={{ fontSize: "1rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>{title}</h3>
-            <div style={{ fontSize: "0.68rem", color: "var(--kravy-text-muted)", fontWeight: 700 }}>
+            <h3 className="text-base font-black text-[var(--kravy-text-primary)]">{title}</h3>
+            <div className="text-[0.68rem] text-[var(--kravy-text-muted)] font-bold">
               {bills.length} record{bills.length !== 1 ? "s" : ""}
             </div>
           </div>
@@ -107,34 +83,16 @@ export default function RecentBills({
 
         <button 
           onClick={() => router.push(`/dashboard/billing`)}
-          style={{
-            width: "32px",
-            height: "32px",
-            borderRadius: "10px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "var(--kravy-bg-2)",
-            border: "1px solid var(--kravy-border)",
-            cursor: "pointer",
-            color: "var(--kravy-text-secondary)"
-          }}
+          className="w-8 h-8 rounded-[10px] flex items-center justify-center bg-[var(--kravy-bg-2)] border border-[var(--kravy-border)] cursor-pointer text-[var(--kravy-text-secondary)]"
         >
           <Maximize2 size={16} />
         </button>
       </div>
 
       {/* Bills List */}
-      <div style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "10px",
-        maxHeight: "350px",
-        overflowY: "auto",
-        paddingRight: "4px"
-      }}>
+      <div className="flex flex-col gap-2.5 max-h-[350px] overflow-y-auto pr-1">
         {bills.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "40px 0", color: "var(--kravy-text-muted)", fontSize: "0.82rem" }}>📭 No records found</div>
+          <div className="text-center py-10 text-[var(--kravy-text-muted)] text-[0.82rem]">📭 No records found</div>
         ) : (
           bills.map((bill, idx) => (
             <motion.div
@@ -142,41 +100,33 @@ export default function RecentBills({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.05 }}
-              style={{
-                padding: "16px",
-                background: "var(--kravy-bg-2)",
-                border: "1px solid var(--kravy-border)",
-                borderRadius: "16px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "10px"
-              }}
+              className="p-4 bg-[var(--kravy-bg-2)] border border-[var(--kravy-border)] rounded-2xl flex flex-col gap-2.5"
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <div style={{ fontSize: "0.85rem", fontWeight: 900, color: "#6366F1", fontFamily: "monospace" }}>#{bill.billNumber}</div>
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-2.5">
+                  <div className="text-[0.85rem] font-black text-indigo-500 font-mono">#{bill.billNumber}</div>
                   {bill.tokenNumber && (
-                    <div style={{ fontSize: "0.65rem", fontWeight: 900, color: "#10B981", background: "rgba(16, 185, 129, 0.1)", border: "1px solid rgba(16, 185, 129, 0.2)", padding: "2px 6px", borderRadius: "4px" }}>T-{String(bill.tokenNumber).padStart(2, '0')}</div>
+                    <div className="text-[0.65rem] font-black text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">T-{String(bill.tokenNumber).padStart(2, '0')}</div>
                   )}
                 </div>
-                <div style={{ fontSize: "1rem", fontWeight: 900, color: deleted ? "#EF4444" : "var(--kravy-text-primary)" }}>₹{format(bill.total)}</div>
+                <div className={`text-base font-black ${deleted ? "text-red-500" : "text-[var(--kravy-text-primary)]"}`}>{sym}{format(bill.total)}</div>
               </div>
 
               {/* Items in Card */}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+              <div className="flex flex-wrap gap-1">
                 {bill.items?.map((it: any, i: number) => (
-                  <span key={i} style={{ fontSize: "0.6rem", padding: "2px 6px", background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "4px", color: "var(--kravy-text-secondary)", fontWeight: 700 }}>
+                  <span key={i} className="text-[0.6rem] px-1.5 py-0.5 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded text-[var(--kravy-text-secondary)] font-bold">
                     {it.name} x{it.quantity || it.qty}
                   </span>
                 ))}
               </div>
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--kravy-border)", paddingTop: "8px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                   <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--kravy-text-secondary)" }}>{bill.customerName || "Walk-in"}</div>
+              <div className="flex justify-between items-center border-t border-[var(--kravy-border)] pt-2">
+                <div className="flex items-center gap-1.5">
+                   <div className="text-xs font-extrabold text-[var(--kravy-text-secondary)]">{bill.customerName || "Walk-in"}</div>
                    <PaymentBadge mode={bill.paymentMode} />
                 </div>
-                <div style={{ fontSize: "0.65rem", color: "var(--kravy-text-muted)", fontWeight: 600 }}>{new Date(bill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                <div className="text-[0.65rem] text-[var(--kravy-text-muted)] font-semibold">{new Date(bill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
               </div>
             </motion.div>
           ))
@@ -186,11 +136,7 @@ export default function RecentBills({
   );
 
   return (
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
-      gap: "20px"
-    }}>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 w-full min-w-0">
       <BillCardContainer
         title="Recent Sales"
         bills={recentBills}

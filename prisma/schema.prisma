@@ -312,7 +312,8 @@ model Table {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   name        String
   qrUrl       String? // persisted QR code image URL (150x150) for this table
-  zone        String   @default("Default") // ✅ Zone assigned to this table
+  zone        String   @default("Default")
+  floor       String?  @default("Floor 1") // ✅ Zone assigned to this table
   clerkUserId String
   user        User     @relation(fields: [clerkUserId], references: [clerkId])
   orders      Order[]
@@ -429,6 +430,8 @@ model Field {
 //////////////////////////////////////////////////
 
 model BusinessProfile {
+  currencyCode       String? @default("INR")
+  currencySymbol     String? @default("₹")
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
   userId String
@@ -588,6 +591,7 @@ model BusinessProfile {
 //////////////////////////////////////////////////
 
 model ManualInvoice {
+  currencySymbol    String? @default("₹") // ✅ Snapshot for historical invoices
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   clerkUserId String
   user        User     @relation(fields: [clerkUserId], references: [clerkId])
@@ -684,6 +688,8 @@ model ActivityLog {
 //////////////////////////////////////////////////
 
 model BillManager {
+  currencySymbol    String? @default("₹")
+  editLogs          BillEditLog[]
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
   clerkUserId String
@@ -1063,4 +1069,33 @@ model FuelBill {
   updatedAt   DateTime @updatedAt
 
   @@index([clerkUserId])
+}
+
+model BillEditLog {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  clerkUserId String
+  billId      String   @db.ObjectId
+  invoiceNo   String
+  actorId     String
+  actorName   String?
+  actorRole   String?
+  eventType   String
+  reason      String?
+  changes     Json
+  createdAt   DateTime @default(now())
+  bill        BillManager @relation(fields: [billId], references: [id], onDelete: Cascade)
+  @@index([clerkUserId, billId, createdAt(sort: Desc)])
+}
+
+model GmailConnection {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  clerkUserId    String   @unique
+  accessToken    String?
+  refreshToken   String?
+  connectedEmail String?
+  isConnected    Boolean  @default(false)
+  lastSynced     DateTime?
+  lastEmailId    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }

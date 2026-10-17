@@ -1,4 +1,5 @@
 "use client";
+import { useCurrency } from '@/lib/currency-context';
 
 import { useState } from "react";
 import { ChevronLeft, Search, Calendar, User, Phone, ArrowUpRight, ArrowDownLeft, Plus, Minus, Download, RefreshCw, FileText, CheckCircle, TrendingUp } from "lucide-react";
@@ -58,6 +59,7 @@ export default function WalletDepositsClient({
   initStartDate,
   initEndDate,
 }: Props) {
+  const { currencySymbol: sym } = useCurrency();
   const router = useRouter();
   const [ledgerList, setLedgerList] = useState<CustomerLedger[]>(customerLedgerList);
   const [searchQuery, setSearchQuery] = useState("");
@@ -227,9 +229,9 @@ export default function WalletDepositsClient({
             columns={[
               { key: "name", label: "Customer Name" },
               { key: "phone", label: "Phone Number" },
-              { key: "walletBalance", label: "Wallet Balance (₹)", format: (v) => v ? Number(v).toFixed(2) : "0.00" },
-              { key: "totalDeposited", label: "Total Loaded (₹)", format: (v) => v ? Number(v).toFixed(2) : "0.00" },
-              { key: "totalUtilized", label: "Total Utilized (₹)", format: (v) => v ? Number(v).toFixed(2) : "0.00" },
+              { key: "walletBalance", label: "Wallet Balance ({sym})", format: (v) => v ? Number(v).toFixed(2) : "0.00" },
+              { key: "totalDeposited", label: "Total Loaded ({sym})", format: (v) => v ? Number(v).toFixed(2) : "0.00" },
+              { key: "totalUtilized", label: "Total Utilized ({sym})", format: (v) => v ? Number(v).toFixed(2) : "0.00" },
             ]}
             filename={`Wallet_Advances_${new Date().toISOString().split("T")[0]}`}
             title="Wallet Deposits & Advances"
@@ -241,17 +243,17 @@ export default function WalletDepositsClient({
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "24px" }}>
         <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "24px", padding: "28px" }}>
           <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>Active Advance Liability</div>
-          <div style={{ fontSize: "2.25rem", fontWeight: 950, color: "#8B5CF6", lineHeight: 1 }}>₹{fmt(currentTotalAdvance)}</div>
+          <div style={{ fontSize: "2.25rem", fontWeight: 950, color: "#8B5CF6", lineHeight: 1 }}>{sym}{fmt(currentTotalAdvance)}</div>
           <p style={{ fontSize: "0.7rem", color: "var(--kravy-text-muted)", marginTop: "6px", fontWeight: 700 }}>Total currently held in customer wallets</p>
         </div>
         <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "24px", padding: "28px" }}>
           <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>Total Deposited (Period)</div>
-          <div style={{ fontSize: "2.25rem", fontWeight: 950, color: "#10B981", lineHeight: 1 }}>₹{fmt(totalDeposited)}</div>
+          <div style={{ fontSize: "2.25rem", fontWeight: 950, color: "#10B981", lineHeight: 1 }}>{sym}{fmt(totalDeposited)}</div>
           <p style={{ fontSize: "0.7rem", color: "var(--kravy-text-muted)", marginTop: "6px", fontWeight: 700 }}>Advance loads recorded in date range</p>
         </div>
         <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "24px", padding: "28px" }}>
           <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>Total Utilized (Period)</div>
-          <div style={{ fontSize: "2.25rem", fontWeight: 950, color: "#EF4444", lineHeight: 1 }}>₹{fmt(totalUtilized)}</div>
+          <div style={{ fontSize: "2.25rem", fontWeight: 950, color: "#EF4444", lineHeight: 1 }}>{sym}{fmt(totalUtilized)}</div>
           <p style={{ fontSize: "0.7rem", color: "var(--kravy-text-muted)", marginTop: "6px", fontWeight: 700 }}>Deducted for POS checkouts / orders</p>
         </div>
         <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "24px", padding: "28px" }}>
@@ -290,7 +292,7 @@ export default function WalletDepositsClient({
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px", maxH: "280px", overflowY: "auto" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px", maxHeight: "280px", overflowY: "auto" }}>
           {trendTab === "daily" && (
             dailyTrend.length === 0 ? (
               <div style={{ fontSize: "0.8rem", color: "var(--kravy-text-muted)", fontStyle: "italic", textAlign: "center", padding: "30px" }}>No daily deposits recorded.</div>
@@ -304,7 +306,7 @@ export default function WalletDepositsClient({
                       <span style={{ fontWeight: 800, color: "var(--kravy-text-secondary)" }}>
                         {new Date(d.date!).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                       </span>
-                      <span style={{ fontWeight: 900, color: "#10B981" }}>₹{fmt(d.amount)} <span style={{ color: "var(--kravy-text-muted)", fontWeight: 500 }}>({d.count} deposit{d.count > 1 ? "s" : ""})</span></span>
+                      <span style={{ fontWeight: 900, color: "#10B981" }}>{sym}{fmt(d.amount)} <span style={{ color: "var(--kravy-text-muted)", fontWeight: 500 }}>({d.count} deposit{d.count > 1 ? "s" : ""})</span></span>
                     </div>
                     <div style={{ height: "8px", background: "var(--kravy-bg-2)", borderRadius: "999px", overflow: "hidden" }}>
                       <div style={{ width: `${pct}%`, height: "100%", background: "linear-gradient(90deg, #10B981 0%, #059669 100%)", borderRadius: "999px" }} />
@@ -326,7 +328,7 @@ export default function WalletDepositsClient({
                   <div key={i} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.75rem" }}>
                       <span style={{ fontWeight: 800, color: "var(--kravy-text-secondary)" }}>{w.week}</span>
-                      <span style={{ fontWeight: 900, color: "#8B5CF6" }}>₹{fmt(w.amount)} <span style={{ color: "var(--kravy-text-muted)", fontWeight: 500 }}>({w.count} deposit{w.count > 1 ? "s" : ""})</span></span>
+                      <span style={{ fontWeight: 900, color: "#8B5CF6" }}>{sym}{fmt(w.amount)} <span style={{ color: "var(--kravy-text-muted)", fontWeight: 500 }}>({w.count} deposit{w.count > 1 ? "s" : ""})</span></span>
                     </div>
                     <div style={{ height: "8px", background: "var(--kravy-bg-2)", borderRadius: "999px", overflow: "hidden" }}>
                       <div style={{ width: `${pct}%`, height: "100%", background: "linear-gradient(90deg, #8B5CF6 0%, #7C3AED 100%)", borderRadius: "999px" }} />
@@ -348,7 +350,7 @@ export default function WalletDepositsClient({
                   <div key={i} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.75rem" }}>
                       <span style={{ fontWeight: 800, color: "var(--kravy-text-secondary)" }}>{m.month}</span>
-                      <span style={{ fontWeight: 900, color: "#3B82F6" }}>₹{fmt(m.amount)} <span style={{ color: "var(--kravy-text-muted)", fontWeight: 500 }}>({m.count} deposit{m.count > 1 ? "s" : ""})</span></span>
+                      <span style={{ fontWeight: 900, color: "#3B82F6" }}>{sym}{fmt(m.amount)} <span style={{ color: "var(--kravy-text-muted)", fontWeight: 500 }}>({m.count} deposit{m.count > 1 ? "s" : ""})</span></span>
                     </div>
                     <div style={{ height: "8px", background: "var(--kravy-bg-2)", borderRadius: "999px", overflow: "hidden" }}>
                       <div style={{ width: `${pct}%`, height: "100%", background: "linear-gradient(90deg, #3B82F6 0%, #2563EB 100%)", borderRadius: "999px" }} />
@@ -471,16 +473,16 @@ export default function WalletDepositsClient({
                         <div style={{ display: "flex", gap: "12px", marginTop: "4px", fontSize: "0.75rem", color: "var(--kravy-text-muted)" }}>
                           <span style={{ display: "flex", alignItems: "center", gap: "4px", fontFamily: "monospace" }}><Phone size={12} /> {customer.phone}</span>
                           <span>•</span>
-                          <span>Deposited: ₹{fmt(customer.totalDeposited)}</span>
+                          <span>Deposited: {sym}{fmt(customer.totalDeposited)}</span>
                           <span>•</span>
-                          <span>Utilized: ₹{fmt(customer.totalUtilized)}</span>
+                          <span>Utilized: {sym}{fmt(customer.totalUtilized)}</span>
                         </div>
                       </div>
                     </div>
 
                     <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
                       <div style={{ textAlign: "right" }}>
-                        <div style={{ fontSize: "1.25rem", fontWeight: 950, color: "#10B981" }}>₹{customer.walletBalance.toFixed(2)}</div>
+                        <div style={{ fontSize: "1.25rem", fontWeight: 950, color: "#10B981" }}>{sym}{customer.walletBalance.toFixed(2)}</div>
                         <div style={{ fontSize: "0.7rem", color: "var(--kravy-text-muted)", fontWeight: 700, textTransform: "uppercase" }}>Current Balance</div>
                       </div>
                       <span style={{ color: "var(--kravy-text-muted)", fontSize: "1.2rem", transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.2s" }}>
@@ -533,7 +535,7 @@ export default function WalletDepositsClient({
 
                             <input
                               type="number"
-                              placeholder="Amount (₹)..."
+                              placeholder="Amount ({sym})..."
                               value={adjustAmount}
                               onChange={(e) => setAdjustAmount(e.target.value)}
                               style={{
@@ -590,7 +592,7 @@ export default function WalletDepositsClient({
                                   {customer.transactions.map((tx) => {
                                     const isCredit = tx.type === "CREDIT";
                                     return (
-                                      <tr key={tx.id} style={{ borderBottom: "1px solid var(--kravy-border)" / 50 }}>
+                                      <tr key={tx.id} style={{ borderBottom: "1px solid var(--kravy-border)" }}>
                                         <td style={{ padding: "10px 8px", fontSize: "0.75rem", fontWeight: 800 }}>
                                           <span style={{
                                             padding: "2px 8px", borderRadius: "6px",
@@ -601,7 +603,7 @@ export default function WalletDepositsClient({
                                           </span>
                                         </td>
                                         <td style={{ padding: "10px 8px", fontSize: "0.75rem", fontWeight: 800, color: isCredit ? "#10B981" : "#EF4444" }}>
-                                          {isCredit ? "+" : "-"} ₹{tx.amount.toFixed(2)}
+                                          {isCredit ? "+" : "-"} {sym}{tx.amount.toFixed(2)}
                                         </td>
                                         <td style={{ padding: "10px 8px", fontSize: "0.75rem", color: "var(--kravy-text-secondary)" }}>{tx.description || "N/A"}</td>
                                         <td style={{ padding: "10px 8px", fontSize: "0.75rem", color: "var(--kravy-text-muted)" }}>

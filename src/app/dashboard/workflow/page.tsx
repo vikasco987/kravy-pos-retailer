@@ -1,4 +1,5 @@
 "use client";
+import { useCurrency } from '@/lib/currency-context';
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useSidebar } from "@/components/SidebarContext";
 import { toast } from "sonner";
@@ -27,6 +28,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useAuthContext } from "@/components/AuthContext";
 import { useConfirm } from "@/components/ConfirmContext";
+import { useSocket } from "@/components/SocketContext";
+import { useProfileCache } from "@/hooks/useProfileCache";
 
 
 // --- TYPES ---
@@ -39,6 +42,10 @@ type OrderItem = {
     isNew?: boolean;
     instruction?: string;
     variants?: any[];
+    taxStatus?: string;
+    gst?: number;
+    qty?: number;
+    rate?: number;
 };
 
 type Order = {
@@ -57,10 +64,19 @@ type Order = {
     customerAddress?: string;
     updatedAt: string;
     notes?: string;
+    discountAmount?: number;
+    deliveryCharges?: number;
+    packagingCharges?: number;
+    serviceCharge?: number;
     preferences?: {
         dontSendCutlery?: boolean;
     };
     isDeleted?: boolean;
+    zoneName?: string;
+    isBillPrinted?: boolean;
+    tokenNumber?: string | number;
+    kotNumbers?: string[];
+    billNumber?: string;
 };
 
 type TableStatus = {
@@ -131,6 +147,7 @@ const DroppableColumn = ({ children, id, className, isOverStyle }: any) => {
 };
 
 export default function KravyPOS() {
+  const { currencySymbol: sym } = useCurrency();
     const receiptRef = useRef<HTMLDivElement | null>(null);
     const billReceiptRef = useRef<HTMLDivElement | null>(null);
     const kotReceiptRef = useRef<HTMLDivElement | null>(null);
@@ -151,17 +168,43 @@ export default function KravyPOS() {
     const [selectedParty, setSelectedParty] = useState<any>(null);
     const [clock, setClock] = useState("");
     const [dateStr, setDateStr] = useState("");
-    const [business, setBusiness] = useState<any>(null);
+    
+    const { profile: business } = useProfileCache();
+    const { socket, isConnected } = useSocket();
+
+    useEffect(() => {
+        if (!socket) return;
+        const handleUpdate = () => {
+            console.log("Realtime update received in workflow");
+            fetchData();
+        };
+        socket.on("dashboard_update", handleUpdate);
+        return () => {
+            socket.off("dashboard_update", handleUpdate);
+        };
+    }, [socket]);
+
+    const emitUpdate = (customData?: any) => {
+        if (socket && isConnected && business?.id) {
+            socket.emit("pos_update", { businessId: business.id, timestamp: Date.now(), ...(customData || {}) });
+        }
+    };
     
     const selectedTable = tablesList.find(t => t.id === selectedTableId);
     const activeOrderForSelected = orders.find(o => o.id === selectedTable?.activeOrderId);
 
-    // Dynamic Totals Calculation
     const isTaxEnabled = business?.taxEnabled ?? true;
-    const taxRate = business?.taxRate ?? 5.0;
-    const subtotalCost = activeOrderForSelected?.items.reduce((acc, it) => acc + (it.price * it.quantity), 0) || 0;
-    const calculatedGst = isTaxEnabled ? (subtotalCost * taxRate) / 100 : 0;
-    const grandTotal = subtotalCost + calculatedGst;
+    const taxRate = 0;
+
+    // Dynamic Totals Calculation
+    const businessDetails = business;
+    const activeOrderTotals = activeOrderForSelected 
+        ? calculateWorkflowTotals(activeOrderForSelected.items, businessDetails, activeOrderForSelected)
+        : { subtotal: 0, taxableSubtotal: 0, totalGst: 0, grandTotal: 0 };
+    
+    const subtotalCost = activeOrderTotals.subtotal;
+    const calculatedGst = activeOrderTotals.totalGst;
+    const grandTotal = activeOrderTotals.grandTotal;
     
     useEffect(() => {
         fetchMenu();
@@ -184,6 +227,7 @@ export default function KravyPOS() {
     const [previewZoom, setPreviewZoom] = useState(1);
     const [printOrder, setPrintOrder] = useState<Order | null>(null);
     const [printTable, setPrintTable] = useState<TableStatus | null>(null);
+    const printRequestIdRef = useRef<number>(0);
     const [menuItems, setMenuItems] = useState<any[]>([]);
     const [showAddItemModal, setShowAddItemModal] = useState(false);
     const [orderToUpdate, setOrderToUpdate] = useState<Order | null>(null);
@@ -197,39 +241,56 @@ export default function KravyPOS() {
 
     const handlePrint = async (type: "KOT" | "BILL" | "COMBINED_BILL" | "MANUAL_COMBINE", customOrder?: Order, customTable?: TableStatus) => {
         kravy.click();
+        
+        const currentRequestId = ++printRequestIdRef.current;
 
         let targetOrder = customOrder || printOrder || activeOrderForSelected;
         let targetTable = customTable || printTable || selectedTable;
 
         if (type === "COMBINED_BILL" && targetOrder) {
-            try {
-                const res = await fetch(`/api/public/orders/${targetOrder.id}/combined-bill`);
-                const data = await res.json();
-                if (data.success) {
-                    const mergedItems = data.orders.flatMap((o: any) => o.items);
-                    targetOrder = {
-                        ...targetOrder,
-                        id: `Combined #${targetOrder.id.slice(-4).toUpperCase()}`,
-                        items: mergedItems,
-                        total: data.grandTotal
-                    } as any;
-                    setPrintOrder(targetOrder);
-                } else {
-                    alert("Combined bill failed: " + data.error);
+            if (targetOrder.id.includes("Combined")) {
+                setPrintOrder(targetOrder);
+            } else {
+                try {
+                    const res = await fetch(`/api/public/orders/${targetOrder.id}/combined-bill`);
+                    if (!res.ok) {
+                        toast.error("Failed to fetch combined bill data. Server returned " + res.status);
+                        console.error("Combined bill fetch failed with status:", res.status);
+                        return;
+                    }
+                    const data = await res.json();
+                    if (data.success) {
+                        const mergedItems = data.orders.flatMap((o: any) => o.items);
+                        targetOrder = {
+                            ...targetOrder,
+                            id: `Combined #${targetOrder.id.slice(-4).toUpperCase()}`,
+                            items: mergedItems,
+                            total: data.grandTotal
+                        } as any;
+                        setPrintOrder(targetOrder as Order);
+                    } else {
+                        alert("Combined bill failed: " + data.error);
+                        return;
+                    }
+                } catch (err) {
+                    console.error("Combined bill fetch error:", err);
+                    toast.error("Failed to parse combined bill data.");
                     return;
                 }
-            } catch (err) {
-                console.error("Combined bill fetch error:", err);
-                return;
             }
         } else if (type === "MANUAL_COMBINE") {
             const selectedOrders = orders.filter(o => combineSelection.has(o.id));
             if (selectedOrders.length === 0) return;
 
             const mergedItems = selectedOrders.flatMap(o => o.items);
-            const subtotal = mergedItems.reduce((acc, it) => acc + (it.price * it.quantity), 0);
-            const gst = isTaxEnabled ? (subtotal * taxRate) / 100 : 0;
-            const total = subtotal + gst;
+            const totalDiscount = selectedOrders.reduce((sum, o) => sum + (o.discountAmount || 0), 0);
+            const totalDelivery = selectedOrders.reduce((sum, o) => sum + (o.deliveryCharges || 0), 0);
+            const totalPackaging = selectedOrders.reduce((sum, o) => sum + (o.packagingCharges || 0), 0);
+            const totalService = selectedOrders.reduce((sum, o) => sum + (o.serviceCharge || 0), 0);
+            const totals = calculateWorkflowTotals(mergedItems, business, { discountAmount: totalDiscount, deliveryCharges: totalDelivery, packagingCharges: totalPackaging, serviceCharge: totalService } as any);
+            const subtotal = totals.subtotal;
+            const gst = totals.totalGst;
+            const total = totals.grandTotal;
 
             targetOrder = {
                 id: `ManualMerge-${new Date().getTime().toString().slice(-4)}`,
@@ -240,7 +301,7 @@ export default function KravyPOS() {
                 createdAt: new Date().toISOString(),
                 status: "ACCEPTED"
             } as any;
-            setPrintOrder(targetOrder);
+            setPrintOrder(targetOrder as Order);
             setPrintTable(targetTable || (selectedOrders[0].table as any));
         } else {
             if (customOrder) setPrintOrder(customOrder);
@@ -251,7 +312,7 @@ export default function KravyPOS() {
         console.log(`[PRINT] Starting ${type} flow...`);
         console.log(`[PRINT] Context: Order=${targetOrder?.id}, Table=${targetTable?.name || "None"}`);
 
-        setTimeout(() => {
+
             const isBill = type === "BILL" || type === "COMBINED_BILL" || type === "MANUAL_COMBINE";
             const autoBoth = isBill && business?.enableKOTWithBill && type !== "MANUAL_COMBINE" && type !== "COMBINED_BILL";
             
@@ -290,6 +351,68 @@ export default function KravyPOS() {
             document.getElementById("print-receipt-style")?.remove();
             document.querySelectorAll("[id^='print-container-']").forEach(el => el.remove());
             document.querySelectorAll("[id^='print-style-']").forEach(el => el.remove());
+
+            // --- RECURSIVE DOM POLLER FIX ---
+            // --- RECURSIVE DOM POLLER FIX ---
+            const checkAndPrint = async (attempts = 0) => {
+                if (currentRequestId !== printRequestIdRef.current) {
+                    console.log(`[PRINT WARNING] Print request ${currentRequestId} aborted because a new request (${printRequestIdRef.current}) started.`);
+                    return;
+                }
+
+                let currentHtml = "";
+                if (autoBoth) {
+                    currentHtml = `
+                        <div class="kot-section">${kotReceiptRef.current?.innerHTML || ""}</div>
+                        <div style="border-top: 2px dashed #000; margin: 30px 0; position: relative;">
+                            <span style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: #fff; padding: 0 10px; font-size: 8px; font-weight: bold; text-transform: uppercase;">Final Bill Follows</span>
+                        </div>
+                        <div class="bill-section">${billReceiptRef.current?.innerHTML || ""}</div>
+                    `;
+                } else {
+                    const targetRef = (showPreview && previewMode === (isBill ? "BILL" : "KOT"))
+                        ? receiptRef.current
+                        : (isBill ? billReceiptRef.current : kotReceiptRef.current);
+                    currentHtml = targetRef?.innerHTML || "";
+                }
+
+                const expectedIdPart = targetOrder ? (targetOrder.status === "COMPLETED" ? "#B_N_PLACEHOLDER" : targetOrder.id.slice(-6).toUpperCase()) : "";
+                
+                if (type !== "MANUAL_COMBINE" && type !== "COMBINED_BILL" && targetOrder && currentHtml && currentHtml.length > 50 && !currentHtml.includes(expectedIdPart)) {
+                    if (attempts < 20) {
+                        setTimeout(() => checkAndPrint(attempts + 1), 50);
+                        return;
+                    } else {
+                        console.warn(`[PRINT ABORTED] DOM did not sync to order ${targetOrder.id} within 1000ms. Stale bill printing prevented.`);
+                        if (typeof toast !== 'undefined' && toast.error) {
+                            toast.error("Receipt generation timeout. Stale bill printing prevented.");
+                        }
+                        setPrintOrder(null);
+
+                        setPrintTable(null);
+                        return;
+                    }
+                }
+
+                printHTML = currentHtml;
+
+                if (isBill && targetOrder?.status === "COMPLETED") {
+                    try {
+                        const res = await fetch(`/api/bill-manager/search-by-order?orderId=${targetOrder.id}`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (data.billNumber) {
+                                printHTML = printHTML.replace(/INV: #B_N_PLACEHOLDER/g, `INV: ${data.billNumber}`);
+                            } else {
+                                printHTML = printHTML.replace(/INV: #B_N_PLACEHOLDER/g, `INV: #${targetOrder.id.slice(-6).toUpperCase()}`);
+                            }
+                        } else {
+                            printHTML = printHTML.replace(/INV: #B_N_PLACEHOLDER/g, `INV: #${targetOrder.id.slice(-6).toUpperCase()}`);
+                        }
+                    } catch (e) {
+                        printHTML = printHTML.replace(/INV: #B_N_PLACEHOLDER/g, `INV: #${targetOrder.id.slice(-6).toUpperCase()}`);
+                    }
+                }
 
             // ✅ Read printSettings dynamically
             const ps = (business as any)?.printSettings || {};
@@ -451,7 +574,7 @@ export default function KravyPOS() {
 
             if (targetOrder && type !== "MANUAL_COMBINE") {
                 const body: any = { orderId: (targetOrder as any).id.includes("Combined") ? customOrder?.id || printOrder?.id : targetOrder.id };
-                const autoBoth = isBill && business?.enableKOTWithBill && type !== "MANUAL_COMBINE" && type !== "COMBINED_BILL";
+                const autoBoth = isBill && business?.enableKOTWithBill && type !== "COMBINED_BILL";
 
                 if (type === "KOT" || autoBoth) {
                     body.isKotPrinted = true;
@@ -473,6 +596,7 @@ export default function KravyPOS() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(body)
                 }).then(() => {
+                    emitUpdate();
                     if (body.status === "COMPLETED") {
                         handleCheckout(body.orderId, true);
                     } else {
@@ -480,7 +604,9 @@ export default function KravyPOS() {
                     }
                 });
             }
-        }, 50);
+        };
+
+        checkAndPrint(0);
     };
 
     const handleSaveAction = async (type: "KOT" | "BILL", order: Order) => {
@@ -502,6 +628,7 @@ export default function KravyPOS() {
             });
             if (res.ok) {
                 toast.success(`Order ${type} Saved & Updated`);
+                emitUpdate();
                 if (body.status === "COMPLETED") {
                     await handleCheckout(order.id, true);
                 } else {
@@ -561,15 +688,7 @@ export default function KravyPOS() {
         } catch (err) { console.error("Polling failed", err); }
     };
 
-    const fetchBusiness = async () => {
-        try {
-            const res = await fetch("/api/profile");
-            if (res.ok) {
-                const data = await res.json();
-                setBusiness(data);
-            }
-        } catch (err) { console.error("Profile fetch failed", err); }
-    };
+    // Business profile is now handled by useProfileCache
 
     useEffect(() => {
         if (activeTab === "payment" && activeOrderForSelected?.customerPhone) {
@@ -594,9 +713,6 @@ export default function KravyPOS() {
         }
     }, [activeTab, activeOrderForSelected?.customerPhone]);
 
-    useEffect(() => {
-        fetchBusiness();
-    }, []);
 
     const { manualSync, isSyncing } = useSmartPolling(fetchData, 15000, true);
     useEffect(() => {
@@ -648,6 +764,7 @@ export default function KravyPOS() {
                 } else {
                     fetchData();
                 }
+                emitUpdate();
             }
         } catch {
             kravy.error();
@@ -672,6 +789,7 @@ export default function KravyPOS() {
             if (res.ok) {
                 toast.success("Order removed from workflow");
                 fetchData();
+                emitUpdate();
             }
         } catch (err) {
             toast.error("Failed to delete order");
@@ -682,9 +800,10 @@ export default function KravyPOS() {
         const order = orders.find(o => o.id === targetOrderId);
         if (!order) return;
 
-        const orderSubtotal = order.items.reduce((acc, it) => acc + (it.price * it.quantity), 0);
-        const orderGst = isTaxEnabled ? (orderSubtotal * taxRate) / 100 : 0;
-        const orderTotal = orderSubtotal + orderGst;
+        const totals = calculateWorkflowTotals(order.items, business, order);
+        const orderSubtotal = totals.subtotal;
+        const orderGst = totals.totalGst;
+        const orderTotal = totals.grandTotal;
 
         try {
             if (payMethod === "wallet") {
@@ -712,19 +831,38 @@ export default function KravyPOS() {
                 setSelectedParty((prev: any) => ({ ...prev, walletBalance: walletData.balance }));
             }
 
+            const taxActive = business?.taxEnabled ?? true;
+            const globalRate = 0;
+
             const billData = {
+                orderId: order.id,
                 items: order.items.map(it => ({
+                    ...it,
                     name: it.name,
                     price: it.price,
                     quantity: it.quantity,
-                    total: it.price * it.quantity
+                    total: it.price * it.quantity,
+                    gst: (it.gst === undefined || it.gst === null) ? (taxActive ? globalRate : 0) : it.gst,
                 })),
-                subtotal: orderSubtotal,
+                subtotal: totals.taxableSubtotal || orderSubtotal,
+                tax: totals.totalGst,
                 total: orderTotal,
                 paymentMode: payMethod.toUpperCase(),
                 paymentStatus: "Paid",
-                customerName: order.customerName || "Walk-in",
-                tableName: order.table?.name || "Counter"
+                customerName: order.customerName || "Walk-in Customer",
+                customerPhone: order.customerPhone || null,
+                customerAddress: order.customerAddress || null,
+                tableName: order.table?.name || "Counter",
+                zoneName: order.table?.name && order.table?.name !== "Counter" ? (tablesList.find((t: any) => t.name === order.table?.name) as any)?.zone : null,
+                discountAmount: order.discountAmount || 0,
+                deliveryCharges: order.deliveryCharges || 0,
+                packagingCharges: order.packagingCharges || 0,
+                serviceCharge: order.serviceCharge || 0,
+                deliveryGst: ((order.deliveryCharges || 0) > 0 && business?.deliveryGstEnabled) ? ((order.deliveryCharges || 0) * (business?.deliveryGstRate || 0) / 100) : 0,
+                packagingGst: ((order.packagingCharges || 0) > 0 && business?.packagingGstEnabled) ? ((order.packagingCharges || 0) * (business?.packagingGstRate || 0) / 100) : 0,
+                amountPaid: orderTotal,
+                currencySymbol: business?.currencySymbol || sym,
+                profileId: business?.id,
             };
             const p1 = fetch("/api/bill-manager", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(billData) });
             const p2 = order.status !== "COMPLETED" 
@@ -859,7 +997,7 @@ export default function KravyPOS() {
                                             <div className="flex items-center gap-2">
                                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{o.items.length} items</span>
                                                 <span className="w-1 h-1 rounded-full bg-slate-200" />
-                                                <span className="text-[10px] font-black text-emerald-500 italic">₹{o.total}</span>
+                                                <span className="text-[10px] font-black text-emerald-500 italic">{sym}{o.total}</span>
                                             </div>
                                         </div>
                                         <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${combineSelection.has(o.id) ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-200 dark:border-slate-700"}`}>
@@ -1042,7 +1180,7 @@ export default function KravyPOS() {
 
                             {/* Orders Grid */}
                             <div className="flex-1 overflow-y-auto p-4 md:p-8">
-                                <div className="max-w-7xl mx-auto space-y-6">
+                                <div className="max-w-7xl mx-auto space-y-6 pb-24 lg:pb-8">
                                     {orders
                                         .filter(o => {
                                             const statusMatch = liveOrderTab === "PREPARING"
@@ -1058,10 +1196,10 @@ export default function KravyPOS() {
                                                 initial={{ opacity: 0, y: 20 }}
                                                 animate={{ opacity: 1, y: 0 }}
                                                 transition={{ delay: idx * 0.05 }}
-                                                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2.5rem] shadow-sm overflow-hidden flex flex-col md:flex-row min-h-[180px] hover:shadow-xl hover:border-slate-300 dark:hover:border-slate-600 transition-all group"
+                                                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2.5rem] shadow-sm overflow-hidden flex flex-col lg:flex-row min-h-[180px] hover:shadow-xl hover:border-slate-300 dark:hover:border-slate-600 transition-all group w-full max-w-2xl lg:max-w-none mx-auto"
                                             >
                                                 {/* Left Section: Info & Buttons */}
-                                                <div className="md:w-72 border-r border-slate-200 dark:border-slate-800 flex flex-col">
+                                                <div className="w-full lg:w-72 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 flex flex-col">
                                                     <div className="bg-[#E8EAF6] dark:bg-indigo-900/30 text-[#3F51B5] dark:text-indigo-300 px-4 py-1.5 text-[10px] font-black uppercase tracking-widest">
                                                         QR ORDER - {order.caseType || "DINE-IN"}
                                                     </div>
@@ -1143,7 +1281,7 @@ export default function KravyPOS() {
                                                 </div>
 
                                                 {/* Middle Section: Items & Status */}
-                                                <div className="flex-1 p-6 flex flex-col border-r border-slate-200 dark:border-slate-800" style={{ minWidth: 0 }}>
+                                                <div className="w-full flex-1 p-6 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800" style={{ minWidth: 0 }}>
                                                     <div className={`flex items-center gap-2 mb-4 text-[11px] font-black uppercase tracking-wider ${order.preferences?.dontSendCutlery ? "text-rose-600 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-100" : "text-emerald-600"}`}>
                                                         {order.preferences?.dontSendCutlery ? (
                                                             <>
@@ -1184,7 +1322,7 @@ export default function KravyPOS() {
                                                                         <span className="text-[10px] text-slate-400 uppercase tracking-widest truncate">{it.instruction || "Standard Prepared"}</span>
                                                                     </div>
                                                                 </div>
-                                                                <span className="text-sm font-medium text-slate-600 dark:text-slate-400 shrink-0">₹{it.price * it.quantity}</span>
+                                                                <span className="text-sm font-medium text-slate-600 dark:text-slate-400 shrink-0">{sym}{it.price * it.quantity}</span>
                                                             </div>
                                                         ))}
                                                         
@@ -1228,7 +1366,7 @@ export default function KravyPOS() {
                                                                     </span>
                                                                 )}
                                                             </div>
-                                                            <span className="text-sm font-bold text-slate-800 dark:text-white">₹{order.total}</span>
+                                                            <span className="text-sm font-bold text-slate-800 dark:text-white">{sym}{order.total}</span>
                                                         </div>
 
                                                         {liveOrderTab !== "COMPLETED" && (
@@ -1254,7 +1392,7 @@ export default function KravyPOS() {
                                                 </div>
 
                                                 {/* Right Section: Partner & Support */}
-                                                <div className="md:w-72 p-6 flex flex-col justify-between">
+                                                <div className="w-full lg:w-72 p-6 flex flex-col justify-between gap-6">
                                                     <div className="space-y-4">
                                                         {order.status === "READY" ? (
                                                             <div className="p-3 border border-slate-200 rounded-lg flex items-center gap-3">
@@ -1445,7 +1583,7 @@ export default function KravyPOS() {
                                             <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Done</span>
                                         </div>
                                         <div className="flex-1 text-center py-2">
-                                            <span className="block text-[11px] font-black text-slate-900 dark:text-white leading-none">₹{stats.sales}</span>
+                                            <span className="block text-[11px] font-black text-slate-900 dark:text-white leading-none">{sym}{stats.sales}</span>
                                             <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Sales</span>
                                         </div>
                                     </div>
@@ -1538,7 +1676,7 @@ export default function KravyPOS() {
                                                                 <div>
                                                                     <p className="text-sm font-black text-slate-900 uppercase leading-none mb-1">{item.name}</p>
                                                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                                                                        ₹{item.price}
+                                                                        {sym}{item.price}
                                                                         {item.instruction && <span className="text-slate-900 ml-1.5 font-black border-l border-slate-200 pl-1.5 italic text-[9px] uppercase"> · {item.instruction}</span>}
                                                                     </p>
                                                                 </div>
@@ -1549,7 +1687,7 @@ export default function KravyPOS() {
                                                                     <span className="w-4 text-center text-xs font-black italic">x{item.quantity}</span>
                                                                     <button className="w-6 h-6 rounded-lg text-slate-400 hover:bg-slate-50 transition-colors font-bold">+</button>
                                                                 </div>
-                                                                <span className="w-16 text-right text-sm font-black italic text-slate-900">₹{item.price * item.quantity}</span>
+                                                                <span className="w-16 text-right text-sm font-black italic text-slate-900">{sym}{item.price * item.quantity}</span>
                                                                 <button className="w-8 h-8 rounded-lg flex items-center justify-center text-rose-300 hover:text-rose-500 hover:bg-rose-50 transition-all opacity-0 group-hover:opacity-100"><Trash2 size={14} /></button>
                                                             </div>
                                                         </motion.div>
@@ -1577,7 +1715,7 @@ export default function KravyPOS() {
                                                             <button
                                                                 key={i}
                                                                 disabled={!activeOrderForSelected || !btn.active}
-                                                                onClick={async () => updateOrderStatus(activeOrderForSelected!.id, btn.s)}
+                                                                onClick={async () => updateOrderStatus(activeOrderForSelected!.id, btn.s as Order["status"])}
                                                                 className={`flex-1 h-10 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${btn.active ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-lg shadow-slate-900/10" : "bg-slate-50 dark:bg-slate-800 text-slate-300 dark:text-slate-600 opacity-50 cursor-not-allowed"}`}
                                                             >
                                                                 {btn.icon} {btn.label}
@@ -1588,7 +1726,7 @@ export default function KravyPOS() {
                                                 <div className="w-[180px] bg-slate-900 text-white rounded-[1.5rem] p-4 shadow-xl flex flex-col justify-between relative overflow-hidden">
                                                     <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 -mr-8 -mt-8 rounded-full blur-2xl" />
                                                     <span className="text-[10px] font-black uppercase tracking-widest opacity-40">Total Amount</span>
-                                                    <strong className="text-3xl font-black italic tracking-tighter">₹{activeOrderForSelected?.total ?? "—"}</strong>
+                                                    <strong className="text-3xl font-black italic tracking-tighter">{sym}{activeOrderForSelected?.total ?? "—"}</strong>
                                                 </div>
                                             </div>
                                             <div className="flex gap-3">
@@ -1793,7 +1931,7 @@ export default function KravyPOS() {
                                                             </button>
                                                         </div>
                                                         <button
-                                                            onClick={async (e) => { e.stopPropagation(); updateOrderStatus(o.id, col.next); }}
+                                                            onClick={async (e) => { e.stopPropagation(); updateOrderStatus(o.id, col.next as Order["status"]); }}
                                                             className={`w-full h-11 rounded-xl font-black uppercase text-[10px] tracking-[0.2em] transition-all shadow-lg active:scale-95 ${col.status === 'PENDING' ? 'bg-rose-500 text-white shadow-rose-500/10' : col.status === 'ACCEPTED' ? 'bg-blue-500 text-white shadow-blue-500/10' : col.status === 'PREPARING' ? 'bg-amber-500 text-white shadow-amber-500/10' : 'bg-emerald-900 text-white shadow-emerald-900/10'}`}
                                                         >
                                                             {col.btnLabel}
@@ -1863,9 +2001,9 @@ export default function KravyPOS() {
                                                                 ))}
                                                             </div>
                                                         )}
-                                                        <p className="text-[10px] font-bold text-slate-400 tracking-tight uppercase">{it.quantity} × ₹{it.price}</p>
+                                                        <p className="text-[10px] font-bold text-slate-400 tracking-tight uppercase">{it.quantity} × {sym}{it.price}</p>
                                                     </div>
-                                                    <span className="text-xs font-black italic text-slate-900">₹{it.price * it.quantity}</span>
+                                                    <span className="text-xs font-black italic text-slate-900">{sym}{it.price * it.quantity}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -1873,21 +2011,21 @@ export default function KravyPOS() {
                                         <div className="mt-auto pt-6 border-t border-dashed border-slate-200 space-y-3">
                                             <div className="flex justify-between text-[11px] font-black text-slate-400 uppercase tracking-widest leading-none">
                                                 <span>Subtotal</span>
-                                                <span>₹{(activeOrderForSelected.total / 1.05).toFixed(0)}</span>
+                                                <span>{sym}{(activeOrderForSelected.total / 1.05).toFixed(0)}</span>
                                             </div>
                                             <div className="flex justify-between text-[11px] font-black text-slate-400 uppercase tracking-widest leading-none">
                                                 <span>GST (5%)</span>
-                                                <span>₹{(activeOrderForSelected.total - activeOrderForSelected.total / 1.05).toFixed(0)}</span>
+                                                <span>{sym}{(activeOrderForSelected.total - activeOrderForSelected.total / 1.05).toFixed(0)}</span>
                                             </div>
                                             {payMethod === "wallet" && (
                                                 <div className="flex justify-between text-[11px] font-black text-indigo-600 uppercase tracking-widest leading-none">
                                                     <span>Remaining Bal</span>
-                                                    <span>₹{((selectedParty?.walletBalance || 0) - activeOrderForSelected.total).toFixed(0)}</span>
+                                                    <span>{sym}{((selectedParty?.walletBalance || 0) - activeOrderForSelected.total).toFixed(0)}</span>
                                                 </div>
                                             )}
                                             <div className="flex justify-between items-center mt-6 pt-6 border-t-2 border-slate-900">
                                                 <span className="text-xs font-black uppercase tracking-[0.2em] text-slate-900 italic">Bill Amount</span>
-                                                <span className="text-3xl font-black italic tracking-tighter text-slate-900">₹{activeOrderForSelected.total}</span>
+                                                <span className="text-3xl font-black italic tracking-tighter text-slate-900">{sym}{activeOrderForSelected.total}</span>
                                             </div>
                                         </div>
 
@@ -1933,7 +2071,7 @@ export default function KravyPOS() {
                                                 <div className="flex items-center gap-8 animate-in fade-in slide-in-from-bottom-4">
                                                     <div className="w-20 h-20 bg-white dark:bg-slate-700 rounded-3xl flex items-center justify-center text-4xl shadow-2xl shadow-indigo-500/10 border border-slate-50 dark:border-slate-600">📱</div>
                                                     <div>
-                                                        <p className="text-xl font-black text-slate-900 dark:text-white leading-none uppercase tracking-tight mb-2 italic">Scan to Pay ₹{activeOrderForSelected.total}</p>
+                                                        <p className="text-xl font-black text-slate-900 dark:text-white leading-none uppercase tracking-tight mb-2 italic">Scan to Pay {sym}{activeOrderForSelected.total}</p>
                                                         <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Awaiting Digital Handshake...</p>
                                                         <div className="mt-4 flex items-center gap-2 text-emerald-500 bg-emerald-50 w-fit px-3 py-1 rounded-full border border-emerald-100">
                                                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -2094,7 +2232,7 @@ export default function KravyPOS() {
                                                                 </div>
                                                             </td>
                                                             <td className="px-6 py-8">
-                                                                <p className="text-sm font-black text-slate-900 dark:text-white italic">₹{Math.round(order.total)}</p>
+                                                                <p className="text-sm font-black text-slate-900 dark:text-white italic">{sym}{Math.round(order.total)}</p>
                                                             </td>
                                                             <td className="px-6 py-8">
                                                                 <div>
@@ -2239,9 +2377,10 @@ export default function KravyPOS() {
                                         const targetO = printOrder || activeOrderForSelected;
                                         const targetT = printTable || selectedTable;
                                         if (!targetO || !targetT) return null;
-                                        const sub = targetO.items.reduce((acc, it) => acc + (it.price * it.quantity), 0);
-                                        const gst = isTaxEnabled ? (sub * taxRate) / 100 : 0;
-                                        const total = sub + gst;
+                                        const totals = calculateWorkflowTotals(targetO.items, business, targetO);
+                                        const sub = totals.subtotal;
+                                        const gst = totals.totalGst;
+                                        const total = totals.grandTotal;
 
                                         return getReceiptJSX(
                                             previewMode,
@@ -2340,7 +2479,7 @@ export default function KravyPOS() {
                                                 </div>
                                                 <div>
                                                     <p className="text-sm font-black text-slate-900 dark:text-white uppercase leading-none mb-1">{it.name}</p>
-                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">₹{it.price}</p>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{sym}{it.price}</p>
                                                 </div>
                                             </div>
                                             <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
@@ -2361,9 +2500,10 @@ export default function KravyPOS() {
                         const targetO = printOrder || activeOrderForSelected;
                         const targetT = printTable || selectedTable;
                         if (!targetO || !targetT) return null;
-                        const sub = targetO.items.reduce((acc, it) => acc + (it.price * it.quantity), 0);
-                        const gst = isTaxEnabled ? (sub * taxRate) / 100 : 0;
-                        const total = sub + gst;
+                        const totals = calculateWorkflowTotals(targetO.items, business, targetO);
+                        const sub = totals.subtotal;
+                        const gst = totals.totalGst;
+                        const total = totals.grandTotal;
                         const predictedBalance = (payMethod.toLowerCase() === "wallet" && selectedParty) 
                             ? (selectedParty.walletBalance - total) 
                             : selectedParty?.walletBalance;
@@ -2375,9 +2515,10 @@ export default function KravyPOS() {
                         const targetO = printOrder || activeOrderForSelected;
                         const targetT = printTable || selectedTable;
                         if (!targetO || !targetT) return null;
-                        const sub = targetO.items.reduce((acc, it) => acc + (it.price * it.quantity), 0);
-                        const gst = isTaxEnabled ? (sub * taxRate) / 100 : 0;
-                        const total = sub + gst;
+                        const totals = calculateWorkflowTotals(targetO.items, business, targetO);
+                        const sub = totals.subtotal;
+                        const gst = totals.totalGst;
+                        const total = totals.grandTotal;
                         return getReceiptJSX("KOT", business, targetO, targetT, sub, isTaxEnabled, taxRate, gst, total, payMethod, qrUrl);
                     })()}
                 </div>
@@ -2424,7 +2565,7 @@ export default function KravyPOS() {
 
                     {/* Order Details Section */}
                     <div className="flex justify-between text-[10px] font-black uppercase border-b border-dotted border-black pb-1 mb-1">
-                        <span>INV: #{activeOrder?.id.slice(-6).toUpperCase()}</span>
+                        <span>{activeOrder?.status === "COMPLETED" ? "INV: #B_N_PLACEHOLDER" : `ORDER: #${activeOrder?.id.slice(-6).toUpperCase()}`}</span>
                         <span>{new Date(activeOrder.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
                     </div>
                     <div className="flex justify-between text-[10px] font-black uppercase mb-1">
@@ -2448,38 +2589,41 @@ export default function KravyPOS() {
                     </div>
 
                     <div className="space-y-1">
-                        {activeOrder?.items.map((it: any, idx: number) => (
+                        {activeOrder?.items.map((it: any, idx: number) => {
+                            const q = Number(it.quantity || it.qty || 0);
+                            const p = Number(it.price || it.rate || 0);
+                            return (
                             <div key={idx} className="flex justify-between text-[10px] font-black uppercase leading-tight border-b border-dotted border-black/20 pb-0.5">
                                 <div className="flex-1 pr-1">
                                     <div className="truncate">{it.name}</div>
-                                    <div className="text-[8px] opacity-70">{it.quantity} x {it.price.toFixed(2)}</div>
+                                    <div className="text-[8px] opacity-70">{q} x {p.toFixed(2)}</div>
                                 </div>
-                                <span className="w-[8mm] text-center self-start pt-0.5">x{it.quantity}</span>
-                                <span className="w-[15mm] text-right self-start pt-0.5">{(it.quantity * it.price).toFixed(2)}</span>
+                                <span className="w-[8mm] text-center self-start pt-0.5">x{q}</span>
+                                <span className="w-[15mm] text-right self-start pt-0.5">{(q * p).toFixed(2)}</span>
                             </div>
-                        ))}
+                        )})}
                     </div>
 
                     {/* Totals Section */}
                     <div className="mt-1 pt-1 space-y-0.5">
                         <div className="flex justify-between text-[10px] font-black">
                             <span>SUBTOTAL</span>
-                            <span>₹{subtotal.toFixed(2)}</span>
+                            <span>{sym}{subtotal.toFixed(2)}</span>
                         </div>
                         {taxEnabled && (
                             <div className="flex justify-between text-[9px] font-black">
                                 <span>GST ({taxRate}%)</span>
-                                <span>₹{gst.toFixed(2)}</span>
+                                <span>{sym}{gst.toFixed(2)}</span>
                             </div>
                         )}
                         <div className="flex justify-between font-black text-[16px] border-y-2 border-dotted border-black py-1.5 my-1 uppercase">
                             <span>GRAND TOTAL</span>
-                            <span>₹{total.toFixed(0)}</span>
+                            <span>{sym}{total.toFixed(0)}</span>
                         </div>
                     </div>
 
                     <div className="mt-1 text-[8px] font-black uppercase italic leading-none">
-                        RUPEES: {numberToWords(total)}
+                        RUPEES: {numberToWords(Math.round(total))}
                     </div>
 
                     <div className="mt-3 text-center">
@@ -2488,7 +2632,7 @@ export default function KravyPOS() {
                         </div>
                         {paymentMethod.toLowerCase() === "wallet" && remainingBalance !== undefined && (
                             <div className="mt-1 text-[10px] font-black uppercase border-t border-dotted border-black pt-1">
-                                Remaining Balance: ₹{remainingBalance.toFixed(2)}
+                                Remaining Balance: {sym}{remainingBalance.toFixed(2)}
                             </div>
                         )}
                     </div>
@@ -2595,7 +2739,8 @@ export default function KravyPOS() {
             };
 
             const updatedItems = [...orderToUpdate.items, newItem];
-            const newTotal = updatedItems.reduce((acc, it) => acc + (it.price * it.quantity), 0);
+            const totals = calculateWorkflowTotals(updatedItems, business, activeOrderForSelected);
+            const newTotal = totals.grandTotal;
 
             const res = await fetch("/api/orders", {
                 method: "PATCH",
@@ -2608,8 +2753,10 @@ export default function KravyPOS() {
             });
 
             if (res.ok) {
+                const updatedOrderData = await res.json().catch(() => null);
                 toast.success(`Added ${menuItem.name} to order`);
                 fetchData(); // Refresh orders
+                emitUpdate(updatedOrderData ? { order: updatedOrderData } : undefined);
                 setShowAddItemModal(false);
                 setItemSearch("");
             } else {
@@ -2620,4 +2767,93 @@ export default function KravyPOS() {
             toast.error("An error occurred");
         }
     }
+}
+
+export function calculateWorkflowTotals(items: any[], business: any, order?: Order) {
+    if (!items || !Array.isArray(items)) {
+        return { subtotal: 0, taxableSubtotal: 0, totalGst: 0, grandTotal: 0 };
+    }
+
+    const taxEnabled = business?.taxEnabled ?? true;
+    const globalRate = 0;
+    const perProductEnabled = true;
+    const globalTaxInclusive = false;
+
+    const discountAmt = order?.discountAmount || 0;
+    const deliveryCharge = order?.deliveryCharges || 0;
+    const packagingCharge = order?.packagingCharges || 0;
+    const serviceCharge = order?.serviceCharge || 0;
+
+    let subtotal = 0;
+    
+    // 1. Calculate raw subtotal (respecting overriddenAmount like QuickPOS)
+    items.forEach(item => {
+        const qty = Number(item.quantity || item.qty || 0);
+        const rate = Number(item.price || item.rate || 0);
+        subtotal += (item.overriddenAmount ?? (qty * rate));
+    });
+
+    // 2. Pro-rata discount calculation
+    const netSubtotal = subtotal - discountAmt;
+    const discountRatio = subtotal > 0 ? netSubtotal / subtotal : 1;
+
+    let totalTaxable = 0;
+    let totalGst = 0;
+
+    items.forEach(item => {
+        const qty = Number(item.quantity || item.qty || 0);
+        const rate = Number(item.price || item.rate || 0);
+        const rawGross = (item.overriddenAmount ?? (qty * rate));
+        const gross = rawGross * discountRatio; // apply pro-rata discount
+
+        let itemTaxRate = 0;
+        if (taxEnabled) {
+            if (perProductEnabled && item.gst !== undefined && item.gst !== null) {
+                itemTaxRate = Number(item.gst);
+            } else {
+                itemTaxRate = Number(globalRate);
+            }
+        }
+
+        let taxable = gross;
+        let gst = 0;
+
+        let isInclusive = false;
+        if (taxEnabled) {
+            if (perProductEnabled && item.gst !== undefined && item.gst !== null) {
+                isInclusive = item.taxStatus === "With Tax";
+            } else {
+                isInclusive = globalTaxInclusive;
+            }
+        }
+
+        if (taxEnabled) {
+            if (isInclusive) {
+                taxable = gross / (1 + itemTaxRate / 100);
+                gst = gross - taxable;
+            } else {
+                taxable = gross;
+                gst = (gross * itemTaxRate) / 100;
+            }
+        }
+
+        totalTaxable += taxable;
+        totalGst += gst;
+    });
+
+    // 3. Tax on charges
+    const deliveryGst = (deliveryCharge > 0 && business?.deliveryGstEnabled) ? (deliveryCharge * (business?.deliveryGstRate || 0) / 100) : 0;
+    const packagingGst = (packagingCharge > 0 && business?.packagingGstEnabled) ? (packagingCharge * (business?.packagingGstRate || 0) / 100) : 0;
+
+    const totalCharges = deliveryCharge + packagingCharge + serviceCharge;
+    const totalChargesGst = deliveryGst + packagingGst;
+
+    const finalTotal = totalTaxable + totalGst + totalCharges + totalChargesGst;
+
+    return {
+        subtotal: Number(subtotal.toFixed(2)),
+        taxableSubtotal: Number(totalTaxable.toFixed(2)),
+        totalGst: Number((totalGst + totalChargesGst).toFixed(2)),
+        grandTotal: Number(finalTotal.toFixed(2))
+    };
 }

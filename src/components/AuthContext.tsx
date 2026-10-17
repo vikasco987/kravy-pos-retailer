@@ -12,6 +12,7 @@ interface AuthUser {
   email?: string;
   role?: string;
   hiddenSidebarItems?: string[];
+  sidebarOrder?: Record<string, string[]>;
 }
 
 interface AuthContextType {
@@ -46,7 +47,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ...data,
           type: data.role,
           permissions: data.allowedPaths || [],
-          hiddenSidebarItems: data.hiddenSidebarItems || []
+          hiddenSidebarItems: data.hiddenSidebarItems || [],
+          sidebarOrder: data.sidebarOrder || null
         });
       } else {
         setUser(null);

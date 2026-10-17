@@ -1,3 +1,4 @@
+import { getServerCurrency } from '@/lib/server-currency';
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveClerkId } from "@/lib/auth-utils";
@@ -13,6 +14,7 @@ export default async function CashReportPage({
   searchParams: Promise<{ range?: string }>;
 }) {
   const effectiveId = await getEffectiveClerkId();
+  const { sym } = await getServerCurrency();
   if (!effectiveId) redirect("/auth/custom");
 
   const { range: rangeParam } = await searchParams;
@@ -74,7 +76,7 @@ export default async function CashReportPage({
            <div style={{ position: "absolute", top: "-30px", right: "-30px", opacity: 0.15 }}><Banknote size={240} /></div>
            <div style={{ position: "relative", zIndex: 1 }}>
               <div style={{ fontSize: "0.85rem", fontWeight: 800, opacity: 0.8, textTransform: "uppercase", letterSpacing: "3px", marginBottom: "16px" }}>NET CASH POSITION</div>
-              <div style={{ fontSize: "5rem", fontWeight: 950, margin: "16px 0", letterSpacing: "-4px", lineHeight: 0.82 }}>₹{format(totalCash)}</div>
+              <div style={{ fontSize: "5rem", fontWeight: 950, margin: "16px 0", letterSpacing: "-4px", lineHeight: 0.82 }}>{sym}{format(totalCash)}</div>
               <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "0.9rem", fontWeight: 700, marginTop: "24px" }}>
                  <ShieldCheck size={18} /> Physical cash verified across {totalBills} sessions
               </div>
@@ -92,7 +94,7 @@ export default async function CashReportPage({
            <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "32px", padding: "32px", display: "flex", alignItems: "center", gap: "28px", boxShadow: "var(--kravy-card-shadow)" }}>
               <div style={{ width: "64px", height: "64px", borderRadius: "20px", background: "rgba(245, 158, 11, 0.1)", color: "#F59E0B", display: "flex", alignItems: "center", justifyContent: "center" }}><Wallet size={32} /></div>
               <div>
-                 <div style={{ fontSize: "2rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1px" }}>₹{format(avgCash)}</div>
+                 <div style={{ fontSize: "2rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1px" }}>{sym}{format(avgCash)}</div>
                  <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "1px" }}>Avg Cash Ticket</div>
               </div>
            </div>
@@ -142,7 +144,7 @@ export default async function CashReportPage({
                           <div style={{ fontSize: "0.75rem", color: "var(--kravy-text-faint)", marginTop: "4px" }}>{new Date(b.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                        </td>
                        <td style={{ padding: "28px 52px", textAlign: "right" }}>
-                          <div style={{ fontSize: "1.65rem", fontWeight: 950, color: "#10B981", letterSpacing: "-1.8px" }}>₹{format(b.total)}</div>
+                          <div style={{ fontSize: "1.65rem", fontWeight: 950, color: "#10B981", letterSpacing: "-1.8px" }}>{sym}{format(b.total)}</div>
                           <span style={{ fontSize: "0.65rem", fontWeight: 800, background: "rgba(16, 185, 129, 0.1)", padding: "4px 10px", borderRadius: "6px" }}>SECURE SETTLEMENT</span>
                        </td>
                     </tr>

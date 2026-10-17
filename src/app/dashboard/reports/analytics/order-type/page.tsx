@@ -1,3 +1,4 @@
+import { getServerCurrency } from '@/lib/server-currency';
 import React from "react";
 import prisma from "@/lib/prisma";
 import { getEffectiveClerkId } from "@/lib/auth-utils";
@@ -18,6 +19,7 @@ export default async function OrderTypeAnalyticsPage({ searchParams }: { searchP
   const range = params.range || "week";
 
   const effectiveId = await getEffectiveClerkId();
+  const { sym } = await getServerCurrency();
   if (!effectiveId) return <div>Unauthorized</div>;
 
   const now = new Date();
@@ -176,8 +178,8 @@ export default async function OrderTypeAnalyticsPage({ searchParams }: { searchP
       {/* --- TOP METRICS --- */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "24px" }}>
         {[
-          { label: "Total Type Revenue", val: `₹${format(totalRevenue)}`, icon: <TrendingUp size={20} color="#10B981" />, bg: "rgba(16, 185, 129, 0.1)" },
-          { label: "Avg Order Value", val: `₹${format(avgOrderValue)}`, icon: <Sparkles size={20} color="#8B5CF6" />, bg: "rgba(139, 92, 246, 0.1)" },
+          { label: "Total Type Revenue", val: `${sym}${format(totalRevenue)}`, icon: <TrendingUp size={20} color="#10B981" />, bg: "rgba(16, 185, 129, 0.1)" },
+          { label: "Avg Order Value", val: `${sym}${format(avgOrderValue)}`, icon: <Sparkles size={20} color="#8B5CF6" />, bg: "rgba(139, 92, 246, 0.1)" },
           { label: "Peak Order Type", val: peakTypeEntry.type, icon: <Utensils size={20} color="#F59E0B" />, bg: "rgba(245, 158, 11, 0.1)" }
         ].map((m, i) => (
           <div key={i} style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "28px", padding: "32px", boxShadow: "var(--kravy-shadow-sm)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -220,7 +222,7 @@ export default async function OrderTypeAnalyticsPage({ searchParams }: { searchP
                            </div>
                         </div>
                         <div style={{ textAlign: "right" }}>
-                           <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>₹{format(item.data.revenue)}</div>
+                           <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>{sym}{format(item.data.revenue)}</div>
                            <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--kravy-text-muted)" }}>{Math.round((item.data.revenue / (totalRevenue || 1)) * 100)}% of total</div>
                         </div>
                      </div>
@@ -246,7 +248,7 @@ export default async function OrderTypeAnalyticsPage({ searchParams }: { searchP
                     </div>
                     <div>
                        <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--kravy-text-muted)", marginBottom: "4px" }}>{item.label}</div>
-                       <div style={{ fontSize: "1.4rem", fontWeight: 950, color: "var(--kravy-text-primary)" }}>₹{format(item.val)}</div>
+                       <div style={{ fontSize: "1.4rem", fontWeight: 950, color: "var(--kravy-text-primary)" }}>{sym}{format(item.val)}</div>
                     </div>
                  </div>
                ))}

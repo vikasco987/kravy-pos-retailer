@@ -1,403 +1,20 @@
-// "use client";
-
-// import React, { use, useEffect, useRef, useState } from "react";
-// import Link from "next/link";
-// import type { Bill, BusinessProfile as PrismaBusinessProfile } from "@prisma/client";
-
-// type BillItem = {
-//   name: string;
-//   qty: number;
-//   rate: number;
-// };
-
-// type BusinessProfile = {
-//   businessName: string;
-//   businessTagLine?: string;
-//   gstNumber?: string;
-//   businessAddress?: string;
-//   district?: string;
-//   state?: string;
-//   pinCode?: string;
-// };
-// type BillResponse = {
-//   bill: Bill;
-//   business: PrismaBusinessProfile | null;
-// };
-
-
-// export default function ViewBillPage({
-//   params,
-// }: {
-//   params: Promise<{ id: string }>;
-// }) {
-//   // ✅ Next.js 16 async params
-//   const { id } = use(params);
-
-//   const [bill, setBill] = useState<Bill | null>(null);
-//   const [business, setBusiness] = useState<PrismaBusinessProfile | null>(null);
-//   const [loading, setLoading] = useState(true);
-//   const receiptRef = useRef<HTMLDivElement>(null);
-
-//   // ✅ Fetch from BillManager API
-//   useEffect(() => {
-//   fetch(`/api/bill-manager/${id}`)
-//     .then((r) => r.json())
-//     .then((data: BillResponse) => {
-//       setBill(data.bill);
-//       setBusiness(data.business);
-//     })
-//     .finally(() => setLoading(false));
-// }, [id]);
-
-
-//   // ✅ Print receipt function    
-
-
-//   function printReceipt() {
-//     if (!receiptRef.current) return;
-//     const html = document.body.innerHTML;
-//     document.body.innerHTML = receiptRef.current.outerHTML;
-//     window.print();
-//     document.body.innerHTML = html;
-//   }
-
-//   if (loading) return <p className="p-6">Loading bill...</p>;
-//   if (!bill) return <p className="p-6">Bill not found</p>;
-
-//   return (
-//     <div className="p-26 space-y-6">
-
-//       {bill.isHeld && (
-//   <div className="p-3 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded">
-//     ⏸ This bill is currently on hold.  
-//     Unhold the bill to proceed with printing or payment.
-//   </div>
-// )}
-//   {bill.isHeld && (
-//   <div className="bg-yellow-50 text-yellow-700 p-3 rounded">
-//     ⏸ This bill is on hold. Resume it to continue.
-//   </div>
-// )}
-
-//       {/* HEADER */}
-//       <div className="flex justify-between items-center">
-//         <div>
-//           <h1 className="text-xl font-semibold">
-//             Bill #{bill.billNumber}
-//           </h1>
-//           <p className="text-sm text-gray-500">
-//             {new Date(bill.createdAt).toLocaleString()}
-//           </p>
-//         </div>
-
-//         {/* CUSTOMER DETAILS */}
-// <div className="border rounded-lg p-3 bg-white">
-//   <p className="text-sm font-medium mb-1">Customer Details</p>
-
-//   <p className="text-sm">
-//     <span className="font-medium">Name:</span>{" "}
-//     {bill.customerId || "Walk-in Customer"}
-//   </p>
-
-//   <p className="text-sm">
-//     <span className="font-medium">Customer:</span>{" "}
-//     {bill.customerId || "Walk-in Customer"}
-//   </p>
-
-// </div>
-
-//         <div className="flex gap-2">
-//          <button
-//   onClick={printReceipt}
-//   disabled={bill.isHeld}
-//   className="border px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-// >
-//   Print
-// </button>
-//       <button disabled={bill.isHeld}className="border px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-// >
-//   Share
-// </button>
-
-// <button disabled={bill.isHeld}className="border px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-// >
-//   Download PDF
-// </button>
-
-//           <Link
-//             href="/billing"
-//             className="border px-3 py-1 rounded"
-//           >
-//             Back
-//           </Link>
-//         </div>
-//       </div>
-
-//       {/* BILL DETAILS */}
-//       <div className="bg-white border rounded-xl p-6 space-y-4">
-//         {/* CUSTOMER */}
-//         <div>
-//           <p className="text-sm text-gray-500">Customer</p>
-//           <p className="font-medium">
-//             {bill.customerName ?? "Walk-in Customer"}
-//           </p>
-//         </div>
-
-//         {/* ITEMS */}
-//         <div className="border rounded-lg overflow-hidden">
-//           <table className="w-full text-sm">
-//             <thead className="bg-gray-50">
-//               <tr>
-//                 <th className="p-3 text-left">Item</th>
-//                 <th className="p-3 text-right">Qty</th>
-//                 <th className="p-3 text-right">Rate</th>
-//                 <th className="p-3 text-right">Amount</th>
-//               </tr>
-//             </thead>
-//             <tbody>
-//               {Array.isArray(bill.items) &&
-//                 bill.items.map((i, idx) => (
-//                   <tr key={idx} className="border-t">
-//                     <td className="p-3">{i.name}</td>
-//                     <td className="p-3 text-right">{i.qty}</td>
-//                     <td className="p-3 text-right">
-//                       ₹{i.rate.toFixed(2)}
-//                     </td>
-//                     <td className="p-3 text-right">
-//                       ₹{(i.qty * i.rate).toFixed(2)}
-//                     </td>
-//                   </tr>
-//                 ))}
-//             </tbody>
-//           </table>
-//         </div>
-
-//         {/* TOTALS */}
-//         <div className="flex justify-end">
-//           <div className="w-full max-w-xs space-y-2 text-sm">
-//             <Row label="Subtotal" value={bill.subtotal} />
-//             <Row label="Discount" value={bill.discount} />
-//             <Row label="Tax" value={bill.tax} />
-//             <Row label="Total" value={bill.total} bold />
-//           </div>
-//         </div>
-
-//         {/* PAYMENT */}
-//         <div className="border-t pt-4 text-sm space-y-1">
-//           <p>
-//             <b>Payment Mode:</b> {bill.paymentMode}
-//           </p>
-//           <p>
-//             <b>Status:</b> {bill.paymentStatus}
-//           </p>
-//           {bill.upiTxnRef && (
-//             <p>
-//               <b>Txn Ref:</b> {bill.upiTxnRef}
-//             </p>
-//           )}
-//         </div>
-//       </div>
-
-//       {/* PRINT RECEIPT */}
-//       <div
-//         ref={receiptRef}
-//         className="hidden print:block w-[80mm] text-[12px]"
-//       >
-//         {/* LOGO */}
-//           {business?.logoUrl && (
-//             <div className="flex justify-center mb-1">
-//               <img
-//                 src={business.logoUrl}
-//                 alt={business.businessName}
-//                 className="max-h-[40px] object-contain"
-//                 onError={(e) => {
-//                   (e.currentTarget as HTMLImageElement).style.display = "none";
-//                 }}
-//               />
-//             </div>
-//           )}
-
-//        <div className="text-center font-bold text-[13px]">
-//           {business?.businessName}
-//           </div>
-
-//           {(business?.businessAddress ||
-//             business?.district ||
-//             business?.state ||
-//             business?.pinCode) && (
-//             <div className="text-center text-[9px]">
-//               {business.businessAddress}
-//               {business.district && `, ${business.district}`}
-//               {business.state && `, ${business.state}`}
-//               {business.pinCode && ` - ${business.pinCode}`}
-//             </div>
-//           )}
-
-//           {business?.gstNumber && (
-//             <div className="text-center text-[9px]">
-//               GSTIN: {business.gstNumber}
-//             </div>
-//           )}
-//            {/* BILL META */}
-//             <div className="text-center text-[9px]">
-//               Bill No: {bill.billNumber}
-//             </div>
-//             <div className="text-center text-[9px]">
-//               Date: {new Date(bill.createdAt).toLocaleString()}
-//             </div>
-
-//             <hr />
-
-//         <hr />
-//           {(bill.customerName || bill.customerPhoneNumber) && (
-//           <>
-//           <div>Customer: {bill.customerName || "Walk-in Customer"}</div>
-//           {bill.customerPhoneNumber && <div>Phone: {bill.customerPhoneNumber}</div>}
-//           <hr />
-//           </>
-//           )}
-//         {/* ITEM HEADER */}
-//           <div className="flex justify-between font-semibold text-[9px] border-b border-dashed pb-1">
-//             <span className="w-[28mm]">Item</span>
-//             <span className="w-[8mm] text-right">Qty</span>
-//             <span className="w-[10mm] text-right">Rate</span>
-//             <span className="w-[12mm] text-right">Amt</span>
-//           </div>
-
-//        {/* ITEMS */}
-//           {bill.items.map((i, idx) => (
-//             <div
-//               key={idx}
-//               className="flex justify-between text-[9px] mt-1"
-//             >
-//               <span className="w-[28mm] truncate">
-//                 {i.name}
-//               </span>
-//               <span className="w-[8mm] text-right">
-//                 {i.qty}
-//               </span>
-//               <span className="w-[10mm] text-right">
-//                 {i.rate.toFixed(2)}
-//               </span>
-//               <span className="w-[12mm] text-right">
-//                 {(i.qty * i.rate).toFixed(2)}
-//               </span>
-//             </div>
-//           ))}
-//           <div className="border-t border-dashed my-1" />
-
-//           {/* SUBTOTAL */}
-//           <div className="flex justify-between text-[9px]">
-//             <span>Subtotal</span>
-//             <span>₹{bill.subtotal.toFixed(2)}</span>
-//           </div>
-
-//           {/* GST */}
-//           <div className="flex justify-between text-[9px]">
-//             <span>GST</span>
-//             <span>₹{bill.tax.toFixed(2)}</span>
-//           </div>
-
-//           <div className="border-t border-dashed my-1" />
-
-//           {/* GRAND TOTAL */}
-//           <div className="flex justify-between font-bold text-[11px]">
-//             <span>GRAND TOTAL</span>
-//             <span>₹{bill.total.toFixed(2)}</span>
-//           </div>
-
-//           <div className="border-t border-dashed my-1" />
-
-//          {/* PAYMENT MODE */}
-// <div className="text-center text-[9px]">
-//   Payment: {bill.paymentMode}
-// </div>
-
-// {/* UPI QR INSIDE RECEIPT */}
-// {bill.paymentMode === "UPI" && business?.upi && (
-//   <>
-//     <div className="flex justify-center my-2">
-//       <img
-//         src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
-//           `upi://pay?pa=${business.upi}&pn=${encodeURIComponent(
-//             business.businessName
-//           )}&am=${bill.total}&cu=INR`
-//         )}`}
-//         alt="UPI QR"
-//         className="w-[28mm]"
-//       />
-//     </div>
-
-//     <div className="text-center text-[9px]">
-//       Scan & Pay via UPI
-//     </div>
-
-//     {bill.upiTxnRef && (
-//       <div className="text-center text-[9px]">
-//         Txn Ref: {bill.upiTxnRef}
-//       </div>
-//     )}
-//   </>
-// )}
-
-//           {business?.businessTagLine && (
-//             <div className="text-center text-[9px] mt-1">
-//               {business.businessTagLine}
-//             </div>
-//           )}
-
-//           <div className="text-center font-semibold text-[10px] mt-1">
-//             Thank you 🙏
-//           </div>
-
-//       </div>
-//     </div>
-//   );
-// }
-
-// /* ---------- SAFE ROW ---------- */
-
-// function Row({
-//   label,
-//   value,
-//   bold,
-// }: {
-//   label: string;
-//   value?: number;
-//   bold?: boolean;
-// }) {
-//   return (
-//     <div
-//       className={`flex justify-between ${
-//         bold ? "font-semibold text-base" : ""
-//       }`}
-//     >
-//       <span>{label}</span>
-//       <span>₹{(value ?? 0).toFixed(2)}</span>
-//     </div>
-//   );
-// }
-
-
-
-
-
-/* ======================================================*/
-
 "use client";
 
+import { useCurrency } from '@/lib/currency-context';
 import React, { useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { generateTextReceiptPreview, ensurePrinterConnected, printReceiptData } from "@/lib/web-bluetooth";
 import { 
   MessageCircle, Printer, Download, ArrowLeft, Receipt, 
-  Calendar, Clock, UtensilsCrossed, User, Phone, 
-  CreditCard, CheckCircle2, AlertCircle, IndianRupee 
+  Calendar, Clock, UtensilsCrossed, User, Phone, Eye,
+  CreditCard, CheckCircle2, AlertCircle, IndianRupee, Bluetooth, History
 } from "lucide-react";
 import { formatWhatsAppNumber } from "@/lib/whatsapp";
 import { WhatsAppBillButton } from "@/components/WhatsAppBillButton";
 import { useAuthContext } from "@/components/AuthContext";
 import PrintTemplates from "@/components/printing/PrintTemplates";
+import BillHistoryModal from "../components/BillHistoryModal";
 import { toast } from "sonner";
 import type {
   BillManager,
@@ -460,8 +77,12 @@ type BillResponse = {
 
 
 export default function ViewBillPage() {
+  const { currencySymbol: sym } = useCurrency();
   const params = useParams();
   const id = params.id as string;
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const returnTo = searchParams.get("returnTo");
 
   const { user: authUser } = useAuthContext();
   const userRole = authUser?.type || null;
@@ -470,8 +91,28 @@ export default function ViewBillPage() {
   const [bill, setBill] = useState<BillManager | null>(null);
   const [business, setBusiness] = useState<PrismaBusinessProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showJson, setShowJson] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showWebPreview, setShowWebPreview] = useState(false);
+  const [webPreviewText, setWebPreviewText] = useState("");
   const receiptRef = useRef<HTMLDivElement>(null);
   const kotRef = useRef<HTMLDivElement>(null);
+  const previewReceiptRef = useRef<HTMLDivElement>(null);
+  const previewKotRef = useRef<HTMLDivElement>(null);
+
+  const handleWebPreview = async () => {
+    try {
+      if (typeof generateTextReceiptPreview !== 'function') {
+        throw new Error(`generateTextReceiptPreview is not a function. Type is ${typeof generateTextReceiptPreview}`);
+      }
+      const text = generateTextReceiptPreview(bill, business, false);
+      setWebPreviewText(text);
+      setShowWebPreview(true);
+    } catch(e: any) {
+      console.error("Web Preview Error:", e);
+      toast.error(e.message || "Failed to show preview. Check console for details.");
+    }
+  };
 
 
   // ✅ Fetch from BillManager API
@@ -484,6 +125,25 @@ export default function ViewBillPage() {
       })
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (bill && business && !loading) {
+      const autoPrint = searchParams.get("autoPrint");
+      if (autoPrint === "bt") {
+        const doPrint = async () => {
+          try {
+            const { ensurePrinterConnected, printReceiptData } = await import("@/lib/web-bluetooth");
+            await ensurePrinterConnected();
+            await printReceiptData(bill, business, receiptRef.current);
+          } catch (e: any) {
+            toast.error(e.message || "Auto Web Print failed");
+          }
+        };
+        // Small delay to ensure the DOM is painted for receiptRef
+        setTimeout(doPrint, 500);
+      }
+    }
+  }, [bill, business, loading, searchParams]);
 
 
   // ✅ Print receipt function using dynamic spooler configurations and variables
@@ -516,6 +176,7 @@ export default function ViewBillPage() {
       const taglineSize = getClamped(ps.taglineSize, 11, 8, 14);
       const receiptTokenSize = getClamped(ps.receiptTokenSize, 28, 18, 40);
       const detailsFontSize = getClamped(ps.detailsFontSize, 10, 8, 14);
+      const customerDetailsFontSize = getClamped(ps.customerDetailsFontSize, detailsFontSize, 8, 24);
       const itemsFontSize = getClamped(ps.itemsFontSize, 11, 9, 18);
       const totalFontSize = getClamped(ps.totalFontSize, 13, 11, 24);
       const greetingFontSize = getClamped(ps.greetingFontSize, 12, 9, 18);
@@ -543,7 +204,7 @@ export default function ViewBillPage() {
         @media print {
           html, body { height: auto !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; background: #fff !important; }
           body > *:not(#${containerId}) { display: none !important; }
-          @page { margin: 0; size: ${is80 ? '80mm' : '58mm'} auto; }
+          @page { margin: 0; size: ${is80 ? '80mm auto' : 'auto'}; }
 
           #${containerId} {
             display: block !important;
@@ -559,7 +220,7 @@ export default function ViewBillPage() {
             box-sizing: border-box !important;
           }
 
-          #${containerId}.receipt-container-dynamic {
+          #${containerId} .receipt-container-dynamic, #${containerId}.receipt-container-dynamic {
             --r-font-family: ${fontFamilyVal};
             --r-business-size: ${finalBusinessNameSize}px;
             --r-address-size: ${finalAddressSize}px;
@@ -568,15 +229,16 @@ export default function ViewBillPage() {
             --r-total-size: ${totalFontSize}px;
             --r-token-size: ${receiptTokenSize}px;
             --r-details-size: ${detailsFontSize}px;
+            --r-customer-details-size: ${customerDetailsFontSize}px;
             --r-greeting-size: ${greetingFontSize}px;
             font-family: var(--r-font-family) !important;
             font-size: var(--r-details-size) !important;
           }
-          #${containerId}.receipt-container-dynamic, #${containerId}.receipt-container-dynamic * {
+          #${containerId} .receipt-container-dynamic, #${containerId}.receipt-container-dynamic, #${containerId} .receipt-container-dynamic *, #${containerId}.receipt-container-dynamic * {
             font-family: var(--r-font-family) !important;
           }
 
-          #${containerId}.kot-container-dynamic {
+          #${containerId} .kot-container-dynamic, #${containerId}.kot-container-dynamic {
             --k-font-family: ${kotFontFamilyVal};
             --k-items-size: ${kotItemsFontSize}px;
             --k-qty-size: ${kotQtyFontSize}px;
@@ -584,24 +246,81 @@ export default function ViewBillPage() {
             font-family: var(--k-font-family) !important;
             font-size: var(--k-items-size) !important;
           }
-          #${containerId}.kot-container-dynamic, #${containerId}.kot-container-dynamic * {
+          #${containerId} .kot-container-dynamic, #${containerId}.kot-container-dynamic, #${containerId} .kot-container-dynamic *, #${containerId}.kot-container-dynamic * {
             font-family: var(--k-font-family) !important;
           }
 
           ${fontWeightVal ? `
-          #${containerId}.receipt-container-dynamic, #${containerId}.receipt-container-dynamic * {
+          #${containerId} .receipt-container-dynamic, #${containerId}.receipt-container-dynamic, #${containerId} .receipt-container-dynamic *, #${containerId}.receipt-container-dynamic * {
             font-weight: ${fontWeightVal} !important;
           }
           ` : ''}
 
           ${kotFontWeightVal ? `
-          #${containerId}.kot-container-dynamic, #${containerId}.kot-container-dynamic * {
+          #${containerId} .kot-container-dynamic, #${containerId}.kot-container-dynamic, #${containerId} .kot-container-dynamic *, #${containerId}.kot-container-dynamic * {
             font-weight: ${kotFontWeightVal} !important;
           }
           ` : ''}
 
           * { color: #000 !important; border-color: #000 !important; overflow: visible !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           img { filter: grayscale(100%) contrast(300%) !important; max-width: 100% !important; display: block !important; margin: 0 auto !important; }
+
+          /* 3-inch print layout: explicit CSS fallbacks for Tailwind utility classes */
+          ${is80 ? `
+          #${containerId} .flex { display: flex !important; }
+          #${containerId} .flex-1 { flex: 1 1 0% !important; }
+          #${containerId} .shrink-0 { flex-shrink: 0 !important; }
+          #${containerId} .min-w-0 { min-width: 0 !important; }
+          #${containerId} .justify-between { justify-content: space-between !important; }
+          #${containerId} .items-start { align-items: flex-start !important; }
+          #${containerId} .items-center { align-items: center !important; }
+          #${containerId} .text-center { text-align: center !important; }
+          #${containerId} .text-right { text-align: right !important; }
+          #${containerId} .text-left { text-align: left !important; }
+          #${containerId} .break-words { overflow-wrap: break-word !important; word-break: break-word !important; }
+          #${containerId} .whitespace-nowrap { white-space: nowrap !important; }
+          #${containerId} .w-\\[26mm\\] { width: 26mm !important; }
+          #${containerId} .w-\\[16mm\\] { width: 16mm !important; }
+          #${containerId} .w-\\[12mm\\] { width: 12mm !important; }
+          #${containerId} .pr-1 { padding-right: 0.25rem !important; }
+          #${containerId} .pr-2 { padding-right: 0.5rem !important; }
+          #${containerId} .pl-0\\.5 { padding-left: 0.125rem !important; }
+          #${containerId} .pl-1 { padding-left: 0.25rem !important; }
+          #${containerId} .leading-\\[1\\.2\\] { line-height: 1.2 !important; }
+          #${containerId} .leading-tight { line-height: 1.25 !important; }
+          #${containerId} .font-bold { font-weight: 700 !important; }
+          #${containerId} .font-black { font-weight: 900 !important; }
+          #${containerId} .space-y-1 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.25rem !important; }
+          #${containerId} .border-b { border-bottom-width: 1px !important; }
+          #${containerId} .border-t { border-top-width: 1px !important; }
+          #${containerId} .border-t-2 { border-top-width: 2px !important; }
+          #${containerId} .border-y-2 { border-top-width: 2px !important; border-bottom-width: 2px !important; }
+          #${containerId} .border-dashed { border-style: dashed !important; }
+          #${containerId} .border-dotted { border-style: dotted !important; }
+          #${containerId} .uppercase { text-transform: uppercase !important; }
+          #${containerId} .italic { font-style: italic !important; }
+          #${containerId} .mb-2 { margin-bottom: 0.5rem !important; }
+          #${containerId} .pb-1 { padding-bottom: 0.25rem !important; }
+          #${containerId} .py-1 { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+          #${containerId} .py-2 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
+          #${containerId} .px-1 { padding-left: 0.25rem !important; padding-right: 0.25rem !important; }
+          #${containerId} .my-1 { margin-top: 0.25rem !important; margin-bottom: 0.25rem !important; }
+          #${containerId} .mt-0\\.5 { margin-top: 0.125rem !important; }
+          #${containerId} .mt-1 { margin-top: 0.25rem !important; }
+          #${containerId} .mt-2 { margin-top: 0.5rem !important; }
+          #${containerId} .mt-3 { margin-top: 0.75rem !important; }
+          #${containerId} .mt-4 { margin-top: 1rem !important; }
+          #${containerId} .mb-1 { margin-bottom: 0.25rem !important; }
+          #${containerId} .pt-1 { padding-top: 0.25rem !important; }
+          #${containerId} .pt-2 { padding-top: 0.5rem !important; }
+          #${containerId} .w-full { width: 100% !important; }
+          #${containerId} .border-collapse { border-collapse: collapse !important; }
+          #${containerId} .w-\\[30mm\\] { width: 30mm !important; }
+          #${containerId} .h-\\[30mm\\] { height: 30mm !important; }
+          #${containerId} .inline-block { display: inline-block !important; }
+          #${containerId} .block { display: block !important; }
+          #${containerId} .flex-wrap { flex-wrap: wrap !important; }
+          ` : ''}
         }
       `;
       document.head.appendChild(style);
@@ -626,13 +345,28 @@ export default function ViewBillPage() {
 
       document.body.appendChild(container);
 
-      window.print();
-      
-      // Delay cleanup significantly to ensure slow spoolers finish reading the DOM
-      setTimeout(() => {
-        if (document.body.contains(container)) container.remove();
-        if (document.head.contains(style)) style.remove();
-      }, 15000); 
+      // Dynamic Image Preloader: Ensure logo and QR codes are fully loaded before print dialog opens
+      const images = container.querySelectorAll("img");
+      const imagePromises = Array.from(images).map((img) => {
+        if (img.complete) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        });
+      });
+
+      Promise.all(imagePromises).then(() => {
+        const timeoutDelay = images.length > 0 ? 150 : 10;
+        setTimeout(() => {
+          window.print();
+          
+          // Delay cleanup significantly to ensure slow spoolers finish reading the DOM
+          setTimeout(() => {
+            if (document.body.contains(container)) container.remove();
+            if (document.head.contains(style)) style.remove();
+          }, 15000); 
+        }, timeoutDelay);
+      });
     }, 50);
   };
 
@@ -708,9 +442,15 @@ export default function ViewBillPage() {
     : [];
 
   // ── Precise Print-Time Calculations matching POS Checkout spooler ──
-  const taxActive = business?.taxEnabled ?? true;
-  const perProductEnabled = business?.perProductTaxEnabled ?? false;
-  const globalRate = business?.taxRate ?? 5.0;
+  const tableName = (bill as any).tableName || (bill as any).selectedTable || "";
+  const isDining = tableName && tableName !== "POS" && tableName !== "TAKEAWAY" && tableName !== "DELIVERY";
+
+  // Historically accurate tax active state
+  const taxActive = (bill.tax || 0) > 0 || (bill.deliveryGst || 0) > 0 || (bill.packagingGst || 0) > 0;
+  const perProductEnabled = true;
+  const globalRate = 0;
+  const globalTaxInclusive = false;
+
   const discountAmt = bill.discountAmount || 0;
   
   // Recalculate discount ratio
@@ -720,7 +460,7 @@ export default function ViewBillPage() {
     const rawItem = (bill.items as any[]).find((it: any) => (it.name === item.name || it.id === item.id)) || {};
     
     let rate = 0;
-    if (perProductEnabled && rawItem.gst !== undefined && rawItem.gst !== null) {
+    if (taxActive && perProductEnabled && rawItem.gst !== undefined && rawItem.gst !== null) {
       rate = Number(rawItem.gst);
     } else if (taxActive) {
       rate = globalRate;
@@ -733,12 +473,12 @@ export default function ViewBillPage() {
     const taxStatus = rawItem.taxStatus || "Without Tax";
     let isInclusive = taxStatus === "With Tax";
 
-    if ((bill.tax || 0) > 0 && (bill.total || 0) > 0) {
-      const expectedExclusive = (bill.subtotal || 0) + (bill.tax || 0) + (bill.deliveryCharges || 0) + (bill.packagingCharges || 0) + (bill.serviceCharge || 0) - (bill.discountAmount || 0);
-      if (Math.abs(bill.total - expectedExclusive) < 0.5) {
-        isInclusive = false;
+    // If perProductTax is disabled, use global taxInclusive setting
+    if (!perProductEnabled) {
+      if (typeof (bill as any).isTaxInclusive === 'boolean') {
+        isInclusive = (bill as any).isTaxInclusive;
       } else {
-        isInclusive = true;
+        isInclusive = globalTaxInclusive;
       }
     }
 
@@ -792,271 +532,387 @@ export default function ViewBillPage() {
   /* ================= UPI ================= */
   const upiLink = `upi://pay?pa=${business?.upi || ""}&pn=${encodeURIComponent(business?.businessName || "Store")}&am=${bill.total.toFixed(2)}&cu=INR`;
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiLink)}`;
-
+  
+  const handleBack = () => {
+    if (returnTo) {
+      router.push(returnTo);
+    } else if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/dashboard/billing");
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 p-4 sm:p-6 lg:p-10 space-y-8 max-w-5xl mx-auto">
+    <div className="w-full min-h-full text-slate-900 dark:text-slate-100 p-0 sm:p-1 md:p-2">
+      <style>{`
+        @keyframes pageSlideInRight {
+          from { transform: translateX(20px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        .page-slide-in {
+          animation: pageSlideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+      `}</style>
       
-      {/* ── Status Alerts ── */}
-      {bill.isHeld && (
-        <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300 rounded-3xl shadow-sm animate-pulse">
-          <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">
-            <Clock size={20} className="animate-spin" />
-          </div>
-          <div>
-            <p className="font-black text-sm uppercase tracking-tight">Bill is on Hold</p>
-            <p className="text-xs font-medium opacity-80">Unhold the bill to proceed with printing or payment.</p>
-          </div>
-        </div>
-      )}
-
-      {/* ── Page Header ── */}
-      <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-        <div className="flex items-center gap-5">
-          <div className="w-16 h-16 rounded-[24px] bg-gradient-to-br from-indigo-600 to-indigo-500 flex items-center justify-center shadow-xl shadow-indigo-500/20 flex-shrink-0">
-            <Receipt className="text-white" size={32} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                Bill <span className="text-indigo-600 dark:text-indigo-400">#{bill.billNumber}</span>
-              </h1>
-              <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${bill.paymentStatus?.toLowerCase() === 'paid' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400'}`}>
-                {bill.paymentStatus || 'Pending'}
-              </span>
-            </div>
-            <p className="text-sm font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-              <Calendar size={14} />
-              {new Date(bill.createdAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'long', year: 'numeric' })}
-              <span className="opacity-30 mx-1">|</span>
-              <Clock size={14} />
-              {new Date(bill.createdAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+      <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 page-slide-in">
+        
+        {/* ── Top Navigation Row: Back Arrow Button ── */}
+        <div className="flex items-center justify-between">
           <button
-            onClick={printReceipt}
-            disabled={bill.isHeld}
-            className="flex-1 lg:flex-none flex items-center justify-center gap-2.5 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 px-6 py-3 rounded-2xl font-black text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm active:scale-[0.98] disabled:opacity-50"
+            onClick={handleBack}
+            className="group inline-flex items-center gap-2 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-700 shadow-sm transition-all active:scale-95"
+            title="Go Back"
           >
-            <Printer size={18} className="text-indigo-500" />
-            Print
+            <ArrowLeft size={18} className="transition-transform group-hover:-translate-x-1" />
+            <span className="text-xs sm:text-sm font-black">Back</span>
           </button>
-
-          {(userRole === "ADMIN" || userRole === "OWNER" || userRole === "SELLER" || userPermissions.includes("whatsapp-bill")) && (
-            <WhatsAppBillButton 
-              billId={id} 
-              defaultPhone={bill.customerPhone || ""} 
-              onSent={() => {}} 
-            />
-          )}
-
-          <button
-            onClick={() => window.open((bill as any).pdfUrl || `/api/bill-manager/${bill.id}/pdf${bill.clerkUserId ? `?clerkId=${bill.clerkUserId}` : ""}`, "_blank")}
-            disabled={bill.isHeld}
-            className="flex-1 lg:flex-none flex items-center justify-center gap-2.5 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 px-6 py-3 rounded-2xl font-black text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm active:scale-[0.98] disabled:opacity-50"
-          >
-            <Download size={18} className="text-sky-500" />
-            PDF
-          </button>
-
-          <Link
-            href="/dashboard/billing"
-            className="flex-1 lg:flex-none flex items-center justify-center gap-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-6 py-3 rounded-2xl font-black text-sm hover:opacity-90 transition-all shadow-lg shadow-slate-200 dark:shadow-none active:scale-[0.98]"
-          >
-            <ArrowLeft size={18} />
-            Back
-          </Link>
         </div>
-      </header>
 
-      {/* ── Bill Body ── */}
-      <div className="grid lg:grid-cols-3 gap-8">
-        {/* Left Column: Items & Details */}
-        <div className="lg:col-span-2 space-y-8">
-          <section className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
-              <h2 className="text-sm font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
-                <UtensilsCrossed size={16} /> Order Summary
-              </h2>
-              <span className="text-xs font-black px-3 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full text-slate-600 dark:text-slate-400">
-                {billItems.length} Items
-              </span>
+        {/* ── Status Alert (Hold) ── */}
+        {bill.isHeld && (
+          <div className="flex items-center gap-3 p-3.5 sm:p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300 rounded-2xl shadow-sm">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">
+              <Clock size={18} className="animate-spin text-amber-600 dark:text-amber-400" />
             </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-black text-xs sm:text-sm uppercase tracking-tight">Bill is on Hold</p>
+              <p className="text-[11px] sm:text-xs font-medium opacity-80 truncate">Unhold the bill to proceed with printing or payment.</p>
+            </div>
+          </div>
+        )}
 
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-50 dark:border-slate-800">
-                    <th className="px-6 py-4 text-left">Product</th>
-                    <th className="px-4 py-4 text-center">Qty</th>
-                    <th className="px-4 py-4 text-right">Price</th>
-                    <th className="px-6 py-4 text-right">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
-                  {billItems.map((item, idx) => (
-                    <tr key={idx} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-6 py-4">
-                        <p className="font-bold text-slate-800 dark:text-slate-200">{item.name}</p>
-                        {/* If we have category or HSN info we could add it here */}
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-black text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                          {item.qty}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-right font-bold text-slate-500 dark:text-slate-400 text-sm">
-                        ₹{item.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-6 py-4 text-right font-black text-slate-900 dark:text-white">
-                        ₹{(item.qty * item.rate).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
+        {/* ── Page Header / Action Bar ── */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+          
+          {/* Bill Title & Meta */}
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div className="w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-500 flex items-center justify-center shadow-md shadow-indigo-500/20 flex-shrink-0">
+              <Receipt className="text-white" size={22} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <span className="text-[11px] sm:text-xs font-black text-slate-400 uppercase tracking-wider">Bill</span>
+                <h1 className="text-base sm:text-lg md:text-xl lg:text-2xl font-black text-indigo-600 dark:text-indigo-400 tracking-tight break-all">
+                  #{bill.billNumber}
+                </h1>
+                <span className={`px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider ${
+                  bill.paymentStatus?.toLowerCase() === 'paid' 
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' 
+                    : bill.paymentStatus?.toLowerCase() === 'partial'
+                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400'
+                    : 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400'
+                }`}>
+                  {bill.paymentStatus || 'Pending'}
+                </span>
+              </div>
+              <p className="text-[10px] sm:text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <span className="flex items-center gap-1">
+                  <Calendar size={12} />
+                  {new Date(bill.createdAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}
+                </span>
+                <span className="opacity-30">•</span>
+                <span className="flex items-center gap-1">
+                  <Clock size={12} />
+                  {new Date(bill.createdAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </p>
+            </div>
+          </div>
+
+          {/* Action Buttons (Responsively wrapping, touch-friendly) */}
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full xl:w-auto">
+            <button
+              onClick={printReceipt}
+              disabled={bill.isHeld}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition shadow-sm active:scale-95 disabled:opacity-50"
+            >
+              <Printer size={15} className="text-indigo-500" />
+              <span>Print</span>
+            </button>
+
+            <button
+              onClick={handleWebPreview}
+              disabled={bill.isHeld}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition shadow-sm active:scale-95 disabled:opacity-50"
+            >
+              <Eye size={15} className="text-purple-500" />
+              <span className="whitespace-nowrap">Web Preview</span>
+            </button>
+
+            <button
+              onClick={async () => {
+                try {
+                  await ensurePrinterConnected();
+                  await printReceiptData(bill, business, receiptRef.current);
+                } catch (err: any) {
+                  toast.error(err.message || "Web Print failed");
+                }
+              }}
+              disabled={bill.isHeld}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm hover:opacity-90 transition shadow-sm active:scale-95 disabled:opacity-50"
+            >
+              <Bluetooth size={15} className="text-indigo-400 dark:text-indigo-600" />
+              <span className="whitespace-nowrap">Web Print</span>
+            </button>
+
+            <button
+              onClick={() => setShowJson(true)}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition shadow-sm active:scale-95"
+            >
+              JSON
+            </button>
+
+            <button
+              onClick={() => setShowHistory(true)}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition shadow-sm active:scale-95"
+            >
+              <History size={15} />
+              <span>History</span>
+            </button>
+
+            <button
+              onClick={() => window.open((bill as any).pdfUrl || `/api/bill-manager/${bill.id}/pdf${bill.clerkUserId ? `?clerkId=${bill.clerkUserId}` : ""}`, "_blank")}
+              disabled={bill.isHeld}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition shadow-sm active:scale-95 disabled:opacity-50"
+            >
+              <Download size={15} className="text-sky-500" />
+              <span>PDF</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ── Main Responsive Grid ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+          
+          {/* LEFT 2 COLUMNS: Order Summary */}
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+            <section className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden">
+              <div className="px-4 sm:px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/20">
+                <h2 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                  <UtensilsCrossed size={16} className="text-indigo-500" /> Order Summary
+                </h2>
+                <span className="text-xs font-bold px-3 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full text-slate-600 dark:text-slate-300">
+                  {billItems.length} {billItems.length === 1 ? 'Item' : 'Items'}
+                </span>
+              </div>
+
+              {/* Responsive Table */}
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-800/10">
+                      <th className="px-4 sm:px-6 py-3.5">Product</th>
+                      <th className="px-3 sm:px-4 py-3.5 text-center">Qty</th>
+                      <th className="px-3 sm:px-4 py-3.5 text-right">Price</th>
+                      <th className="px-4 sm:px-6 py-3.5 text-right">Amount</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
+                    {billItems.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
+                        <td className="px-4 sm:px-6 py-3.5 min-w-[140px]">
+                          <p className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 break-words">{item.name}</p>
+                          {item.variants && item.variants.length > 0 && (
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              {item.variants.map((v: any) => v.name || v).join(", ")}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-3 sm:px-4 py-3.5 text-center">
+                          <span className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-black text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                            {item.qty}
+                          </span>
+                        </td>
+                        <td className="px-3 sm:px-4 py-3.5 text-right font-medium text-slate-500 dark:text-slate-400 text-xs sm:text-sm whitespace-nowrap">
+                          {sym}{(item.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 sm:px-6 py-3.5 text-right font-black text-slate-900 dark:text-white text-xs sm:text-sm whitespace-nowrap">
+                          {sym}{((item.qty || 0) * (item.rate || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-            <div className="p-8 bg-slate-50/50 dark:bg-slate-800/30 flex flex-col items-end border-t border-slate-100 dark:border-slate-800">
-              <div className="w-full max-w-[280px] space-y-3">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="font-bold text-slate-500 dark:text-slate-400">Subtotal</span>
-                  <span className="font-black text-slate-900 dark:text-white">₹{bill.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                </div>
-                {bill.tax ? (
-                   <div className="flex justify-between items-center text-sm">
-                    <span className="font-bold text-slate-500 dark:text-slate-400">GST / Tax</span>
-                    <span className="font-black text-amber-600 dark:text-amber-400">₹{bill.tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              {/* Total Calculation Section */}
+              <div className="p-4 sm:p-6 bg-slate-50/40 dark:bg-slate-800/20 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                <div className="w-full sm:max-w-xs space-y-2.5">
+                  <div className="flex justify-between items-center text-xs sm:text-sm">
+                    <span className="font-semibold text-slate-500 dark:text-slate-400">Subtotal</span>
+                    <span className="font-black text-slate-800 dark:text-slate-200">{sym}{(bill.subtotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
-                ) : null}
-                <div className="h-px bg-slate-200 dark:bg-slate-700 my-2" />
-                <div className="flex justify-between items-center">
-                  <span className="text-base font-black text-slate-900 dark:text-white">Grand Total</span>
-                  <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">₹{bill.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  
+                  {discountAmt > 0 && (
+                    <div className="flex justify-between items-center text-xs sm:text-sm text-emerald-600 dark:text-emerald-400">
+                      <span className="font-semibold">Discount</span>
+                      <span className="font-black">-{sym}{discountAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+
+                  {bill.tax ? (
+                    <div className="flex justify-between items-center text-xs sm:text-sm">
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">GST / Tax</span>
+                      <span className="font-black text-amber-600 dark:text-amber-400">{sym}{(bill.tax || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  ) : null}
+
+                  {deliveryCharge > 0 && (
+                    <div className="flex justify-between items-center text-xs sm:text-sm">
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">Delivery Charge</span>
+                      <span className="font-black text-slate-800 dark:text-slate-200">{sym}{deliveryCharge.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+
+                  {packagingCharge > 0 && (
+                    <div className="flex justify-between items-center text-xs sm:text-sm">
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">Packaging Charge</span>
+                      <span className="font-black text-slate-800 dark:text-slate-200">{sym}{packagingCharge.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+
+                  <div className="h-px bg-slate-200 dark:bg-slate-700 my-1" />
+
+                  <div className="flex justify-between items-center pt-1">
+                    <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white">Grand Total</span>
+                    <span className="text-lg sm:text-xl font-black text-indigo-600 dark:text-indigo-400">{sym}{(bill.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </section>
-        </div>
+            </section>
+          </div>
 
-        {/* Right Column: Information Cards */}
-        <div className="space-y-6">
-          {/* Customer Info Card */}
-          <section className="bg-white dark:bg-slate-900 rounded-[32px] p-6 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-              <User size={80} />
-            </div>
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-5 flex items-center gap-2">
-              <User size={14} className="text-indigo-500" /> Customer Information
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Full Name</p>
-                <p className="text-lg font-black text-slate-800 dark:text-slate-200">{bill.customerName || "Walk-in Customer"}</p>
+          {/* RIGHT COLUMN: Information Cards */}
+          <div className="space-y-4 sm:space-y-6">
+            
+            {/* Customer Info Card */}
+            <section className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+              <div className="absolute top-2 right-2 p-2 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
+                <User size={70} />
               </div>
-              {bill.customerPhone && (
+              <h3 className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-400 mb-4 flex items-center gap-2">
+                <User size={14} className="text-indigo-500" /> Customer Information
+              </h3>
+              <div className="space-y-3.5">
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Phone Number</p>
-                  <p className="text-sm font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <Phone size={14} className="text-emerald-500" />
-                    {bill.customerPhone}
-                  </p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Full Name</p>
+                  <p className="text-base sm:text-lg font-black text-slate-800 dark:text-slate-100">{bill.customerName || "Walk-in Customer"}</p>
                 </div>
-              )}
-               {(bill as any).buyerGSTIN && (
-                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">GSTIN Number</p>
-                  <p className="text-sm font-black text-indigo-600 dark:text-indigo-400 uppercase">{(bill as any).buyerGSTIN}</p>
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* Payment Info Card */}
-          <section className="bg-white dark:bg-slate-900 rounded-[32px] p-6 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-              <CreditCard size={80} />
-            </div>
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-5 flex items-center gap-2">
-              <CreditCard size={14} className="text-emerald-500" /> Payment Details
-            </h3>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Payment Mode</p>
-                  <p className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight">
-                    {bill.paymentMode?.startsWith("Split") ? "Split Payment" : (bill.paymentMode || "Cash")}
-                  </p>
-                </div>
-                <div className={`p-2 rounded-xl ${bill.paymentStatus?.toLowerCase() === 'paid' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30' : bill.paymentStatus?.toLowerCase() === 'partial' ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/30' : 'bg-rose-50 text-rose-600 dark:bg-rose-950/30'}`}>
-                  {bill.paymentStatus?.toLowerCase() === 'paid' ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
-                </div>
-              </div>
-
-              {bill.paymentMode?.startsWith("Split") && (
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {bill.paymentMode.replace("Split (", "").replace(")", "").split(",").map((s, i) => (
-                    <span key={i} className="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-[11px] font-black tracking-wide border border-slate-200 dark:border-slate-700 uppercase">
-                      {s.trim()}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {bill.paymentStatus?.toLowerCase() === 'partial' && (
-                <div className="flex justify-between items-center bg-amber-50 dark:bg-amber-950/20 p-3 rounded-xl border border-amber-100 dark:border-amber-900/50 mt-2">
+                {bill.customerPhone && (
                   <div>
-                    <p className="text-[10px] font-bold text-amber-600/70 dark:text-amber-500/70 uppercase tracking-tighter">Amount Paid</p>
-                    <p className="text-sm font-black text-amber-700 dark:text-amber-400">₹{(bill.amountPaid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Phone Number</p>
+                    <p className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 mt-0.5">
+                      <Phone size={13} className="text-emerald-500" />
+                      {bill.customerPhone}
+                    </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-bold text-rose-600/70 dark:text-rose-500/70 uppercase tracking-tighter">Balance Due</p>
-                    <p className="text-sm font-black text-rose-700 dark:text-rose-400">₹{(bill.balanceDue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                )}
+                {(bill as any).buyerGSTIN && (
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">GSTIN Number</p>
+                    <p className="text-xs sm:text-sm font-black text-indigo-600 dark:text-indigo-400 uppercase">{(bill as any).buyerGSTIN}</p>
+                  </div>
+                )}
+                {(bill as any).customerAddress && (
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Address</p>
+                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mt-0.5">{(bill as any).customerAddress}</p>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* Payment Info Card */}
+            <section className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+              <div className="absolute top-2 right-2 p-2 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
+                <CreditCard size={70} />
+              </div>
+              <h3 className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-400 mb-4 flex items-center gap-2">
+                <CreditCard size={14} className="text-emerald-500" /> Payment Details
+              </h3>
+              <div className="space-y-3.5">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Payment Mode</p>
+                    <p className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-tight">
+                      {bill.paymentMode?.startsWith("Split") ? "Split Payment" : (bill.paymentMode || "Cash")}
+                    </p>
+                  </div>
+                  <div className={`p-2 rounded-xl ${
+                    bill.paymentStatus?.toLowerCase() === 'paid' 
+                      ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40' 
+                      : bill.paymentStatus?.toLowerCase() === 'partial' 
+                      ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/40' 
+                      : 'bg-rose-50 text-rose-600 dark:bg-rose-950/40'
+                  }`}>
+                    {bill.paymentStatus?.toLowerCase() === 'paid' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
                   </div>
                 </div>
-              )}
-              
-              {bill.upiTxnRef && (
-                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Transaction ID</p>
-                  <p className="text-xs font-black text-slate-500 dark:text-slate-400 font-mono bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-800">
-                    {bill.upiTxnRef}
-                  </p>
-                </div>
-              )}
 
-              {bill.tableName && (
-                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Source / Table</p>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 rounded-lg text-xs font-black uppercase">
-                    <UtensilsCrossed size={12} />
-                    {bill.tableName}
-                  </span>
-                </div>
-              )}
-            </div>
-          </section>
+                {bill.paymentMode?.startsWith("Split") && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {bill.paymentMode.replace("Split (", "").replace(")", "").split(",").map((s, i) => (
+                      <span key={i} className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-black border border-slate-200 dark:border-slate-700 uppercase">
+                        {s.trim()}
+                      </span>
+                    ))}
+                  </div>
+                )}
 
-          {/* Quick Info Bar */}
-          <div className="bg-gradient-to-r from-indigo-600 to-indigo-500 rounded-[28px] p-6 text-white shadow-lg shadow-indigo-500/30">
-            <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Business Name</p>
-            <p className="text-xl font-black truncate mb-4">{business?.businessName}</p>
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <p className="text-[9px] font-bold opacity-60 uppercase tracking-tighter">Total Bill</p>
-                <p className="text-lg font-black tracking-tight">₹{bill.total.toLocaleString()}</p>
+                {bill.paymentStatus?.toLowerCase() === 'partial' && (
+                  <div className="flex justify-between items-center bg-amber-50 dark:bg-amber-950/30 p-2.5 rounded-xl border border-amber-100 dark:border-amber-900/50 mt-1">
+                    <div>
+                      <p className="text-[9px] font-bold text-amber-600/70 dark:text-amber-400 uppercase">Paid</p>
+                      <p className="text-xs font-black text-amber-700 dark:text-amber-300">{sym}{(bill.amountPaid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] font-bold text-rose-600/70 dark:text-rose-400 uppercase">Balance Due</p>
+                      <p className="text-xs font-black text-rose-700 dark:text-rose-300">{sym}{(bill.balanceDue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                    </div>
+                  </div>
+                )}
+
+                {bill.upiTxnRef && (
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Transaction ID</p>
+                    <p className="text-[11px] font-mono text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-800 break-all">
+                      {bill.upiTxnRef}
+                    </p>
+                  </div>
+                )}
+
+                {bill.tableName && (
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Source / Table</p>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 rounded-lg text-xs font-black uppercase mt-0.5">
+                      <UtensilsCrossed size={12} />
+                      {bill.tableName}
+                    </span>
+                  </div>
+                )}
               </div>
-              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-                <IndianRupee size={20} />
+            </section>
+
+            {/* Business Quick Card */}
+            <div className="bg-gradient-to-br from-indigo-600 via-indigo-600 to-indigo-700 rounded-2xl sm:rounded-3xl p-5 text-white shadow-lg shadow-indigo-500/20">
+              <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest opacity-70 mb-0.5">Business Name</p>
+              <p className="text-base sm:text-lg font-black truncate mb-3">{business?.businessName || "Kravy POS"}</p>
+              <div className="flex items-center justify-between pt-2 border-t border-white/15">
+                <div>
+                  <p className="text-[9px] font-bold opacity-70 uppercase tracking-tight">Total Bill</p>
+                  <p className="text-lg sm:text-xl font-black tracking-tight">{sym}{(bill.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                  <IndianRupee size={18} />
+                </div>
               </div>
             </div>
+
           </div>
         </div>
-      </div>
 
+      </div>
       {/* PRINT RECEIPT — Unified PrintTemplates (honours all printSettings) */}
 
       <PrintTemplates
@@ -1103,6 +959,129 @@ export default function ViewBillPage() {
         kotNumbers={(bill as any).kotNumbers || []}
         numberToWords={numberToWords}
       />
+
+      {showJson && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 999999, display: "flex", flexDirection: "column", background: "rgba(0,0,0,0.6)", padding: "20px" }}>
+          <div style={{ margin: "auto", background: "#0F172A", width: "100%", maxWidth: "600px", borderRadius: "20px", display: "flex", flexDirection: "column", overflow: "hidden", maxHeight: "90vh", boxShadow: "0 25px 50px rgba(0,0,0,0.25)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", background: "#1E293B", borderBottom: "1px solid #334155" }}>
+               <div style={{ fontSize: "1.15rem", fontWeight: 950, color: "white" }}>JSON Debug View</div>
+               <button onClick={() => setShowJson(false)} style={{ width: "36px", height: "36px", borderRadius: "10px", background: "rgba(255,255,255,0.1)", color: "#94A3B8", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "0.2s" }} className="hover:bg-red-500/20 hover:text-red-400">
+                 <span style={{ fontSize: "24px", lineHeight: 1 }}>×</span>
+               </button>
+            </div>
+            <div style={{ padding: "24px", overflowY: "auto", flex: 1, position: "relative" }}>
+               <button onClick={() => { navigator.clipboard.writeText(JSON.stringify(bill, null, 2)); toast.success("JSON copied!"); }} style={{ position: "absolute", top: "24px", right: "24px", padding: "6px 12px", background: "#3B82F6", color: "white", borderRadius: "6px", border: "none", fontSize: "0.75rem", cursor: "pointer", fontWeight: "bold", zIndex: 10, transition: "0.2s" }} className="hover:bg-blue-600">Copy JSON</button>
+               <div style={{ marginBottom: "16px", padding: "12px", background: "rgba(0,0,0,0.3)", borderRadius: "8px", color: "#94A3B8", wordBreak: "break-all" }}>
+                 <div style={{ fontWeight: "bold", color: "#F8FAFC", marginBottom: "4px" }}>Fetch URL:</div>
+                 /api/bill-manager/{id}
+               </div>
+               <pre style={{ margin: 0, color: "#38BDF8", fontFamily: "monospace", fontSize: "0.85rem", overflowX: "auto", paddingTop: "12px" }}>{JSON.stringify(bill, null, 2)}</pre>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Web Print Preview Modal */}
+      {showWebPreview && (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+              <h3 className="font-black text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                <Bluetooth className="text-indigo-500" size={20} />
+                Web Print Preview
+              </h3>
+              <button 
+                onClick={() => setShowWebPreview(false)}
+                className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto bg-slate-100 dark:bg-black/50 flex-1 flex flex-col items-center">
+              <div 
+                className="bg-white w-[80mm] min-h-[100px] p-4 shadow-md text-black whitespace-pre leading-tight mx-auto border border-slate-200 overflow-x-auto shrink-0"
+                style={{ fontFamily: '"Courier New", Courier, monospace', fontSize: '11px' }}
+              >
+                {webPreviewText}
+              </div>
+
+              <div className="mt-6 flex flex-col gap-4 w-full max-w-[80mm] mx-auto">
+                <div className="bg-slate-200 dark:bg-slate-800 p-3 rounded-xl border border-slate-300 dark:border-slate-700 w-full text-left">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">API Endpoint</span>
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(`/api/bill-manager/${id}`);
+                        toast.success("URL copied!");
+                      }}
+                      className="text-xs px-2 py-1 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900 transition-colors"
+                    >
+                      Copy URL
+                    </button>
+                  </div>
+                  <div className="text-[11px] font-mono text-slate-700 dark:text-slate-300 break-all p-2 bg-white dark:bg-slate-900 rounded border border-slate-300 dark:border-slate-700">
+                    /api/bill-manager/{id}
+                  </div>
+                </div>
+
+                <div className="bg-slate-200 dark:bg-slate-800 p-3 rounded-xl border border-slate-300 dark:border-slate-700 w-full text-left">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">JSON Data</span>
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(JSON.stringify(bill, null, 2));
+                        toast.success("JSON copied!");
+                      }}
+                      className="text-xs px-2 py-1 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900 transition-colors"
+                    >
+                      Copy JSON
+                    </button>
+                  </div>
+                  <div className="h-32 overflow-y-auto mt-2 bg-white dark:bg-slate-900 p-2 rounded border border-slate-300 dark:border-slate-700">
+                    <pre className="text-[10px] font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                      {JSON.stringify(bill, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-end gap-3">
+              <button 
+                onClick={() => setShowWebPreview(false)}
+                className="px-5 py-2.5 rounded-xl font-bold text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+              >
+                Close
+              </button>
+              <button 
+                onClick={async () => {
+                  setShowWebPreview(false);
+                  try {
+                    await ensurePrinterConnected();
+                    await printReceiptData(bill, business, receiptRef.current);
+                  } catch (err: any) {
+                    toast.error(err.message || "Web Print failed");
+                  }
+                }}
+                className="px-5 py-2.5 rounded-xl font-black text-sm bg-indigo-600 text-white hover:bg-indigo-700 transition-colors flex items-center gap-2"
+              >
+                <Bluetooth size={16} /> Print Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bill Edit History Audit Modal */}
+      {bill && (
+        <BillHistoryModal
+          billId={bill.id}
+          isOpen={showHistory}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
+
     </div>
   );
 }

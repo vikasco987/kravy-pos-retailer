@@ -1,5 +1,5 @@
 "use client";
-
+import { useCurrency } from "@/lib/currency-context";
 import React from "react";
 import {
   ResponsiveContainer,
@@ -22,7 +22,9 @@ interface Props {
 }
 
 export default function OrderTypeCharts({ dailyTrends, hourlyDistribution }: Props) {
-  const formatValue = (value: number) => `₹${new Intl.NumberFormat("en-IN").format(Math.round(value))}`;
+  const { currencySymbol: sym } = useCurrency();
+
+  const formatValue = (value: number) => `${sym}${new Intl.NumberFormat("en-IN").format(Math.round(value))}`;
 
   return (
     <div style={{ display: "contents" }}>
@@ -57,7 +59,7 @@ export default function OrderTypeCharts({ dailyTrends, hourlyDistribution }: Pro
                 axisLine={false} 
                 tickLine={false} 
                 tick={{ fill: "var(--kravy-text-muted)", fontSize: 12, fontWeight: 700 }}
-                tickFormatter={(value) => `₹${value >= 1000 ? value / 1000 + "k" : value}`}
+                tickFormatter={(value) => `${sym}${value >= 1000 ? value / 1000 + "k" : value}`}
               />
               <Tooltip 
                 contentStyle={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "16px", boxShadow: "var(--kravy-shadow-lg)" }}

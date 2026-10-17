@@ -1,7 +1,6 @@
+"use client";
 // // src/app/profile/page.tsx
-// "use client";
-
-// import React, { useEffect, useState } from "react";
+// // import React, { useEffect, useState } from "react";
 // import BusinessProfileCard from "@/components/profile/BusinessProfileCard";
 // import ProfileForm from "@/components/profile/ProfileForm";
 
@@ -125,8 +124,6 @@
 
 
 
-"use client";
-
 import { useState } from "react";
 import Image from "next/image";
 import {
@@ -140,7 +137,6 @@ import { Button } from "@/components/ui/button";
 import { Pencil, Activity } from "lucide-react";
 
 import BusinessProfileForm from "./_components/BusinessProfileForm";
-import UserActivityHeatmap from "@/components/profile/UserActivityHeatmap";
 
 export default function BusinessProfile({
   data,
@@ -210,9 +206,9 @@ export default function BusinessProfile({
     fallback?: string;
   }) {
     return (
-      <div className="flex justify-between gap-4 text-sm py-1">
-        <span className="text-[var(--kravy-text-muted)] font-medium">{label}</span>
-        <span className="font-bold text-right text-[var(--kravy-text-primary)]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-4 text-xs sm:text-sm py-1.5 border-b border-[var(--kravy-border)]/40 last:border-b-0">
+        <span className="text-[var(--kravy-text-muted)] font-medium shrink-0">{label}</span>
+        <span className="font-bold text-left sm:text-right text-[var(--kravy-text-primary)] break-all min-w-0">
           {value || fallback}
         </span>
       </div>
@@ -228,7 +224,7 @@ export default function BusinessProfile({
   }) {
     return (
       <div className="text-center group">
-        <div className="relative h-32 w-full rounded-2xl border border-[var(--kravy-border)] bg-[var(--kravy-bg-2)] overflow-hidden shadow-inner group-hover:border-indigo-500/50 transition-colors">
+        <div className="relative h-28 sm:h-32 w-full rounded-2xl border border-[var(--kravy-border)] bg-[var(--kravy-bg-2)] overflow-hidden shadow-inner group-hover:border-indigo-500/50 transition-colors">
           <Image
             src={url || "/no-image.png"}
             alt={label}
@@ -236,25 +232,25 @@ export default function BusinessProfile({
             className="object-contain p-4"
           />
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">{label}</p>
+        <p className="mt-2 text-xs sm:text-sm text-muted-foreground font-semibold">{label}</p>
       </div>
     );
   }
 
 
   return (
-    <div className="max-w-5xl mx-auto p-6 transition-colors duration-300">
-      <Card className="rounded-[40px] bg-[var(--kravy-surface)] backdrop-blur-xl shadow-2xl border border-[var(--kravy-border)] overflow-hidden">
+    <div className="w-full transition-colors duration-300">
+      <Card className="rounded-2xl sm:rounded-[32px] lg:rounded-[40px] bg-[var(--kravy-surface)] backdrop-blur-xl shadow-2xl border border-[var(--kravy-border)] overflow-hidden">
         {/* ================= TOP PROFILE ================= */}
-        <div className="relative px-8 pt-12 pb-8 text-center">
+        <div className="relative px-4 sm:px-8 pt-8 sm:pt-12 pb-6 sm:pb-8 text-center">
           {/* Edit */}
           <Button
             size="sm"
             variant="outline"
-            className="absolute top-6 right-6 rounded-full shadow-sm"
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full shadow-sm text-xs"
             onClick={() => setEditMode(true)}
           >
-            <Pencil size={14} />
+            <Pencil size={13} />
             Edit
           </Button>
 
@@ -292,27 +288,16 @@ export default function BusinessProfile({
           </div>
         </div>
 
-        {/* ================= DIVIDER ================= */}
-        <div className="border-t border-[var(--kravy-border)] mx-8" />
-
-        {/* ================= ACTIVITY HEATMAP ================= */}
-        <div className="px-8 py-10">
-          <UserActivityHeatmap clerkId={data.userId} />
-        </div>
-
-        {/* ================= DIVIDER ================= */}
-        <div className="border-t border-[var(--kravy-border)] mx-8" />
-
         {/* ================= DETAILS GRID ================= */}
-        <div className="grid md:grid-cols-2 gap-8 px-8 py-8">
+        <div className="grid md:grid-cols-2 gap-6 sm:gap-8 px-4 sm:px-8 py-6 sm:py-8">
           {/* CONTACT */}
           <div>
-            <h3 className="text-xs font-black text-[var(--kravy-text-muted)] mb-5 uppercase tracking-widest flex items-center gap-2">
-              <div className="w-1.5 h-3 bg-[var(--kravy-brand)] rounded-full" />
+            <h3 className="text-xs font-black text-[var(--kravy-text-muted)] mb-3 sm:mb-5 uppercase tracking-widest flex items-center gap-2">
+              <div className="w-1.5 h-3 bg-[var(--kravy-brand)] rounded-full shrink-0" />
               Customer Information
             </h3>
 
-            <div className="space-y-2 bg-[var(--kravy-bg-2)] p-6 rounded-3xl border border-[var(--kravy-border)]">
+            <div className="space-y-2 bg-[var(--kravy-bg-2)] p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-[var(--kravy-border)]">
               <Info label="Contact Person" value={data.contactPersonName} />
               <Info label="Phone" value={data.contactPersonPhone} />
               <Info label="Email" value={data.contactPersonEmail} />
@@ -322,12 +307,12 @@ export default function BusinessProfile({
 
           {/* BUSINESS */}
           <div>
-            <h3 className="text-xs font-bold text-[var(--kravy-text-muted)] mb-5 uppercase tracking-widest flex items-center gap-2">
-              <div className="w-1 h-3 bg-purple-500 rounded-full" />
+            <h3 className="text-xs font-bold text-[var(--kravy-text-muted)] mb-3 sm:mb-5 uppercase tracking-widest flex items-center gap-2">
+              <div className="w-1 h-3 bg-purple-500 rounded-full shrink-0" />
               Business Details
             </h3>
 
-            <div className="space-y-2 bg-[var(--kravy-bg-2)] p-6 rounded-3xl border border-[var(--kravy-border)]">
+            <div className="space-y-2 bg-[var(--kravy-bg-2)] p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-[var(--kravy-border)]">
               <Info label="Business Type" value={data.businessType} />
               <Info label="GST Number" value={data.gstNumber} fallback="Not Registered" />
               <Info label="Address" value={data.businessAddress} />
@@ -348,15 +333,15 @@ export default function BusinessProfile({
         </div>
 
         {/* ================= BRANDING ================= */}
-        <div className="border-t border-[var(--kravy-border)] mx-8" />
+        <div className="border-t border-[var(--kravy-border)] mx-4 sm:mx-8" />
 
-        <div className="px-8 py-8">
-          <h3 className="text-xs font-black text-[var(--kravy-text-muted)] mb-5 uppercase tracking-widest flex items-center gap-2">
-            <div className="w-1.5 h-3 bg-pink-500 rounded-full" />
+        <div className="px-4 sm:px-8 py-6 sm:py-8">
+          <h3 className="text-xs font-black text-[var(--kravy-text-muted)] mb-3 sm:mb-5 uppercase tracking-widest flex items-center gap-2">
+            <div className="w-1.5 h-3 bg-pink-500 rounded-full shrink-0" />
             Branding
           </h3>
 
-          <div className="grid sm:grid-cols-2 gap-6">
+          <div className="grid sm:grid-cols-2 gap-4 sm:gap-6">
             <BrandBox label="Logo" url={data.logoUrl} />
             <BrandBox label="Signature" url={data.signatureUrl} />
           </div>

@@ -1,4 +1,5 @@
-'use client'
+"use client";
+import { useCurrency } from "@/lib/currency-context";
 import { useState, useEffect } from 'react'
 import { Plus, Layers, ArrowLeft, Search, Loader2, Sparkles, Filter, MoreHorizontal, LayoutGrid, Zap, UtensilsCrossed, CheckCircle2, AlertCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -9,6 +10,8 @@ import { useConfirm } from "@/components/ConfirmContext";
 
 
 export default function AddonClustersPage() {
+  const { currencySymbol: sym } = useCurrency();
+
   const { confirm } = useConfirm();
   const [groups, setGroups] = useState<any[]>([])
   const [items, setItems] = useState<any[]>([])
@@ -253,7 +256,7 @@ export default function AddonClustersPage() {
                                  {(group.items as any[])?.slice(0, 3).map((it, idx) => (
                                     <div key={idx} className="flex justify-between items-center px-4 py-3 bg-slate-50/50 dark:bg-slate-800/50 rounded-2xl border border-transparent hover:border-slate-100 dark:hover:border-slate-700 hover:bg-white dark:hover:bg-slate-800 transition-all">
                                        <span className="text-[0.85rem] font-black text-slate-600 dark:text-slate-400">{it.name}</span>
-                                       <span className="text-[0.85rem] font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 px-2.5 py-1 rounded-lg shadow-sm border border-slate-50 dark:border-slate-800">₹{it.price}</span>
+                                       <span className="text-[0.85rem] font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 px-2.5 py-1 rounded-lg shadow-sm border border-slate-50 dark:border-slate-800">{sym}{it.price}</span>
                                     </div>
                                  ))}
                                  {group.items?.length > 3 && (

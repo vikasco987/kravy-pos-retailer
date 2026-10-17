@@ -1,3 +1,4 @@
+import { getServerCurrency } from '@/lib/server-currency';
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveClerkId } from "@/lib/auth-utils";
@@ -12,6 +13,7 @@ export default async function CustomerReportPage({
   searchParams: Promise<{ filter?: string }>;
 }) {
   const effectiveId = await getEffectiveClerkId();
+  const { sym } = await getServerCurrency();
   if (!effectiveId) redirect("/auth/custom");
 
   const { filter = "All" } = await searchParams;
@@ -181,7 +183,7 @@ export default async function CustomerReportPage({
                 </div>
                 <div style={{ padding: "12px", borderRadius: "16px", background: "var(--kravy-surface)" }}>
                   <div style={{ fontSize: "0.65rem", fontWeight: 900, color: "var(--kravy-text-muted)", textTransform: "uppercase" }}>Spend</div>
-                  <div style={{ fontSize: "1.25rem", fontWeight: 950, color: "var(--kravy-text-primary)" }}>₹{format(c.totalSpend)}</div>
+                  <div style={{ fontSize: "1.25rem", fontWeight: 950, color: "var(--kravy-text-primary)" }}>{sym}{format(c.totalSpend)}</div>
                 </div>
               </div>
               <div style={{ marginTop: "14px", fontSize: "0.72rem", color: "var(--kravy-text-muted)", fontWeight: 800 }}>{c.reason} • {c.loyaltyPoints} loyalty pts</div>
@@ -252,7 +254,7 @@ export default async function CustomerReportPage({
                            </div>
                         </td>
                         <td style={{ padding: "28px 52px", textAlign: "right" }}>
-                           <div style={{ fontSize: "1.75rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1.8px" }}>₹{format(c.total)}</div>
+                           <div style={{ fontSize: "1.75rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1.8px" }}>{sym}{format(c.total)}</div>
                            <div style={{ fontSize: "0.7rem", color: "#10B981", fontWeight: 900, marginTop: "4px" }}>BILLABLE SESSION</div>
                         </td>
                      </tr>

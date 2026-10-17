@@ -1,4 +1,5 @@
 "use client";
+import { clearProfileCache } from "@/hooks/useProfileCache";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -10,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Upload, Download, FileJson, ClipboardPaste, Info, AlertCircle, Sparkles } from "lucide-react";
+import { Plus, Upload, Download, FileJson, ClipboardPaste, Info, AlertCircle, Sparkles, ChevronDown, Check, X, Trash2 } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -20,7 +21,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { uploadToCloudinary } from "@/lib/cloudinary-client";
+import { uploadToAWS } from "@/lib/upload-client";
 import { INDIA_STATE_DISTRICT } from "@/lib/india-state-district";
 
 
@@ -102,7 +103,9 @@ export default function BusinessProfileForm({
     defaultValues?.signatureUrl || null
   );
 
-  const { register, handleSubmit, watch, reset } = useForm<FormValues>({
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+
+  const { register, handleSubmit, watch, reset, setValue } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues,
   });
@@ -200,16 +203,16 @@ export default function BusinessProfileForm({
         (document.getElementById(id) as HTMLInputElement)?.files?.[0];
 
       const profileImageUrl = getFile("profileImage")
-        ? await uploadToCloudinary(getFile("profileImage")!)
-        : defaultValues?.profileImageUrl || null;
+        ? await uploadToAWS(getFile("profileImage")!)
+        : (profilePreview ? defaultValues?.profileImageUrl || profilePreview : null);
 
       const logoUrl = getFile("logo")
-        ? await uploadToCloudinary(getFile("logo")!)
-        : defaultValues?.logoUrl || null;
+        ? await uploadToAWS(getFile("logo")!)
+        : (logoPreview ? defaultValues?.logoUrl || logoPreview : null);
 
       const signatureUrl = getFile("signature")
-        ? await uploadToCloudinary(getFile("signature")!)
-        : defaultValues?.signatureUrl || null;
+        ? await uploadToAWS(getFile("signature")!)
+        : (signaturePreview ? defaultValues?.signatureUrl || signaturePreview : null);
 
       // ✅ EXPLICIT PAYLOAD (MATCHES API 1:1)
       const payload = {
@@ -281,6 +284,8 @@ export default function BusinessProfileForm({
       console.log("Profile Saved Successfully:", savedData);
       
       // ✅ SUCCESS
+      clearProfileCache();
+
       if (onSuccess) {
         onSuccess();
       }
@@ -295,7 +300,7 @@ export default function BusinessProfileForm({
 
 
   return (
-    <div className="flex flex-col xl:flex-row gap-6 max-w-[1400px] mx-auto p-6 items-start">
+    <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
       <form
         onSubmit={handleSubmit(onSubmit, (errors) => {
           console.group("🚫 Validation Errors Details");
@@ -306,120 +311,134 @@ export default function BusinessProfileForm({
           console.groupEnd();
           toast.error("Please fix the validation errors in the form");
         })}
-        className="flex-1 w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 transition-colors"
+        className="flex-1 w-full space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-bottom-4 transition-colors min-w-0"
       >
-      {/* SCHEMA ACTIONS */}
-      <div className="flex flex-col gap-6 bg-[var(--kravy-surface)] p-6 rounded-[32px] border border-[var(--kravy-border)] shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
-          <FileJson size={120} />
-        </div>
-        
-        <div className="flex flex-col gap-2">
-          <h3 className="text-xl font-black text-[var(--kravy-text-primary)] flex items-center gap-2 tracking-tight">
-            <Sparkles className="text-indigo-500" size={20} />
-            Schema Management
-          </h3>
-          <p className="text-xs font-bold text-[var(--kravy-text-muted)] uppercase tracking-widest">Bulk Setup via JSON Schema</p>
-        </div>
-
-        <div className="flex flex-wrap gap-4">
-          <label className="flex items-center gap-3 px-6 py-3 bg-indigo-500 text-white rounded-2xl cursor-pointer hover:bg-indigo-600 transition-all text-[11px] font-black uppercase tracking-widest shadow-lg shadow-indigo-500/20 active:scale-95 group">
-            <Upload size={16} className="group-hover:-translate-y-0.5 transition-transform" />
-            Upload JSON File
-            <input type="file" accept=".json" hidden onChange={handleSchemaUpload} />
-          </label>
-
-          <Sheet open={isPasteModalOpen} onOpenChange={setIsPasteModalOpen}>
-            <SheetTrigger asChild>
-              <button 
-                type="button"
-                className="flex items-center gap-3 px-6 py-3 bg-[var(--kravy-bg-2)] text-[var(--kravy-text-primary)] rounded-2xl hover:border-indigo-500/50 border border-[var(--kravy-border)] transition-all text-[11px] font-black uppercase tracking-widest active:scale-95"
-              >
-                <ClipboardPaste size={16} />
-                Paste Schema Text
-              </button>
-            </SheetTrigger>
-            <SheetContent className="sm:max-w-xl bg-[var(--kravy-surface)] border-[var(--kravy-border)] p-8 overflow-y-auto">
-              <SheetHeader>
-                <SheetTitle className="text-2xl font-black text-[var(--kravy-text-primary)] tracking-tight">Paste Business Schema</SheetTitle>
-                <SheetDescription className="text-sm font-bold text-[var(--kravy-text-muted)]">Paste your business configuration JSON below to auto-fill the form</SheetDescription>
-              </SheetHeader>
-              <div className="mt-8 space-y-6">
-                <Textarea 
-                  placeholder='{ "businessName": "My Awesome Store", ... }'
-                  className="min-h-[400px] font-mono text-xs bg-[var(--kravy-bg-2)] border-[var(--kravy-border)] rounded-2xl p-6 focus:ring-2 focus:ring-indigo-500/20 transition-all text-[var(--kravy-text-primary)]"
-                  value={pastedJson}
-                  onChange={(e) => setPastedJson(e.target.value)}
-                />
-                <div className="flex flex-col gap-3">
-                  <Button className="w-full bg-indigo-500 text-white font-black py-4 rounded-xl" onClick={() => applyJsonToForm(pastedJson)}>Apply Schema Data</Button>
-                  <Button variant="ghost" className="w-full" onClick={() => setIsPasteModalOpen(false)}>Close & Reset</Button>
-                </div>
-              </div>
-            </SheetContent>
-          </Sheet>
-
-          <button 
-            type="button"
-            onClick={handleDownloadSchema}
-            className="flex items-center gap-3 px-6 py-3 bg-[var(--kravy-bg-2)] text-[var(--kravy-text-muted)] rounded-2xl hover:text-indigo-500 transition-all text-[11px] font-black uppercase tracking-widest border border-dashed border-[var(--kravy-border)] hover:border-indigo-500/50 active:scale-95"
-          >
-            <Download size={16} />
-            Format Template
-          </button>
-        </div>
-
-        {/* GUIDELINES */}
-        <div className="grid md:grid-cols-2 gap-4 pt-4 border-t border-[var(--kravy-border)] border-dashed">
-          <div className="space-y-3 bg-blue-500/5 p-4 rounded-2xl border border-blue-500/10">
-            <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-2">
-              <Info size={12} /> Format Guide
-            </h4>
-            <ul className="text-[10px] font-bold text-[var(--kravy-text-muted)] space-y-1 ml-1">
-              <li>• Key: <code className="text-blue-500">businessName</code> (String, REQUIRED)</li>
-              <li>• Key: <code className="text-blue-500">state</code> / <code className="text-blue-500">district</code> (Valid Indian names)</li>
-              <li>• Key: <code className="text-blue-500">upiQrEnabled</code> (Boolean: true/false)</li>
-              <li>• Key: <code className="text-blue-500">pinCode</code> (String, 6 digits)</li>
-            </ul>
-          </div>
-          <div className="space-y-3 bg-amber-500/5 p-4 rounded-2xl border border-amber-500/10">
-            <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-2">
-              <AlertCircle size={12} /> Conditions
-            </h4>
-            <ul className="text-[10px] font-bold text-[var(--kravy-text-muted)] space-y-1 ml-1">
-              <li>• Image URLs must be from <code className="text-amber-500">cloudinary</code> or <code className="text-amber-500">unsplash</code></li>
-              <li>• Mandatory fields must not be empty or null</li>
-              <li>• Invalid JSON will be rejected to prevent data loss</li>
-            </ul>
-          </div>
-        </div>
-      </div>
 
       {/* BUSINESS */}
       <Section title="Business Information">
         <Field label="Business Type">
-          <select {...register("businessType")} className="w-full bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] rounded-xl h-11 px-4 focus:ring-2 focus:ring-[var(--kravy-brand)]/20 transition-all outline-none font-bold">
-            <option value="">Select</option>
-            <option value="food">Restaurant / Food</option>
-            <option value="retail">Retail</option>
-            <option value="service">Service</option>
-          </select>
+          <div className="relative w-full">
+            <button
+              type="button"
+              onClick={() => setOpenDropdown(openDropdown === "businessType" ? null : "businessType")}
+              className="w-full flex items-center justify-between bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] rounded-xl h-11 px-4 focus:ring-2 focus:ring-[var(--kravy-brand)]/20 transition-all outline-none font-bold text-xs sm:text-sm text-left shadow-sm"
+            >
+              <span className="truncate">
+                {watchedValues.businessType === "food"
+                  ? "Restaurant / Food"
+                  : watchedValues.businessType === "retail"
+                  ? "Retail"
+                  : watchedValues.businessType === "service"
+                  ? "Service"
+                  : "Select Business Type"}
+              </span>
+              <ChevronDown
+                size={16}
+                className={`text-[var(--kravy-text-muted)] shrink-0 transition-transform duration-200 ${
+                  openDropdown === "businessType" ? "rotate-180 text-[var(--kravy-brand)]" : ""
+                }`}
+              />
+            </button>
+
+            {openDropdown === "businessType" && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)} />
+                <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl shadow-2xl p-1.5 max-h-56 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-100">
+                  {[
+                    { value: "", label: "Select Business Type" },
+                    { value: "food", label: "Restaurant / Food" },
+                    { value: "retail", label: "Retail" },
+                    { value: "service", label: "Service" },
+                  ].map((opt) => {
+                    const isSelected = (watchedValues.businessType || "") === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setValue("businessType", opt.value, { shouldValidate: true, shouldDirty: true });
+                          setOpenDropdown(null);
+                        }}
+                        className={`w-full flex items-center justify-between text-left px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors ${
+                          isSelected
+                            ? "bg-[var(--kravy-brand)] text-white"
+                            : "text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-bg-2)]"
+                        }`}
+                      >
+                        <span className="truncate">{opt.label}</span>
+                        {isSelected && <Check size={14} className="shrink-0 ml-2" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
         </Field>
 
         <Field label="Business Name">
-          <Input {...register("businessName")} />
+          <Input {...register("businessName")} className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] text-xs sm:text-sm" />
         </Field>
 
         <Field label="Tagline">
-          <Input {...register("businessTagline")} />
+          <Input {...register("businessTagline")} className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] text-xs sm:text-sm" />
         </Field>
 
         <Field label="Store Name Size">
-          <select {...register("businessNameSize")} className="w-full bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] rounded-xl h-11 px-4 outline-none font-bold">
-            <option value="medium">Medium</option>
-            <option value="large">Large</option>
-            <option value="xlarge">Extra Large</option>
-          </select>
+          <div className="relative w-full">
+            <button
+              type="button"
+              onClick={() => setOpenDropdown(openDropdown === "businessNameSize" ? null : "businessNameSize")}
+              className="w-full flex items-center justify-between bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] rounded-xl h-11 px-4 outline-none font-bold text-xs sm:text-sm text-left shadow-sm"
+            >
+              <span className="truncate">
+                {watchedValues.businessNameSize === "large"
+                  ? "Large"
+                  : watchedValues.businessNameSize === "xlarge"
+                  ? "Extra Large"
+                  : "Medium"}
+              </span>
+              <ChevronDown
+                size={16}
+                className={`text-[var(--kravy-text-muted)] shrink-0 transition-transform duration-200 ${
+                  openDropdown === "businessNameSize" ? "rotate-180 text-[var(--kravy-brand)]" : ""
+                }`}
+              />
+            </button>
+
+            {openDropdown === "businessNameSize" && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)} />
+                <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl shadow-2xl p-1.5 max-h-56 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-100">
+                  {[
+                    { value: "medium", label: "Medium" },
+                    { value: "large", label: "Large" },
+                    { value: "xlarge", label: "Extra Large" },
+                  ].map((opt) => {
+                    const isSelected = (watchedValues.businessNameSize || "medium") === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setValue("businessNameSize", opt.value, { shouldValidate: true, shouldDirty: true });
+                          setOpenDropdown(null);
+                        }}
+                        className={`w-full flex items-center justify-between text-left px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors ${
+                          isSelected
+                            ? "bg-[var(--kravy-brand)] text-white"
+                            : "text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-bg-2)]"
+                        }`}
+                      >
+                        <span className="truncate">{opt.label}</span>
+                        {isSelected && <Check size={14} className="shrink-0 ml-2" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
         </Field>
       </Section>
 
@@ -460,57 +479,101 @@ export default function BusinessProfileForm({
         </Field>
 
         <Field label="Phone Prefix Style">
-          <select 
-            {...register("phonePrefixType")} 
-            className="w-full bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] rounded-xl h-11 px-4 outline-none font-bold"
-          >
-            <option value="TEXT">Text (Mob: )</option>
-            <option value="SYMBOL">Symbol (📞 )</option>
-          </select>
+          <div className="relative w-full">
+            <button
+              type="button"
+              onClick={() => setOpenDropdown(openDropdown === "phonePrefixType" ? null : "phonePrefixType")}
+              className="w-full flex items-center justify-between bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] rounded-xl h-11 px-4 outline-none font-bold text-xs sm:text-sm text-left shadow-sm"
+            >
+              <span className="truncate">
+                {(watchedValues.phonePrefixType || "TEXT").toUpperCase() === "SYMBOL"
+                  ? "Symbol (📞 )"
+                  : "Text (Mob: )"}
+              </span>
+              <ChevronDown
+                size={16}
+                className={`text-[var(--kravy-text-muted)] shrink-0 transition-transform duration-200 ${
+                  openDropdown === "phonePrefixType" ? "rotate-180 text-[var(--kravy-brand)]" : ""
+                }`}
+              />
+            </button>
+
+            {openDropdown === "phonePrefixType" && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)} />
+                <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl shadow-2xl p-1.5 max-h-56 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-100">
+                  {[
+                    { value: "TEXT", label: "Text (Mob: )" },
+                    { value: "SYMBOL", label: "Symbol (📞 )" },
+                  ].map((opt) => {
+                    const isSelected = (watchedValues.phonePrefixType || "TEXT").toUpperCase() === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setValue("phonePrefixType", opt.value, { shouldValidate: true, shouldDirty: true });
+                          setOpenDropdown(null);
+                        }}
+                        className={`w-full flex items-center justify-between text-left px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors ${
+                          isSelected
+                            ? "bg-[var(--kravy-brand)] text-white"
+                            : "text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-bg-2)]"
+                        }`}
+                      >
+                        <span className="truncate">{opt.label}</span>
+                        {isSelected && <Check size={14} className="shrink-0 ml-2" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
           <p className="text-[10px] text-[var(--kravy-text-muted)] mt-1 italic">Choose how the phone number is labeled on the bill.</p>
         </Field>
       </Section>
 
       {/* CONTACT */}
       <Section title="Contact Details">
-        <Input {...register("contactName")} placeholder="Contact Person" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)]" />
-        <Input {...register("contactPhone")} placeholder="Phone" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)]" />
-        <Input {...register("contactEmail")} placeholder="Email" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)]" />
+        <Input {...register("contactName")} placeholder="Contact Person" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] text-xs sm:text-sm" />
+        <Input {...register("contactPhone")} placeholder="Phone" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] text-xs sm:text-sm" />
+        <Input {...register("contactEmail")} placeholder="Email" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] text-xs sm:text-sm" />
         
         <div className="flex flex-col gap-4">
-          <Input {...register("upi")} placeholder="UPI ID" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)]" />
-          <label className="flex items-center gap-3 cursor-pointer bg-[var(--kravy-bg-2)] p-4 rounded-xl border border-[var(--kravy-border)] hover:border-indigo-500/50 transition-colors">
+          <Input {...register("upi")} placeholder="UPI ID" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] text-xs sm:text-sm" />
+          <label className="flex items-center gap-3 cursor-pointer bg-[var(--kravy-bg-2)] p-3 sm:p-4 rounded-xl border border-[var(--kravy-border)] hover:border-indigo-500/50 transition-colors">
             <input 
               type="checkbox" 
               {...register("upiQrEnabled")} 
               className="w-5 h-5 rounded min-w-[20px] accent-[var(--kravy-brand)]"
             />
-            <div>
-              <p className="text-sm font-bold text-[var(--kravy-text-primary)]">Enable UPI QR on Bill</p>
-              <p className="text-xs text-[var(--kravy-text-muted)] mt-0.5">Prints a scannable QR code along with the bill</p>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-bold text-[var(--kravy-text-primary)]">Enable UPI QR on Bill</p>
+              <p className="text-[10px] sm:text-xs text-[var(--kravy-text-muted)] mt-0.5">Prints a scannable QR code along with the bill</p>
             </div>
           </label>
 
-          <label className="flex items-center gap-3 cursor-pointer bg-[var(--kravy-bg-2)] p-4 rounded-xl border border-[var(--kravy-border)] hover:border-indigo-500/50 transition-colors">
+          <label className="flex items-center gap-3 cursor-pointer bg-[var(--kravy-bg-2)] p-3 sm:p-4 rounded-xl border border-[var(--kravy-border)] hover:border-indigo-500/50 transition-colors">
             <input 
               type="checkbox" 
               {...register("menuLinkEnabled")} 
               className="w-5 h-5 rounded min-w-[20px] accent-[var(--kravy-brand)]"
             />
-            <div>
-              <p className="text-sm font-bold text-[var(--kravy-text-primary)]">Share Menu Link in WhatsApp</p>
-              <p className="text-xs text-[var(--kravy-text-muted)] mt-0.5">Include your online menu link in the invoice message</p>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-bold text-[var(--kravy-text-primary)]">Share Menu Link in WhatsApp</p>
+              <p className="text-[10px] sm:text-xs text-[var(--kravy-text-muted)] mt-0.5">Include your online menu link in the invoice message</p>
             </div>
           </label>
-          <label className="flex items-center gap-3 cursor-pointer bg-[var(--kravy-bg-2)] p-4 rounded-xl border border-[var(--kravy-border)] hover:border-indigo-500/50 transition-colors">
+          <label className="flex items-center gap-3 cursor-pointer bg-[var(--kravy-bg-2)] p-3 sm:p-4 rounded-xl border border-[var(--kravy-border)] hover:border-indigo-500/50 transition-colors">
             <input 
               type="checkbox" 
               {...register("enableMenuQRInBill")} 
               className="w-5 h-5 rounded min-w-[20px] accent-indigo-500"
             />
-            <div>
-              <p className="text-sm font-bold text-[var(--kravy-text-primary)]">Print Menu QR on Bill</p>
-              <p className="text-xs text-[var(--kravy-text-muted)] mt-0.5">Prints a scannable QR for your digital menu on receipts</p>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-bold text-[var(--kravy-text-primary)]">Print Menu QR on Bill</p>
+              <p className="text-[10px] sm:text-xs text-[var(--kravy-text-muted)] mt-0.5">Prints a scannable QR for your digital menu on receipts</p>
             </div>
           </label>
         </div>
@@ -518,34 +581,146 @@ export default function BusinessProfileForm({
 
       {/* ADDRESS */}
       <Section title="Business Address">
-        <Input {...register("businessAddress")} placeholder="Full Address" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)]" />
+        <Input {...register("businessAddress")} placeholder="Full Address" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] text-xs sm:text-sm" />
 
-        <select
-          {...register("state")}
-          value={selectedState}
-          onChange={(e) => setSelectedState(e.target.value)}
-          className="w-full bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] rounded-xl h-11 px-4 outline-none font-bold focus:ring-2 focus:ring-[var(--kravy-brand)]/20"
-        >
-          <option value="">Select State</option>
-          {Object.keys(INDIA_STATE_DISTRICT).map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <div className="relative w-full">
+          <button
+            type="button"
+            onClick={() => setOpenDropdown(openDropdown === "state" ? null : "state")}
+            className="w-full flex items-center justify-between bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] rounded-xl h-11 px-4 outline-none font-bold text-xs sm:text-sm text-left focus:ring-2 focus:ring-[var(--kravy-brand)]/20 shadow-sm"
+          >
+            <span className="truncate">
+              {selectedState || watchedValues.state || "Select State"}
+            </span>
+            <ChevronDown
+              size={16}
+              className={`text-[var(--kravy-text-muted)] shrink-0 transition-transform duration-200 ${
+                openDropdown === "state" ? "rotate-180 text-[var(--kravy-brand)]" : ""
+              }`}
+            />
+          </button>
 
-        <select {...register("district")} className="w-full bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] rounded-xl h-11 px-4 outline-none font-bold focus:ring-2 focus:ring-[var(--kravy-brand)]/20">
-          <option value="">Select District</option>
-          {selectedState &&
-            INDIA_STATE_DISTRICT[selectedState]?.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-        </select>
+          {openDropdown === "state" && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)} />
+              <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl shadow-2xl p-1.5 max-h-56 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedState("");
+                    setValue("state", "", { shouldValidate: true, shouldDirty: true });
+                    setValue("district", "", { shouldValidate: true, shouldDirty: true });
+                    setOpenDropdown(null);
+                  }}
+                  className={`w-full flex items-center justify-between text-left px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors ${
+                    !selectedState
+                      ? "bg-[var(--kravy-brand)] text-white"
+                      : "text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-bg-2)]"
+                  }`}
+                >
+                  <span className="truncate">Select State</span>
+                  {!selectedState && <Check size={14} className="shrink-0 ml-2" />}
+                </button>
+                {Object.keys(INDIA_STATE_DISTRICT).map((s) => {
+                  const isSelected = selectedState === s;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => {
+                        setSelectedState(s);
+                        setValue("state", s, { shouldValidate: true, shouldDirty: true });
+                        setValue("district", "", { shouldValidate: true, shouldDirty: true });
+                        setOpenDropdown(null);
+                      }}
+                      className={`w-full flex items-center justify-between text-left px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors ${
+                        isSelected
+                          ? "bg-[var(--kravy-brand)] text-white"
+                          : "text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-bg-2)]"
+                      }`}
+                    >
+                      <span className="truncate">{s}</span>
+                      {isSelected && <Check size={14} className="shrink-0 ml-2" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
 
-        <Input {...register("pinCode")} placeholder="PIN Code" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)]" />
-        <Input {...register("gstNumber")} placeholder="GST Number" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)]" />
+        <div className="relative w-full">
+          <button
+            type="button"
+            onClick={() => {
+              if (!selectedState) {
+                toast.info("Please select a state first");
+                return;
+              }
+              setOpenDropdown(openDropdown === "district" ? null : "district");
+            }}
+            className={`w-full flex items-center justify-between bg-[var(--kravy-input-bg)] border border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] rounded-xl h-11 px-4 outline-none font-bold text-xs sm:text-sm text-left focus:ring-2 focus:ring-[var(--kravy-brand)]/20 shadow-sm ${
+              !selectedState ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+            }`}
+          >
+            <span className="truncate">
+              {watchedValues.district || (selectedState ? "Select District" : "Select State First")}
+            </span>
+            <ChevronDown
+              size={16}
+              className={`text-[var(--kravy-text-muted)] shrink-0 transition-transform duration-200 ${
+                openDropdown === "district" ? "rotate-180 text-[var(--kravy-brand)]" : ""
+              }`}
+            />
+          </button>
+
+          {openDropdown === "district" && selectedState && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)} />
+              <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl shadow-2xl p-1.5 max-h-56 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setValue("district", "", { shouldValidate: true, shouldDirty: true });
+                    setOpenDropdown(null);
+                  }}
+                  className={`w-full flex items-center justify-between text-left px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors ${
+                    !watchedValues.district
+                      ? "bg-[var(--kravy-brand)] text-white"
+                      : "text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-bg-2)]"
+                  }`}
+                >
+                  <span className="truncate">Select District</span>
+                  {!watchedValues.district && <Check size={14} className="shrink-0 ml-2" />}
+                </button>
+                {(INDIA_STATE_DISTRICT[selectedState] || []).map((d) => {
+                  const isSelected = watchedValues.district === d;
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => {
+                        setValue("district", d, { shouldValidate: true, shouldDirty: true });
+                        setOpenDropdown(null);
+                      }}
+                      className={`w-full flex items-center justify-between text-left px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors ${
+                        isSelected
+                          ? "bg-[var(--kravy-brand)] text-white"
+                          : "text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-bg-2)]"
+                      }`}
+                    >
+                      <span className="truncate">{d}</span>
+                      {isSelected && <Check size={14} className="shrink-0 ml-2" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
+        <Input {...register("pinCode")} placeholder="PIN Code" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] text-xs sm:text-sm" />
+        <Input {...register("gstNumber")} placeholder="GST Number" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)] text-xs sm:text-sm" />
         
         <div className="flex flex-col gap-4">
           <Input {...register("fssaiNumber")} placeholder="FSSAI Number" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)]" />
@@ -576,62 +751,7 @@ export default function BusinessProfileForm({
       </Section>
 
 
-      {/* AUTHENTICATION SETTINGS */}
-      <Section title="Authentication Settings">
-        <label className="flex items-center gap-3 cursor-pointer bg-[var(--kravy-bg-2)] p-4 rounded-xl border border-[var(--kravy-border)] hover:border-indigo-500/50 transition-colors">
-          <input 
-            type="checkbox" 
-            {...register("enableClerkAuth")} 
-            className="w-5 h-5 rounded min-w-[20px] accent-blue-500"
-          />
-          <div>
-            <p className="text-sm font-bold text-[var(--kravy-text-primary)]">Enable Clerk Authentication</p>
-            <p className="text-xs text-[var(--kravy-text-muted)] mt-0.5">Use Clerk for enterprise-grade login and security</p>
-          </div>
-        </label>
 
-        <label className="flex items-center gap-3 cursor-pointer bg-[var(--kravy-bg-2)] p-4 rounded-xl border border-[var(--kravy-border)] hover:border-indigo-500/50 transition-colors">
-          <input 
-            type="checkbox" 
-            {...register("enableCustomAuth")} 
-            className="w-5 h-5 rounded min-w-[20px] accent-emerald-500"
-          />
-          <div>
-            <p className="text-sm font-bold text-[var(--kravy-text-primary)]">Enable Custom OTP Authentication</p>
-            <p className="text-xs text-[var(--kravy-text-muted)] mt-0.5">Allow users to sign up using Phone/Email with OTP</p>
-          </div>
-        </label>
-      </Section>
-
-      {/* QR MENU APPEARANCE */}
-      <Section title="QR Menu Appearance">
-        <div className="md:col-span-2 space-y-4">
-          <label className="flex items-center gap-3 cursor-pointer bg-[var(--kravy-bg-2)] p-4 rounded-xl border border-[var(--kravy-border)] hover:border-indigo-500/50 transition-colors">
-            <input 
-              type="checkbox" 
-              {...register("qrMenuShowDetails")} 
-              className="w-5 h-5 rounded min-w-[20px] accent-indigo-500"
-            />
-            <div>
-              <p className="text-sm font-bold text-[var(--kravy-text-primary)]">Show Restaurant Details Banner</p>
-              <p className="text-xs text-[var(--kravy-text-muted)] mt-0.5">Displays cuisines, rating, delivery time, and cost for two below the logo</p>
-            </div>
-          </label>
-        </div>
-
-        <Field label="Cuisines / Tags">
-          <Input {...register("qrMenuCuisines")} placeholder="e.g. North Indian, Mughlai, Biryani" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)]" />
-        </Field>
-        <Field label="Rating Text">
-          <Input {...register("qrMenuRating")} placeholder="e.g. 4.3 (2.1K)" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)]" />
-        </Field>
-        <Field label="Preparation / Delivery Time">
-          <Input {...register("qrMenuDeliveryTime")} placeholder="e.g. 20-30 min" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)]" />
-        </Field>
-        <Field label="Cost for Two">
-          <Input {...register("qrMenuCostForTwo")} placeholder="e.g. ₹350 for two" className="h-11 rounded-xl bg-[var(--kravy-input-bg)] border-[var(--kravy-input-border)] text-[var(--kravy-text-primary)]" />
-        </Field>
-      </Section>
 
       {/* MEDIA */}
       <Section title="Branding">
@@ -798,11 +918,11 @@ export default function BusinessProfileForm({
 
 function Section({ title, children }: any) {
   return (
-    <Card className="rounded-[32px] border-[var(--kravy-border)] bg-[var(--kravy-surface)] shadow-2xl overflow-hidden">
-      <CardHeader className="border-b border-[var(--kravy-border)] bg-[var(--kravy-bg-2)]/50">
-        <CardTitle className="text-lg font-black text-[var(--kravy-text-primary)] tracking-tight uppercase tracking-widest text-[10px] opacity-70">{title}</CardTitle>
+    <Card className="rounded-2xl sm:rounded-[32px] border-[var(--kravy-border)] bg-[var(--kravy-surface)] shadow-2xl overflow-visible">
+      <CardHeader className="border-b border-[var(--kravy-border)] bg-[var(--kravy-bg-2)]/50 p-4 sm:p-6 rounded-t-2xl sm:rounded-t-[32px]">
+        <CardTitle className="font-black text-[var(--kravy-text-primary)] tracking-tight uppercase tracking-widest text-[10px] sm:text-xs opacity-70">{title}</CardTitle>
       </CardHeader>
-      <CardContent className="grid md:grid-cols-2 gap-6 p-8">
+      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 p-4 sm:p-6 lg:p-8">
         {children}
       </CardContent>
     </Card>
@@ -850,6 +970,16 @@ function DragDrop({ id, label, preview, setPreview }: any) {
     }
   };
 
+  const handleRemove = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setPreview(null);
+    const input = document.getElementById(id) as HTMLInputElement;
+    if (input) {
+      input.value = "";
+    }
+  };
+
   return (
     <label 
       onDragOver={handleDragOver}
@@ -882,11 +1012,21 @@ function DragDrop({ id, label, preview, setPreview }: any) {
       )}
 
       {preview ? (
-        <div className="relative group">
-          <img src={preview} className="h-32 mx-auto rounded-xl object-cover shadow-lg border border-[var(--kravy-border)]" />
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 rounded-xl flex items-center justify-center transition-opacity">
+        <div className="relative group inline-block max-w-full">
+          <img src={preview} className="h-32 mx-auto rounded-xl object-cover shadow-lg border border-[var(--kravy-border)] bg-white/5" />
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 rounded-xl flex items-center justify-center transition-opacity pointer-events-none">
             <p className="text-white text-xs font-bold">Change Image</p>
           </div>
+          {/* Remove / Cross Button */}
+          <button
+            type="button"
+            onClick={handleRemove}
+            title="Remove image"
+            aria-label="Remove image"
+            className="absolute -top-2.5 -right-2.5 z-20 w-7 h-7 rounded-full bg-rose-500 hover:bg-rose-600 active:scale-90 text-white shadow-lg flex items-center justify-center border-2 border-white dark:border-neutral-900 transition-all cursor-pointer"
+          >
+            <X size={14} strokeWidth={2.5} />
+          </button>
         </div>
       ) : (
         <div className="py-4">

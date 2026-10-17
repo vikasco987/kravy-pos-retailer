@@ -1,5 +1,5 @@
 "use client";
-
+import { useCurrency } from "@/lib/currency-context";
 import { useState, useEffect, useRef } from "react";
 import { Printer, Settings, Check } from "lucide-react";
 
@@ -9,6 +9,8 @@ interface PrintableTableProps {
 }
 
 export default function PrintableTable({ filteredItems, grandTotalRevenue }: PrintableTableProps) {
+  const { currencySymbol: sym } = useCurrency();
+
   const [showSettings, setShowSettings] = useState(false);
   
   // Column preferences
@@ -248,7 +250,7 @@ export default function PrintableTable({ filteredItems, grandTotalRevenue }: Pri
                       )}
                       {columns.revenue && (
                         <td style={{ padding: "18px 24px", textAlign: "right", fontWeight: 800, color: "var(--kravy-text-primary)" }} className="print:!text-black print:!p-1 print:!text-[10px] print:!border-b print:!border-black print:!border-dashed">
-                          ₹{format(item.totalRevenue)}
+                          {sym}{format(item.totalRevenue)}
                         </td>
                       )}
                       {columns.share && (

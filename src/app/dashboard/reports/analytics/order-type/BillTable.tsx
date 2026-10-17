@@ -1,5 +1,5 @@
 "use client";
-
+import { useCurrency } from "@/lib/currency-context";
 import React, { useState } from "react";
 import { 
   Utensils, Bike, ShoppingBag, Search, Filter, 
@@ -13,6 +13,8 @@ interface Props {
 }
 
 export default function BillTable({ bills, business }: Props) {
+  const { currencySymbol: sym } = useCurrency();
+
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const toggleRow = (id: string) => {
@@ -90,7 +92,7 @@ export default function BillTable({ bills, business }: Props) {
                        }}>{b.paymentStatus}</span>
                     </td>
                     <td style={{ padding: "20px" }}><span style={{ fontWeight: 700, color: "var(--kravy-text-muted)", fontSize: "0.85rem" }}>{b.paymentMode}</span></td>
-                    <td style={{ padding: "20px" }}><span style={{ fontWeight: 900, color: "var(--kravy-text-primary)", fontSize: "1rem" }}>₹{format(b.total)}</span></td>
+                    <td style={{ padding: "20px" }}><span style={{ fontWeight: 900, color: "var(--kravy-text-primary)", fontSize: "1rem" }}>{sym}{format(b.total)}</span></td>
                     <td style={{ padding: "20px", textAlign: "right" }}>
                        <BillActionsReport billId={b.id} bill={b} business={business} />
                     </td>
@@ -126,10 +128,10 @@ export default function BillTable({ bills, business }: Props) {
                                          <div style={{ width: "8px", height: "8px", background: "var(--kravy-purple)", borderRadius: "50%" }} />
                                          <div>
                                             <div style={{ fontWeight: 800, fontSize: "0.9rem", color: "var(--kravy-text-primary)" }}>{item.name}</div>
-                                            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--kravy-text-muted)" }}>Qty: {q} × ₹{p}</div>
+                                            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--kravy-text-muted)" }}>Qty: {q} × {sym}{p}</div>
                                          </div>
                                       </div>
-                                      <div style={{ fontWeight: 900, fontSize: "0.95rem", color: "var(--kravy-text-primary)" }}>₹{format(q * p)}</div>
+                                      <div style={{ fontWeight: 900, fontSize: "0.95rem", color: "var(--kravy-text-primary)" }}>{sym}{format(q * p)}</div>
                                    </div>
                                  );
                                })}
@@ -140,36 +142,36 @@ export default function BillTable({ bills, business }: Props) {
                                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", fontWeight: 700, color: "var(--kravy-text-muted)" }}>
                                      <span>Subtotal</span>
-                                     <span>₹{format(b.subtotal)}</span>
+                                     <span>{sym}{format(b.subtotal)}</span>
                                   </div>
                                   {(b.tax || 0) > 0 && (
                                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", fontWeight: 700, color: "var(--kravy-text-muted)" }}>
                                        <span>Tax / GST</span>
-                                       <span>₹{format(b.tax)}</span>
+                                       <span>{sym}{format(b.tax)}</span>
                                     </div>
                                   )}
                                   {(b.deliveryCharges || 0) > 0 && (
                                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", fontWeight: 700, color: "var(--kravy-text-muted)" }}>
                                        <span>Delivery</span>
-                                       <span>₹{format(b.deliveryCharges)}</span>
+                                       <span>{sym}{format(b.deliveryCharges)}</span>
                                     </div>
                                   )}
                                   {(b.packagingCharges || 0) > 0 && (
                                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", fontWeight: 700, color: "var(--kravy-text-muted)" }}>
                                        <span>Packaging</span>
-                                       <span>₹{format(b.packagingCharges)}</span>
+                                       <span>{sym}{format(b.packagingCharges)}</span>
                                     </div>
                                   )}
                                   {(b.discountAmount || 0) > 0 && (
                                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", fontWeight: 800, color: "#EF4444" }}>
                                        <span>Discount</span>
-                                       <span>-₹{format(b.discountAmount)}</span>
+                                       <span>-{sym}{format(b.discountAmount)}</span>
                                     </div>
                                   )}
                                </div>
                                <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "flex-end", padding: "16px 24px", background: "var(--kravy-surface)", borderRadius: "18px", border: "1px solid var(--kravy-border)" }}>
                                   <span style={{ fontSize: "0.7rem", fontWeight: 900, color: "var(--kravy-purple)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "4px" }}>Grand Total</span>
-                                  <span style={{ fontSize: "1.4rem", fontWeight: 950, color: "var(--kravy-text-primary)" }}>₹{format(b.total)}</span>
+                                  <span style={{ fontSize: "1.4rem", fontWeight: 950, color: "var(--kravy-text-primary)" }}>{sym}{format(b.total)}</span>
                                </div>
                             </div>
                          </div>

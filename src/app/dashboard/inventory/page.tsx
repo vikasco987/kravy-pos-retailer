@@ -1,14 +1,16 @@
 "use client";
-
-import { useState, useEffect } from "react";
+import { useCurrency } from "@/lib/currency-context";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Package, Search, Plus, Filter, Download, Eye, Edit, Trash2, FileText, X, AlertTriangle, Save, Sparkles, TrendingUp, Layers, ArrowUpDown, CheckCircle2, XCircle, BadgePercent, BarChart3, Printer } from "lucide-react";
+import { Package, Search, Plus, Filter, ChevronDown, Download, Eye, Edit, Trash2, FileText, X, AlertTriangle, Save, Sparkles, TrendingUp, Layers, ArrowUpDown, CheckCircle2, XCircle, BadgePercent, BarChart3, Printer } from "lucide-react";
 import toast from "react-hot-toast";
 import { useSearch } from "@/components/SearchContext";
 import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmContext";
 import { printBarcodeLabel } from "@/components/printing/BarcodeLabelPrint";
 import BarcodePrintModal from "./BarcodePrintModal";
+import { useTerminalContext } from "@/components/TerminalContext";
+import { useProfileCache } from "@/hooks/useProfileCache";
 
 type InventoryItem = {
   id: string;
@@ -39,6 +41,9 @@ type RawMaterial = {
 };
 
 export default function InventoryPage() {
+  const { currencySymbol: sym } = useCurrency();
+  const { emitUpdate, lastUpdated } = useTerminalContext();
+
   const { confirm } = useConfirm();
   const { query: globalQuery } = useSearch();
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -53,6 +58,13 @@ export default function InventoryPage() {
   const [filterMode, setFilterMode] = useState<"all" | "critical">("all");
   const [activeTab, setActiveTab] = useState<"finished" | "raw">("finished");
   const [isStockEditMode, setIsStockEditMode] = useState(false);
+
+  // Filter inline dropdowns
+  const [openFilterDropdown, setOpenFilterDropdown] = useState<"category" | "status" | "sort" | null>(null);
+
+  // Modal inline dropdowns
+  const [modalCategoryOpen, setModalCategoryOpen] = useState(false);
+  const [modalUnitOpen, setModalUnitOpen] = useState(false);
   
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [isRawModalOpen, setIsRawModalOpen] = useState(false);
@@ -88,12 +100,11 @@ export default function InventoryPage() {
 
   const [taxEnabled, setTaxEnabled] = useState(true);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
-  const [businessProfile, setBusinessProfile] = useState<any>(null);
+  const { profile } = useProfileCache();
 
   useEffect(() => {
     fetchInventory();
     fetchCategories();
-    fetchProfile();
     fetchRawMaterials();
 
     const handleKravySearch = (e: any) => {
@@ -102,6 +113,13 @@ export default function InventoryPage() {
     window.addEventListener("kravy-search", handleKravySearch);
     return () => window.removeEventListener("kravy-search", handleKravySearch);
   }, []);
+
+  useEffect(() => {
+    if (lastUpdated) {
+      fetchInventory();
+      fetchRawMaterials();
+    }
+  }, [lastUpdated]);
 
   const fetchRawMaterials = async () => {
     try {
@@ -115,18 +133,11 @@ export default function InventoryPage() {
     }
   };
 
-  const fetchProfile = async () => {
-    try {
-      const res = await fetch("/api/profile");
-      if (res.ok) {
-        const data = await res.json();
-        setTaxEnabled(data?.taxEnabled ?? true);
-        setBusinessProfile(data);
-      }
-    } catch (err) {
-      console.error("Profile fetch error", err);
+  useEffect(() => {
+    if (profile) {
+      setTaxEnabled(profile.taxEnabled ?? true);
     }
-  };
+  }, [profile]);
 
   const fetchInventory = async () => {
     try {
@@ -153,6 +164,7 @@ export default function InventoryPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, stock: newStock })
         });
+        emitUpdate();
       } else {
         setItems(prev => prev.map(m => m.id === id ? { ...m, currentStock: newStock } : m));
         await fetch('/api/items', {
@@ -160,6 +172,7 @@ export default function InventoryPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, currentStock: newStock })
         });
+        emitUpdate();
       }
     } catch (err) {
       console.error("Stock inline update failed:", err);
@@ -239,6 +252,7 @@ export default function InventoryPage() {
         setIsModalOpen(false);
         setEditingItem(null);
         fetchInventory();
+        emitUpdate();
       } else {
         const err = await res.json();
         toast.error(err.error || "Save failed");
@@ -257,6 +271,7 @@ export default function InventoryPage() {
       if (res.ok) {
         toast.success("Deleted successfully");
         fetchInventory();
+        emitUpdate();
       }
     } catch (error) {
       toast.error("Delete failed");
@@ -295,54 +310,54 @@ export default function InventoryPage() {
     { label: "Total Assets", val: items.length, icon: Package, color: "text-blue-500", bg: "bg-blue-500/10", mode: "all" },
     { label: "Critical Stock", val: items.filter(i => i.currentStock <= i.reorderLevel).length, icon: AlertTriangle, color: "text-rose-500", bg: "bg-rose-500/10", mode: "critical" },
     { label: "Categories", val: categories.length, icon: Layers, color: "text-amber-500", bg: "bg-amber-500/10", mode: "all" },
-    { label: "Live Value", val: `₹${Math.round(items.reduce((acc, i) => acc + (i.currentStock * i.price), 0))}`, icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-500/10", mode: "all" },
+    { label: "Live Value", val: `${sym}${Math.round(items.reduce((acc, i) => acc + (i.currentStock * i.price), 0))}`, icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-500/10", mode: "all" },
   ];
 
   return (
-    <div className="flex flex-col gap-6 max-h-screen overflow-hidden">
+    <div className="flex flex-col gap-5 sm:gap-6 w-full">
       {/* Header Hub */}
-      <div className="flex justify-between items-center px-1">
-        <div>
-          <h1 className="text-2xl font-black text-[var(--kravy-text-primary)] tracking-tight flex items-center gap-2">
-            <Sparkles className="text-[var(--kravy-brand)]" size={24} />
-            Inventory Hub
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 px-1">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-black text-[var(--kravy-text-primary)] tracking-tight flex items-center gap-2">
+            <Sparkles className="text-[var(--kravy-brand)] shrink-0" size={22} />
+            <span className="truncate">Inventory Hub</span>
           </h1>
-          <p className="text-[10px] font-bold text-[var(--kravy-text-muted)] uppercase tracking-widest opacity-70">
+          <p className="text-[10px] sm:text-xs font-bold text-[var(--kravy-text-muted)] uppercase tracking-wider opacity-70 mt-0.5">
             Real-time Asset Monitoring & Stock Control
           </p>
         </div>
-        <div className="flex gap-2">
-          <div className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] p-1 rounded-xl flex gap-1 mr-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+          <div className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] p-1 rounded-xl flex gap-1 shadow-sm shrink-0">
             <button 
               onClick={async () => setActiveTab("finished")}
-              className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'finished' ? 'bg-[var(--kravy-brand)] text-white shadow-lg shadow-[var(--kravy-brand)]/20' : 'text-[var(--kravy-text-muted)] hover:bg-[var(--kravy-bg)]'}`}
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${activeTab === 'finished' ? 'bg-[var(--kravy-brand)] text-white shadow-md shadow-[var(--kravy-brand)]/20' : 'text-[var(--kravy-text-muted)] hover:bg-[var(--kravy-bg)]'}`}
             >
               Finished Products
             </button>
             <button 
               onClick={async () => setActiveTab("raw")}
-              className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'raw' ? 'bg-[var(--kravy-brand)] text-white shadow-lg shadow-[var(--kravy-brand)]/20' : 'text-[var(--kravy-text-muted)] hover:bg-[var(--kravy-bg)]'}`}
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${activeTab === 'raw' ? 'bg-[var(--kravy-brand)] text-white shadow-md shadow-[var(--kravy-brand)]/20' : 'text-[var(--kravy-text-muted)] hover:bg-[var(--kravy-bg)]'}`}
             >
               Raw Ingredients
             </button>
           </div>
           <Link 
             href="/dashboard/inventory/reports"
-            className="h-10 px-4 bg-[var(--kravy-bg)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:border-[var(--kravy-brand)] transition-all"
+            className="h-9 sm:h-10 px-3 sm:px-4 bg-[var(--kravy-bg)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5 hover:border-[var(--kravy-brand)] transition-all whitespace-nowrap shrink-0"
           >
-            <BarChart3 size={16} /> REPORT
+            <BarChart3 size={15} className="shrink-0" /> REPORT
           </Link>
           <button 
             onClick={() => setIsStockEditMode(!isStockEditMode)}
-            className={`h-10 px-6 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 shadow-md ${isStockEditMode ? 'bg-orange-500 text-white shadow-orange-500/20 border border-orange-500' : 'bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] hover:border-orange-500 hover:text-orange-500'}`}
+            className={`h-9 sm:h-10 px-3.5 sm:px-5 rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-95 shadow-sm whitespace-nowrap shrink-0 ${isStockEditMode ? 'bg-orange-500 text-white shadow-orange-500/20 border border-orange-500' : 'bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] hover:border-orange-500 hover:text-orange-500'}`}
           >
-            <Edit size={16} strokeWidth={isStockEditMode ? 3 : 2} /> {isStockEditMode ? 'Finish Editing' : 'Edit Stock'}
+            <Edit size={15} className="shrink-0" strokeWidth={isStockEditMode ? 3 : 2} /> {isStockEditMode ? 'Finish Editing' : 'Edit Stock'}
           </button>
           <button 
             onClick={() => setIsBarcodeModalOpen(true)}
-            className="h-10 px-4 bg-[var(--kravy-bg)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:border-[var(--kravy-brand)] transition-all"
+            className="h-9 sm:h-10 px-3 sm:px-4 bg-[var(--kravy-bg)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5 hover:border-[var(--kravy-brand)] transition-all whitespace-nowrap shrink-0"
           >
-            <Printer size={16} /> PRINT BARCODES
+            <Printer size={15} className="shrink-0" /> PRINT BARCODES
           </button>
           <button 
             onClick={async () => {
@@ -358,15 +373,15 @@ export default function InventoryPage() {
                 setIsRawModalOpen(true);
               }
             }}
-            className="h-10 px-6 bg-[var(--kravy-brand)] text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:shadow-lg hover:shadow-[var(--kravy-brand)]/20 transition-all active:scale-95 shadow-md shadow-[var(--kravy-brand)]/10"
+            className="h-9 sm:h-10 px-4 sm:px-5 bg-[var(--kravy-brand)] text-white rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5 hover:shadow-lg hover:shadow-[var(--kravy-brand)]/20 transition-all active:scale-95 shadow-md shadow-[var(--kravy-brand)]/10 whitespace-nowrap shrink-0"
           >
-            <Plus size={16} strokeWidth={3} /> {activeTab === 'finished' ? 'New Product' : 'New Material'}
+            <Plus size={15} strokeWidth={3} className="shrink-0" /> {activeTab === 'finished' ? 'New Product' : 'New Material'}
           </button>
         </div>
       </div>
 
       {/* Metric Grid */}
-      <div className="grid grid-cols-4 gap-3 px-1">
+      <div className="flex lg:grid lg:grid-cols-4 gap-2.5 sm:gap-3 px-1 overflow-x-auto no-scrollbar py-1 snap-x">
         {stats.map((stat, i) => (
           <motion.div
             key={i}
@@ -374,13 +389,13 @@ export default function InventoryPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
             onClick={async () => setFilterMode(stat.mode as any)}
-            className={`cursor-pointer bg-[var(--kravy-surface)] border rounded-2xl p-3 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] flex items-center gap-3 transition-all duration-300 ${filterMode === stat.mode && stat.mode === "critical" ? "border-rose-500 ring-2 ring-rose-500/10 shadow-rose-500/5" : "border-[var(--kravy-border)] hover:border-[var(--kravy-brand)]/30"}`}
+            className={`cursor-pointer bg-[var(--kravy-surface)] border rounded-2xl p-3 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] flex items-center gap-3 transition-all duration-300 min-w-[200px] sm:min-w-[220px] lg:min-w-0 flex-1 snap-start ${filterMode === stat.mode && stat.mode === "critical" ? "border-rose-500 ring-2 ring-rose-500/10 shadow-rose-500/5" : "border-[var(--kravy-border)] hover:border-[var(--kravy-brand)]/30"}`}
           >
             <div className={`w-9 h-9 ${stat.bg} ${stat.color} rounded-xl flex items-center justify-center shrink-0`}>
               <stat.icon size={16} />
             </div>
             <div className="truncate">
-              <div className="text-lg font-black text-[var(--kravy-text-primary)] leading-tight">{stat.val}</div>
+              <div className="text-base sm:text-lg font-black text-[var(--kravy-text-primary)] leading-tight truncate">{stat.val}</div>
               <div className="text-[10px] font-black uppercase tracking-[0.15em] text-[var(--kravy-text-muted)] opacity-60">{stat.label}</div>
             </div>
           </motion.div>
@@ -388,8 +403,8 @@ export default function InventoryPage() {
       </div>
 
       {/* Smart Filters */}
-      <div className="flex flex-wrap gap-2 items-center px-1">
-        <div className="relative w-72 max-w-full group">
+      <div className="flex flex-wrap gap-2.5 items-center px-1">
+        <div className="relative flex-1 min-w-[200px] sm:min-w-[260px] group">
           <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--kravy-text-muted)] group-focus-within:text-[var(--kravy-brand)] transition-colors">
             <Search size={14} />
           </div>
@@ -398,55 +413,123 @@ export default function InventoryPage() {
             placeholder="Search assets or barcodes..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-xl text-xs font-bold text-[var(--kravy-text-primary)] outline-none focus:border-[var(--kravy-brand)] focus:ring-4 focus:ring-[var(--kravy-brand)]/5 transition-all h-10 shadow-sm"
+            className="w-full pl-10 pr-4 py-2 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-xl text-xs font-bold text-[var(--kravy-text-primary)] outline-none focus:border-[var(--kravy-brand)] focus:ring-4 focus:ring-[var(--kravy-brand)]/5 transition-all h-9 sm:h-10 shadow-sm"
           />
         </div>
 
-        <div className="flex gap-2 items-center">
+        <div className="flex flex-wrap gap-2 items-center">
           {/* Category Filter */}
           <div className="relative">
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="appearance-none w-36 pl-3 pr-8 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-xl text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-primary)] cursor-pointer outline-none h-10 focus:border-[var(--kravy-brand)] transition-all shadow-sm"
+            <button
+              type="button"
+              onClick={() => setOpenFilterDropdown(openFilterDropdown === "category" ? null : "category")}
+              className="flex items-center justify-between gap-2 px-3 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-xl text-[10px] font-black uppercase tracking-wider text-[var(--kravy-text-primary)] cursor-pointer outline-none h-9 sm:h-10 hover:border-[var(--kravy-brand)] transition-all shadow-sm whitespace-nowrap"
             >
-              <option value="all">Categories: ALL</option>
-              {categories.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
-            <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--kravy-text-muted)] pointer-events-none" size={10} />
+              <span className="truncate max-w-[120px] sm:max-w-[150px]">
+                {selectedCategory === "all" ? "Categories: ALL" : categories.find(c => c.id === selectedCategory)?.name || "Categories"}
+              </span>
+              <Filter className={`text-[var(--kravy-text-muted)] shrink-0 transition-transform ${openFilterDropdown === "category" ? "scale-110 text-[var(--kravy-brand)]" : ""}`} size={12} />
+            </button>
+
+            {openFilterDropdown === "category" && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setOpenFilterDropdown(null)} />
+                <div className="absolute top-full left-0 mt-1.5 z-50 min-w-[200px] max-w-[280px] bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl shadow-2xl p-1.5 max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-100">
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedCategory("all"); setOpenFilterDropdown(null); }}
+                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-colors ${selectedCategory === "all" ? "bg-[var(--kravy-brand)] text-white" : "text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-bg)]"}`}
+                  >
+                    Categories: ALL
+                  </button>
+                  {categories.map(cat => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => { setSelectedCategory(cat.id); setOpenFilterDropdown(null); }}
+                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-colors truncate ${selectedCategory === cat.id ? "bg-[var(--kravy-brand)] text-white" : "text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-bg)]"}`}
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Status Filter */}
           <div className="relative">
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as any)}
-              className="appearance-none w-36 pl-3 pr-8 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-xl text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-primary)] cursor-pointer outline-none h-10 focus:border-[var(--kravy-brand)] transition-all shadow-sm"
+            <button
+              type="button"
+              onClick={() => setOpenFilterDropdown(openFilterDropdown === "status" ? null : "status")}
+              className="flex items-center justify-between gap-2 px-3 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-xl text-[10px] font-black uppercase tracking-wider text-[var(--kravy-text-primary)] cursor-pointer outline-none h-9 sm:h-10 hover:border-[var(--kravy-brand)] transition-all shadow-sm whitespace-nowrap"
             >
-              <option value="all">Condition: ALL</option>
-              <option value="in-stock">IN STOCK</option>
-              <option value="low-stock">LOW STOCK</option>
-              <option value="out-of-stock">OUT OF STOCK</option>
-            </select>
-            <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--kravy-text-muted)] pointer-events-none" size={10} />
+              <span>
+                {filterStatus === "all" ? "Condition: ALL" : filterStatus === "in-stock" ? "IN STOCK" : filterStatus === "low-stock" ? "LOW STOCK" : "OUT OF STOCK"}
+              </span>
+              <CheckCircle2 className={`text-[var(--kravy-text-muted)] shrink-0 transition-transform ${openFilterDropdown === "status" ? "scale-110 text-[var(--kravy-brand)]" : ""}`} size={12} />
+            </button>
+
+            {openFilterDropdown === "status" && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setOpenFilterDropdown(null)} />
+                <div className="absolute top-full left-0 mt-1.5 z-50 min-w-[170px] bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl shadow-2xl p-1.5 max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-100">
+                  {[
+                    { value: "all", label: "Condition: ALL" },
+                    { value: "in-stock", label: "IN STOCK" },
+                    { value: "low-stock", label: "LOW STOCK" },
+                    { value: "out-of-stock", label: "OUT OF STOCK" }
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => { setFilterStatus(opt.value as any); setOpenFilterDropdown(null); }}
+                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-colors ${filterStatus === opt.value ? "bg-[var(--kravy-brand)] text-white" : "text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-bg)]"}`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Sort Filter */}
           <div className="relative">
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="appearance-none w-44 pl-3 pr-8 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-xl text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-primary)] cursor-pointer outline-none h-10 focus:border-[var(--kravy-brand)] transition-all shadow-sm"
+            <button
+              type="button"
+              onClick={() => setOpenFilterDropdown(openFilterDropdown === "sort" ? null : "sort")}
+              className="flex items-center justify-between gap-2 px-3 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-xl text-[10px] font-black uppercase tracking-wider text-[var(--kravy-text-primary)] cursor-pointer outline-none h-9 sm:h-10 hover:border-[var(--kravy-brand)] transition-all shadow-sm whitespace-nowrap"
             >
-              <option value="name">Sort: NAME (A-Z)</option>
-              <option value="stock-low">Sort: STOCK (LOW\u2192HIGH)</option>
-              <option value="stock-high">Sort: STOCK (HIGH\u2192LOW)</option>
-              <option value="price-low">Sort: PRICE (LOW\u2192HIGH)</option>
-              <option value="price-high">Sort: PRICE (HIGH\u2192LOW)</option>
-            </select>
-            <ArrowUpDown className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--kravy-text-muted)] pointer-events-none" size={10} />
+              <span>
+                {sortBy === "name" ? "Sort: NAME (A-Z)" : sortBy === "stock-low" ? "Sort: STOCK ↑" : sortBy === "stock-high" ? "Sort: STOCK ↓" : sortBy === "price-low" ? "Sort: PRICE ↑" : "Sort: PRICE ↓"}
+              </span>
+              <ArrowUpDown className={`text-[var(--kravy-text-muted)] shrink-0 transition-transform ${openFilterDropdown === "sort" ? "scale-110 text-[var(--kravy-brand)]" : ""}`} size={12} />
+            </button>
+
+            {openFilterDropdown === "sort" && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setOpenFilterDropdown(null)} />
+                <div className="absolute top-full left-0 sm:left-auto sm:right-0 mt-1.5 z-50 min-w-[210px] bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl shadow-2xl p-1.5 max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-100">
+                  {[
+                    { value: "name", label: "Sort: NAME (A-Z)" },
+                    { value: "stock-low", label: "Sort: STOCK (LOW→HIGH)" },
+                    { value: "stock-high", label: "Sort: STOCK (HIGH→LOW)" },
+                    { value: "price-low", label: "Sort: PRICE (LOW→HIGH)" },
+                    { value: "price-high", label: "Sort: PRICE (HIGH→LOW)" }
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => { setSortBy(opt.value as any); setOpenFilterDropdown(null); }}
+                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-colors ${sortBy === opt.value ? "bg-[var(--kravy-brand)] text-white" : "text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-bg)]"}`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Reset Filters */}
@@ -459,9 +542,9 @@ export default function InventoryPage() {
                 setSortBy("name");
                 setFilterMode("all");
               }}
-              className="h-10 px-4 bg-rose-500/5 text-rose-500 border border-rose-500/10 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-rose-500/10 transition-all active:scale-95"
+              className="h-9 sm:h-10 px-3 sm:px-4 bg-rose-500/5 text-rose-500 border border-rose-500/10 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 hover:bg-rose-500/10 transition-all active:scale-95 whitespace-nowrap shrink-0"
             >
-              <XCircle size={12} /> Clear Filters
+              <XCircle size={12} className="shrink-0" /> Clear Filters
             </button>
           )}
         </div>
@@ -470,19 +553,19 @@ export default function InventoryPage() {
       {/* Dense Modern Table */}
       <motion.div 
         layout
-        className="flex-1 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-3xl overflow-hidden shadow-2xl shadow-black/5 flex flex-col mb-4"
+        className="flex-1 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl sm:rounded-3xl overflow-hidden shadow-lg shadow-black/5 flex flex-col mb-4"
       >
-        <div className="overflow-y-auto custom-scrollbar flex-1">
-          <table className="w-full border-collapse">
+        <div className="overflow-x-auto overflow-y-auto custom-scrollbar flex-1">
+          <table className="w-full min-w-[980px] border-collapse">
             <thead className="sticky top-0 z-10 bg-[var(--kravy-navbar-bg)] backdrop-blur-xl border-b border-[var(--kravy-border)]">
               <tr className="bg-gradient-to-r from-[var(--kravy-brand)]/[0.03] to-transparent">
-                <th className="px-5 py-4 text-left text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em]">{activeTab === 'finished' ? 'Inventory Item' : 'Raw Material'}</th>
-                {activeTab === 'finished' && <th className="px-5 py-4 text-left text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em]">Inventory ID</th>}
-                <th className="px-5 py-4 text-left text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em]">{activeTab === 'finished' ? 'Category' : 'Stock Unit'}</th>
-                <th className="px-5 py-4 text-left text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em]">Stock Status</th>
-                <th className="px-5 py-4 text-left text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em]">Critical Floor</th>
-                <th className="px-5 py-4 text-left text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em]">Valuation</th>
-                <th className="px-5 py-4 text-center text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em]">Controls</th>
+                <th className="px-5 py-4 text-left text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em] whitespace-nowrap min-w-[200px]">{activeTab === 'finished' ? 'Inventory Item' : 'Raw Material'}</th>
+                {activeTab === 'finished' && <th className="px-5 py-4 text-left text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em] whitespace-nowrap min-w-[150px]">Inventory ID</th>}
+                <th className="px-5 py-4 text-left text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em] whitespace-nowrap min-w-[130px]">{activeTab === 'finished' ? 'Category' : 'Stock Unit'}</th>
+                <th className="px-5 py-4 text-left text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em] whitespace-nowrap min-w-[160px]">Stock Status</th>
+                <th className="px-5 py-4 text-left text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em] whitespace-nowrap min-w-[110px]">Critical Floor</th>
+                <th className="px-5 py-4 text-left text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em] whitespace-nowrap min-w-[120px]">Valuation</th>
+                <th className="px-5 py-4 text-center text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-[0.2em] whitespace-nowrap min-w-[160px]">Controls</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--kravy-border)]/50">
@@ -522,14 +605,14 @@ export default function InventoryPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="px-5 py-4 whitespace-nowrap">
                         {item.inventoryCode ? (
-                          <span className="px-3 py-1 bg-indigo-500/10 text-indigo-600 rounded-md font-black text-xs font-mono border border-indigo-500/20">{item.inventoryCode}</span>
+                          <span className="inline-flex items-center px-2.5 py-1 bg-indigo-500/10 text-indigo-600 rounded-lg font-black text-xs font-mono border border-indigo-500/20 whitespace-nowrap tracking-wide">{item.inventoryCode}</span>
                         ) : (
                           <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--kravy-text-faint)] italic">N/A</span>
                         )}
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="px-5 py-4 whitespace-nowrap">
                         <span className="px-3 py-1.5 bg-[var(--kravy-bg)] border border-[var(--kravy-border)] rounded-lg text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-secondary)]">
                           {item.category?.name || "Uncategorized"}
                         </span>
@@ -573,12 +656,12 @@ export default function InventoryPage() {
                       </td>
                       <td className="px-5 py-4">
                         <div>
-                          <div className="text-sm font-black text-[var(--kravy-text-primary)]">₹{item.sellingPrice}</div>
-                          <div className="text-[10px] font-bold text-[var(--kravy-text-faint)]">Cost: ₹{item.price}</div>
+                          <div className="text-sm font-black text-[var(--kravy-text-primary)]">{sym}{item.sellingPrice}</div>
+                          <div className="text-[10px] font-bold text-[var(--kravy-text-faint)]">Cost: {sym}{item.price}</div>
                         </div>
                       </td>
                       <td className="px-5 py-4">
-                        <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center justify-center gap-1.5 sm:gap-2">
                           <button 
                             onClick={async () => {
                               setSelectedItemForRecipe(item);
@@ -605,7 +688,7 @@ export default function InventoryPage() {
                             <Edit size={14} />
                           </button>
                           <button 
-                            onClick={() => printBarcodeLabel(item, businessProfile)}
+                            onClick={() => printBarcodeLabel(item, profile)}
                             className="w-8 h-8 rounded-lg bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-muted)] hover:text-blue-500 hover:border-blue-500/50 transition-all flex items-center justify-center"
                             title="Print Barcode Label"
                           >
@@ -684,10 +767,10 @@ export default function InventoryPage() {
                           <div className="text-sm font-bold text-[var(--kravy-text-muted)]">{mat.minStock} {mat.unit}</div>
                         </td>
                         <td className="px-5 py-4">
-                          <div className="text-sm font-black text-[var(--kravy-text-primary)]">₹{mat.price}</div>
+                          <div className="text-sm font-black text-[var(--kravy-text-primary)]">{sym}{mat.price}</div>
                         </td>
                         <td className="px-5 py-4">
-                          <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex items-center justify-center gap-1.5 sm:gap-2">
                             <button 
                               onClick={async () => {
                                 setEditingRaw(mat);
@@ -711,6 +794,7 @@ export default function InventoryPage() {
                                 if(res.ok) {
                                   toast.success("Deleted");
                                   fetchRawMaterials();
+                                  emitUpdate();
                                 }
                               }}
                               className="w-8 h-8 rounded-lg bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-muted)] hover:text-rose-500 hover:border-rose-500/50 transition-all flex items-center justify-center"
@@ -736,16 +820,16 @@ export default function InventoryPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={async () => setIsModalOpen(false)}
+              onClick={async () => { setIsModalOpen(false); setModalCategoryOpen(false); setModalUnitOpen(false); }}
               className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             />
             <motion.div
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] w-full max-w-xl rounded-3xl overflow-hidden shadow-2xl relative z-10"
+              className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] w-full max-w-xl rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl relative z-10 flex flex-col max-h-[90vh]"
             >
-              <div className="px-6 py-5 border-b border-[var(--kravy-border)] flex justify-between items-center bg-gradient-to-r from-[var(--kravy-brand)]/[0.05] to-transparent">
+              <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-[var(--kravy-border)] flex justify-between items-center bg-gradient-to-r from-[var(--kravy-brand)]/[0.05] to-transparent shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-[var(--kravy-brand)] flex items-center justify-center text-white shadow-lg shadow-[var(--kravy-brand)]/20">
                     <Layers size={20} />
@@ -755,60 +839,117 @@ export default function InventoryPage() {
                     <p className="text-[10px] font-bold text-[var(--kravy-text-muted)] uppercase tracking-widest leading-none mt-1">Classification & Stock Levels</p>
                   </div>
                 </div>
-                <button onClick={async () => setIsModalOpen(false)} className="w-8 h-8 rounded-xl hover:bg-[var(--kravy-bg)] flex items-center justify-center text-[var(--kravy-text-muted)] transition-colors">
+                <button onClick={async () => { setIsModalOpen(false); setModalCategoryOpen(false); setModalUnitOpen(false); }} className="w-8 h-8 rounded-xl hover:bg-[var(--kravy-bg)] flex items-center justify-center text-[var(--kravy-text-muted)] transition-colors">
                   <X size={20} />
                 </button>
               </div>
 
-              <form onSubmit={handleSave} className="p-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2 space-y-1.5">
+              <form id="asset-form" onSubmit={handleSave} className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="col-span-1 sm:col-span-2 space-y-1.5">
                     <label className="text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest px-1">Item Primary Name</label>
                     <input
                       required
-                      className="w-full bg-[var(--kravy-bg)] border border-[var(--kravy-border)] rounded-2xl px-4 py-3 text-sm font-bold text-[var(--kravy-text-primary)] focus:border-[var(--kravy-brand)] outline-none transition-all shadow-inner shadow-black/5"
+                      className="w-full bg-[var(--kravy-bg)] border border-[var(--kravy-border)] rounded-2xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-[var(--kravy-text-primary)] focus:border-[var(--kravy-brand)] outline-none transition-all shadow-inner shadow-black/5"
                       placeholder="e.g. Basmati Rice 25kg"
                       value={formData.name}
                       onChange={(e) => setFormData({...formData, name: e.target.value})}
                     />
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 relative">
                     <label className="text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest px-1">Classification</label>
-                    <select
-                      className="w-full bg-[var(--kravy-bg)] border border-[var(--kravy-border)] rounded-2xl px-4 py-3 text-sm font-bold text-[var(--kravy-text-primary)] outline-none focus:border-[var(--kravy-brand)] transition-all cursor-pointer shadow-inner shadow-black/5"
-                      value={formData.categoryId}
-                      onChange={(e) => setFormData({...formData, categoryId: e.target.value})}
-                    >
-                      <option value="">No Category</option>
-                      {categories.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => { setModalCategoryOpen(!modalCategoryOpen); setModalUnitOpen(false); }}
+                        className="w-full flex items-center justify-between bg-[var(--kravy-bg)] border border-[var(--kravy-border)] rounded-2xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-[var(--kravy-text-primary)] outline-none hover:border-[var(--kravy-brand)] focus:border-[var(--kravy-brand)] transition-all text-left shadow-inner shadow-black/5"
+                      >
+                        <span className="truncate">
+                          {categories.find(c => c.id === formData.categoryId)?.name || "No Category"}
+                        </span>
+                        <ChevronDown size={16} className={`text-[var(--kravy-text-muted)] shrink-0 transition-transform ${modalCategoryOpen ? "rotate-180" : ""}`} />
+                      </button>
+
+                      {modalCategoryOpen && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setModalCategoryOpen(false)} />
+                          <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl shadow-2xl p-1.5 max-h-52 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-100">
+                            <button
+                              type="button"
+                              onClick={() => { setFormData({ ...formData, categoryId: "" }); setModalCategoryOpen(false); }}
+                              className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-colors ${formData.categoryId === "" ? "bg-[var(--kravy-brand)] text-white" : "text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-bg)]"}`}
+                            >
+                              No Category
+                            </button>
+                            {categories.map(cat => (
+                              <button
+                                key={cat.id}
+                                type="button"
+                                onClick={() => { setFormData({ ...formData, categoryId: cat.id }); setModalCategoryOpen(false); }}
+                                className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-colors truncate ${formData.categoryId === cat.id ? "bg-[var(--kravy-brand)] text-white" : "text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-bg)]"}`}
+                              >
+                                {cat.name}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   <div className="space-y-1.5">
-                    <div className="flex gap-2">
-                       <div className="flex-1 space-y-1.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                       <div className="space-y-1.5 relative">
                           <label className="text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest px-1">Unit Type</label>
-                          <select
-                            className="w-full bg-[var(--kravy-bg)] border border-[var(--kravy-border)] rounded-2xl px-4 py-3 text-sm font-bold text-[var(--kravy-text-primary)] outline-none focus:border-[var(--kravy-brand)] transition-all cursor-pointer shadow-inner shadow-black/5"
-                            value={formData.unit}
-                            onChange={(e) => setFormData({...formData, unit: e.target.value})}
-                          >
-                            <option value="pcs">Pieces (pcs)</option>
-                            <option value="kg">Kilogram (kg)</option>
-                            <option value="ltr">Liter (ltr)</option>
-                            <option value="box">Box</option>
-                            <option value="pkt">Packet</option>
-                          </select>
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => { setModalUnitOpen(!modalUnitOpen); setModalCategoryOpen(false); }}
+                              className="w-full flex items-center justify-between bg-[var(--kravy-bg)] border border-[var(--kravy-border)] rounded-xl sm:rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-[var(--kravy-text-primary)] outline-none hover:border-[var(--kravy-brand)] focus:border-[var(--kravy-brand)] transition-all text-left shadow-inner shadow-black/5"
+                            >
+                              <span className="truncate">
+                                {formData.unit === "pcs" && "Pieces (pcs)"}
+                                {formData.unit === "kg" && "Kilogram (kg)"}
+                                {formData.unit === "ltr" && "Liter (ltr)"}
+                                {formData.unit === "box" && "Box"}
+                                {formData.unit === "pkt" && "Packet"}
+                                {!["pcs","kg","ltr","box","pkt"].includes(formData.unit) && (formData.unit || "Pieces (pcs)")}
+                              </span>
+                              <ChevronDown size={16} className={`text-[var(--kravy-text-muted)] shrink-0 transition-transform ${modalUnitOpen ? "rotate-180" : ""}`} />
+                            </button>
+
+                            {modalUnitOpen && (
+                              <>
+                                <div className="fixed inset-0 z-40" onClick={() => setModalUnitOpen(false)} />
+                                <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl shadow-2xl p-1.5 max-h-52 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-100">
+                                  {[
+                                    { value: "pcs", label: "Pieces (pcs)" },
+                                    { value: "kg", label: "Kilogram (kg)" },
+                                    { value: "ltr", label: "Liter (ltr)" },
+                                    { value: "box", label: "Box" },
+                                    { value: "pkt", label: "Packet" }
+                                  ].map(u => (
+                                    <button
+                                      key={u.value}
+                                      type="button"
+                                      onClick={() => { setFormData({ ...formData, unit: u.value }); setModalUnitOpen(false); }}
+                                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-colors ${formData.unit === u.value ? "bg-[var(--kravy-brand)] text-white" : "text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-bg)]"}`}
+                                    >
+                                      {u.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </div>
                        </div>
-                       <div className="flex-1 space-y-1.5">
+                       <div className="space-y-1.5">
                           <label className="text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest px-1">Barcode</label>
                           <input
                             type="text"
                             placeholder="Scan/Type"
-                            className="w-full bg-[var(--kravy-bg)] border border-[var(--kravy-border)] rounded-2xl px-4 py-3 text-sm font-bold text-[var(--kravy-text-primary)] focus:border-[var(--kravy-brand)] outline-none transition-all shadow-inner shadow-black/5"
+                            className="w-full bg-[var(--kravy-bg)] border border-[var(--kravy-border)] rounded-xl sm:rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-[var(--kravy-text-primary)] focus:border-[var(--kravy-brand)] outline-none transition-all shadow-inner shadow-black/5"
                             value={formData.barcode}
                             onChange={(e) => setFormData({...formData, barcode: e.target.value})}
                           />
@@ -839,7 +980,7 @@ export default function InventoryPage() {
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest px-1">Purchase Cost</label>
                     <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-[var(--kravy-text-faint)]">₹</span>
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-[var(--kravy-text-faint)]">{sym}</span>
                       <input
                         type="number"
                         className="w-full bg-[var(--kravy-bg)] border border-[var(--kravy-border)] rounded-2xl pl-8 pr-4 py-3 text-sm font-bold text-[var(--kravy-text-primary)] focus:border-[var(--kravy-brand)] outline-none transition-all shadow-inner shadow-black/5"
@@ -852,7 +993,7 @@ export default function InventoryPage() {
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest px-1">Selling Value</label>
                     <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-[var(--kravy-text-faint)]">₹</span>
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-[var(--kravy-text-faint)]">{sym}</span>
                       <input
                         type="number"
                         className="w-full bg-[var(--kravy-bg)] border border-[var(--kravy-border)] rounded-2xl pl-8 pr-4 py-3 text-sm font-bold text-[var(--kravy-text-primary)] focus:border-[var(--kravy-brand)] outline-none transition-all shadow-inner shadow-black/5"
@@ -938,24 +1079,25 @@ export default function InventoryPage() {
                     </p>
                   </div>
                 </div>
-                <div className="mt-8 flex gap-3">
-                  <button
-                    type="button"
-                    onClick={async () => setIsModalOpen(false)}
-                    className="flex-1 px-6 py-3 bg-[var(--kravy-bg)] text-[var(--kravy-text-muted)] rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-[var(--kravy-border)]/20 transition-all border border-[var(--kravy-border)]"
-                  >
-                    Discard Changes
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSaving}
-                    className="flex-1 px-6 py-3 bg-[var(--kravy-brand)] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:shadow-lg hover:shadow-[var(--kravy-brand)]/20 transition-all active:scale-95 flex items-center justify-center gap-2 group shadow-xl shadow-[var(--kravy-brand)]/10"
-                  >
-                    {isSaving ? <Package className="animate-spin" size={16} /> : <Save size={16} className="group-hover:scale-110 transition-transform" />}
-                    Confirm Transaction
-                  </button>
-                </div>
               </form>
+              <div className="p-3 sm:p-5 border-t border-[var(--kravy-border)] bg-[var(--kravy-surface)] flex flex-row gap-2.5 sm:gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={async () => { setIsModalOpen(false); setModalCategoryOpen(false); setModalUnitOpen(false); }}
+                  className="flex-1 px-4 sm:px-6 py-2.5 sm:py-3 bg-[var(--kravy-bg)] text-[var(--kravy-text-muted)] rounded-xl sm:rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-[var(--kravy-border)]/20 transition-all border border-[var(--kravy-border)]"
+                >
+                  Discard Changes
+                </button>
+                <button
+                  form="asset-form"
+                  type="submit"
+                  disabled={isSaving}
+                  className="flex-1 px-4 sm:px-6 py-2.5 sm:py-3 bg-[var(--kravy-brand)] text-white rounded-xl sm:rounded-2xl text-[10px] font-black uppercase tracking-widest hover:shadow-lg hover:shadow-[var(--kravy-brand)]/20 transition-all active:scale-95 flex items-center justify-center gap-2 group shadow-xl shadow-[var(--kravy-brand)]/10"
+                >
+                  {isSaving ? <Package className="animate-spin" size={16} /> : <Save size={16} className="group-hover:scale-110 transition-transform" />}
+                  Confirm Transaction
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
@@ -966,7 +1108,7 @@ export default function InventoryPage() {
         {isRawModalOpen && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={async () => setIsRawModalOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] w-full max-w-md rounded-3xl overflow-hidden shadow-2xl relative z-10 p-6">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] w-full max-w-md rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl relative z-10 p-4 sm:p-6 max-h-[90vh] overflow-y-auto custom-scrollbar">
               <h2 className="text-lg font-black mb-6 flex items-center gap-2">
                 <Package className="text-orange-500" /> {editingRaw ? "Edit Material" : "New Raw Material"}
               </h2>
@@ -975,7 +1117,7 @@ export default function InventoryPage() {
                   <label className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)]">Material Name</label>
                   <input className="w-full bg-[var(--kravy-bg)] border border-[var(--kravy-border)] rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-orange-500" placeholder="e.g. Flour, Sugar" value={rawFormData.name} onChange={e => setRawFormData({...rawFormData, name: e.target.value})} />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)]">Unit (kg, ltr, pcs)</label>
                     <input className="w-full bg-[var(--kravy-bg)] border border-[var(--kravy-border)] rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-orange-500" value={rawFormData.unit} onChange={e => setRawFormData({...rawFormData, unit: e.target.value})} />
@@ -985,7 +1127,7 @@ export default function InventoryPage() {
                     <input type="number" className="w-full bg-[var(--kravy-bg)] border border(--kravy-border)] rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-orange-500" value={rawFormData.stock} onChange={e => setRawFormData({...rawFormData, stock: Number(e.target.value)})} />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)]">Reorder Level</label>
                     <input type="number" className="w-full bg-[var(--kravy-bg)] border border(--kravy-border)] rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-orange-500" value={rawFormData.minStock} onChange={e => setRawFormData({...rawFormData, minStock: Number(e.target.value)})} />
@@ -1010,6 +1152,7 @@ export default function InventoryPage() {
                       toast.success("Saved");
                       setIsRawModalOpen(false);
                       fetchRawMaterials();
+                      emitUpdate();
                     } else {
                       toast.error("Failed to save material");
                     }
@@ -1033,7 +1176,7 @@ export default function InventoryPage() {
         {isRecipeModalOpen && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={async () => setIsRecipeModalOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl relative z-10">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] w-full max-w-2xl rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl relative z-10 flex flex-col max-h-[90vh]">
               <div className="px-6 py-5 border-b border-[var(--kravy-border)] flex justify-between items-center bg-indigo-500/5">
                 <div>
                   <h2 className="text-lg font-black text-indigo-600">Recipe: {selectedItemForRecipe?.name}</h2>
@@ -1043,7 +1186,7 @@ export default function InventoryPage() {
                   <X size={20} />
                 </button>
               </div>
-              <div className="p-6 space-y-6">
+              <div className="p-4 sm:p-6 space-y-5 sm:space-y-6 overflow-y-auto custom-scrollbar flex-1">
                 <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                   {currentRecipe.length === 0 ? (
                     <div className="py-10 text-center border-2 border-dashed border-slate-200 dark:border-white/5 rounded-2xl">
@@ -1123,6 +1266,7 @@ export default function InventoryPage() {
                         if (res.ok) {
                           toast.success("Recipe saved successfully!");
                           setIsRecipeModalOpen(false);
+                          emitUpdate();
                         }
                       } finally {
                         setIsRecipeSaving(false);
@@ -1138,6 +1282,9 @@ export default function InventoryPage() {
           </div>
         )}
       </AnimatePresence>
+
+
+
 
       {/* Barcode Print Modal */}
       <BarcodePrintModal 

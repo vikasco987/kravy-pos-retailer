@@ -1,4 +1,5 @@
 "use client";
+import { useCurrency } from '@/lib/currency-context';
 
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { Wallet, Maximize2 } from "lucide-react";
@@ -14,6 +15,7 @@ interface Props {
 }
 
 const CustomTooltip = ({ active, payload }: any) => {
+  const { currencySymbol: sym } = useCurrency();
   if (active && payload && payload.length) {
     return (
       <div style={{
@@ -26,7 +28,7 @@ const CustomTooltip = ({ active, payload }: any) => {
       }}>
         <div style={{ fontSize: "0.72rem", color: "var(--kravy-text-muted)", marginBottom: "4px" }}>{payload[0].name}</div>
         <div style={{ fontSize: "1rem", fontWeight: 800, color: payload[0].payload.color }}>
-          ₹{new Intl.NumberFormat("en-IN").format(Math.round(payload[0].value))}
+          {sym}{new Intl.NumberFormat("en-IN").format(Math.round(payload[0].value))}
         </div>
       </div>
     );
@@ -35,6 +37,7 @@ const CustomTooltip = ({ active, payload }: any) => {
 };
 
 export default function PaymentModeChart({ paymentSplit, range = 30 }: Props) {
+  const { currencySymbol: sym } = useCurrency();
   const router = useRouter();
   const cash = paymentSplit?.Cash || 0;
   const upi = paymentSplit?.UPI || 0;
@@ -178,7 +181,7 @@ export default function PaymentModeChart({ paymentSplit, range = 30 }: Props) {
               pointerEvents: "none"
             }}>
               <div style={{ fontSize: "0.65rem", fontWeight: 700, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "1px" }}>Total</div>
-              <div style={{ fontSize: "1.15rem", fontWeight: 900, color: "var(--kravy-text-primary)", letterSpacing: "-0.5px" }}>₹{format(total)}</div>
+              <div style={{ fontSize: "1.15rem", fontWeight: 900, color: "var(--kravy-text-primary)", letterSpacing: "-0.5px" }}>{sym}{format(total)}</div>
             </div>
           </>
         )}
@@ -214,7 +217,7 @@ export default function PaymentModeChart({ paymentSplit, range = 30 }: Props) {
                 <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--kravy-text-muted)" }}>{item.name}</span>
               </div>
               <div style={{ fontSize: "0.9rem", fontWeight: 800, color: item.color }}>
-                ₹{format(item.value)}
+                {sym}{format(item.value)}
               </div>
               <div style={{ fontSize: "0.65rem", color: "var(--kravy-text-faint)", fontFamily: "monospace" }}>
                 {total > 0 ? Math.round((item.value / total) * 100) : 0}%

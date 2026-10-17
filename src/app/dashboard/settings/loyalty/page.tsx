@@ -36,7 +36,8 @@ export default function LoyaltySettingsPage() {
     loyaltyMinOrderAmount: 100,
     loyaltyValueInRupees: 1,
     loyaltyMinRedeem: 100,
-    maxRedeemPointsPerBill: 500
+    maxRedeemPointsPerBill: 500,
+    maxEarnPointsPerBill: ""
   });
 
   const loading = profileLoading && !cachedProfile;
@@ -49,7 +50,8 @@ export default function LoyaltySettingsPage() {
         loyaltyMinOrderAmount: cachedProfile.loyaltyMinOrderAmount ?? 100,
         loyaltyValueInRupees: cachedProfile.loyaltyValueInRupees ?? 1,
         loyaltyMinRedeem: cachedProfile.loyaltyMinRedeem ?? 100,
-        maxRedeemPointsPerBill: cachedProfile.maxRedeemPointsPerBill ?? 500
+        maxRedeemPointsPerBill: cachedProfile.maxRedeemPointsPerBill ?? 500,
+        maxEarnPointsPerBill: cachedProfile.maxEarnPointsPerBill ?? ""
       });
     }
   }, [cachedProfile]);
@@ -98,7 +100,8 @@ export default function LoyaltySettingsPage() {
           loyaltyMinOrderAmount: parseFloat(profile.loyaltyMinOrderAmount) || 0,
           loyaltyValueInRupees: parseFloat(profile.loyaltyValueInRupees) || 1,
           loyaltyMinRedeem: parseInt(profile.loyaltyMinRedeem) || 100,
-          maxRedeemPointsPerBill: parseInt(profile.maxRedeemPointsPerBill) || 500
+          maxRedeemPointsPerBill: profile.maxRedeemPointsPerBill === "" ? null : (parseInt(profile.maxRedeemPointsPerBill) || null),
+          maxEarnPointsPerBill: profile.maxEarnPointsPerBill === "" || profile.maxEarnPointsPerBill === null ? null : (parseInt(profile.maxEarnPointsPerBill) || null)
         })
       });
 
@@ -109,7 +112,8 @@ export default function LoyaltySettingsPage() {
           loyaltyMinOrderAmount: parseFloat(profile.loyaltyMinOrderAmount) || 0,
           loyaltyValueInRupees: parseFloat(profile.loyaltyValueInRupees) || 1,
           loyaltyMinRedeem: parseInt(profile.loyaltyMinRedeem) || 100,
-          maxRedeemPointsPerBill: parseInt(profile.maxRedeemPointsPerBill) || 500
+          maxRedeemPointsPerBill: profile.maxRedeemPointsPerBill === "" ? null : (parseInt(profile.maxRedeemPointsPerBill) || null),
+          maxEarnPointsPerBill: profile.maxEarnPointsPerBill === "" || profile.maxEarnPointsPerBill === null ? null : (parseInt(profile.maxEarnPointsPerBill) || null)
         });
         toast.success("Loyalty & Rewards rules updated successfully! 👑");
       } else {
@@ -365,6 +369,22 @@ export default function LoyaltySettingsPage() {
             />
             <p className="text-[0.7rem] text-[var(--kravy-text-muted)] italic">Cap maximum points used in a single transaction.</p>
           </div>
+
+          {/* Max Earn Limit per Bill */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-[var(--kravy-text-primary)] flex items-center gap-1.5">
+              <Sparkles size={14} className="text-emerald-500" />
+              Maximum Points Earned Per Bill
+            </label>
+            <input
+              type="number"
+              value={profile.maxEarnPointsPerBill}
+              onChange={(e) => setProfile({ ...profile, maxEarnPointsPerBill: e.target.value })}
+              className="w-full bg-[var(--kravy-bg)] border border-[var(--kravy-border)] rounded-xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500/20 outline-none"
+              placeholder="Unlimited"
+            />
+            <p className="text-[0.7rem] text-[var(--kravy-text-muted)] italic">Maximum loyalty points a customer can earn from a single bill. Leave blank for unlimited.</p>
+          </div>
         </div>
       </div>
 
@@ -475,6 +495,38 @@ export default function LoyaltySettingsPage() {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* HOW IT WORKS / DOCUMENTATION */}
+      <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30 border border-indigo-100 dark:border-indigo-900 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex items-center gap-3 border-b border-indigo-200/50 dark:border-indigo-800/50 pb-4">
+          <div className="w-10 h-10 rounded-xl bg-indigo-500 text-white flex items-center justify-center shadow-md">
+            <Sparkles size={20} />
+          </div>
+          <div>
+            <h3 className="text-lg font-black text-indigo-900 dark:text-indigo-100">How It Works (Guide)</h3>
+            <p className="text-xs text-indigo-700/70 dark:text-indigo-300/70 font-medium">Practical example of how your current loyalty settings work.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+                <h4 className="font-black text-sm text-indigo-800 dark:text-indigo-300 bg-white/50 dark:bg-black/20 px-3 py-1.5 rounded-lg inline-block">1. Earning Points (Customer Orders)</h4>
+                <ul className="space-y-3 text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                    <li className="flex gap-2"><span className="text-emerald-500">✅</span> If a customer bill is <strong>₹{profile.loyaltyMinOrderAmount || 100}</strong> or more, they start earning points.</li>
+                    <li className="flex gap-2"><span className="text-emerald-500">✅</span> They earn <strong>1 point for every ₹{profile.loyaltyPointRatio || 10} spent</strong>. (Example: A bill of ₹500 earns {Math.floor(500 / (profile.loyaltyPointRatio || 10))} points).</li>
+                    <li className="flex gap-2"><span className="text-emerald-500">✅</span> The maximum they can earn from a single bill is <strong>{profile.maxEarnPointsPerBill || "Unlimited"} points</strong>, no matter how huge their bill is.</li>
+                </ul>
+            </div>
+            <div className="space-y-4">
+                <h4 className="font-black text-sm text-rose-800 dark:text-rose-300 bg-white/50 dark:bg-black/20 px-3 py-1.5 rounded-lg inline-block">2. Redeeming Points (Discounts)</h4>
+                <ul className="space-y-3 text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                    <li className="flex gap-2"><span className="text-rose-500">💳</span> Customers cannot use points until they have collected at least <strong>{profile.loyaltyMinRedeem || 100} points</strong> in their account.</li>
+                    <li className="flex gap-2"><span className="text-rose-500">💳</span> Each point gives a discount of <strong>₹{profile.loyaltyValueInRupees || 1}</strong>.</li>
+                    <li className="flex gap-2"><span className="text-rose-500">💳</span> A customer can use a maximum of <strong>{profile.maxRedeemPointsPerBill || 500} points</strong> per order, capping their maximum possible discount at <strong>₹{(profile.maxRedeemPointsPerBill || 500) * (profile.loyaltyValueInRupees || 1)}</strong>.</li>
+                </ul>
+            </div>
         </div>
       </div>
 

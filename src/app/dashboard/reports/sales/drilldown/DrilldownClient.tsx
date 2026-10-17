@@ -1,5 +1,6 @@
 "use client";
 
+import { useCurrency } from '@/lib/currency-context';
 import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { 
@@ -56,12 +57,15 @@ interface BillItemDetail {
   subtotal: number;
   discountAmount: number;
   tax: number;
+  amountPaid?: number;
+  balanceDue?: number;
   tableName: string;
   items: any;
   auditNote: string | null;
 }
 
 export default function DrilldownClient({ businessName }: DrilldownClientProps) {
+  const { currencySymbol: sym } = useCurrency();
   // Navigation / Tabs State
   const [activeTab, setActiveTab] = useState<"year" | "month" | "week" | "day">("month");
   
@@ -253,8 +257,8 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
         <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
           <Link href="/dashboard" style={{
             width: "48px", height: "48px", borderRadius: "16px", background: "var(--kravy-surface)",
-            border: "1px solid var(--kravy-border)", display: "flex", alignItems: "center", justifyCenter: "center", color: "var(--kravy-text-primary)",
-            boxShadow: "var(--kravy-shadow-sm)", display: "inline-flex", justifyContent: "center"
+            border: "1px solid var(--kravy-border)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--kravy-text-primary)",
+            boxShadow: "var(--kravy-shadow-sm)"
           }}>
             <ChevronLeft size={24} style={{ marginTop: "11px" }} />
           </Link>
@@ -346,11 +350,11 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                     { key: "paymentStatus", label: "Status" },
                     { key: "paymentMode", label: "Mode" },
                     { key: "tableName", label: "Source" },
-                    { key: "total", label: "Value (₹)", format: (v: any) => v.toString() }
+                    { key: "total", label: "Value ({sym})", format: (v: any) => v.toString() }
                   ]
                 : [
                     { key: "label", label: "Period / Entity" },
-                    { key: "sales", label: "Sales Volume (₹)", format: (v: any) => v.toString() },
+                    { key: "sales", label: "Sales Volume ({sym})", format: (v: any) => v.toString() },
                     { key: "count", label: "Bill Count", format: (v: any) => v.toString() }
                   ]}
               filename={`Sales_Drilldown_${periodStr.replace(/[^a-zA-Z0-9]/g, "_")}`}
@@ -546,10 +550,10 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                       <span style={{ fontSize: "0.6rem", fontWeight: 800, background: "rgba(255,255,255,0.15)", padding: "2px 8px", borderRadius: "8px" }}>{periodStr}</span>
                     </div>
                     <div style={{ fontSize: "2rem", fontWeight: 950, letterSpacing: "-1.5px", marginTop: "8px" }}>
-                      {showBalances ? "₹" : ""}{mask(format(summary.totalSales))}
+                      {showBalances ? sym : ""}{mask(format(summary.totalSales))}
                     </div>
                     <div style={{ fontSize: "0.7rem", opacity: 0.8, marginTop: "6px" }}>
-                      Gross: {showBalances ? "₹" : ""}{mask(format(summary.grossSales))}
+                      Gross: {showBalances ? sym : ""}{mask(format(summary.grossSales))}
                     </div>
                   </div>
                   
@@ -559,10 +563,10 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                       <span style={{ fontSize: "0.6rem", fontWeight: 800, color: "var(--kravy-text-muted)", background: "var(--kravy-bg-2)", padding: "2px 8px", borderRadius: "8px" }}>{periodStr}</span>
                     </div>
                     <div style={{ fontSize: "2rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1.5px", marginTop: "8px" }}>
-                      {showBalances ? "₹" : ""}{mask(format(summary.netSales))}
+                      {showBalances ? sym : ""}{mask(format(summary.netSales))}
                     </div>
                     <div style={{ fontSize: "0.7rem", color: "var(--kravy-text-muted)", marginTop: "6px" }}>
-                      GST Value: {showBalances ? "₹" : ""}{mask(format(summary.grossSales - summary.netSales))}
+                      GST Value: {showBalances ? sym : ""}{mask(format(summary.grossSales - summary.netSales))}
                     </div>
                   </div>
 
@@ -575,7 +579,7 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                       {mask(summary.totalBills)}
                     </div>
                     <div style={{ fontSize: "0.7rem", color: "var(--kravy-text-muted)", marginTop: "6px" }}>
-                      Cancelled: {mask(summary.cancelledBills)} ({showBalances ? "₹" : ""}{mask(format(summary.cancelledValue))})
+                      Cancelled: {mask(summary.cancelledBills)} ({showBalances ? sym : ""}{mask(format(summary.cancelledValue))})
                     </div>
                   </div>
 
@@ -585,10 +589,10 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                       <span style={{ fontSize: "0.6rem", fontWeight: 800, color: "var(--kravy-text-muted)", background: "var(--kravy-bg-2)", padding: "2px 8px", borderRadius: "8px" }}>{periodStr}</span>
                     </div>
                     <div style={{ fontSize: "2rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1.5px", marginTop: "8px" }}>
-                      {showBalances ? "₹" : ""}{mask(format(summary.avgBill))}
+                      {showBalances ? sym : ""}{mask(format(summary.avgBill))}
                     </div>
                     <div style={{ fontSize: "0.7rem", color: "var(--kravy-text-muted)", marginTop: "6px" }}>
-                      Max Ticket: {showBalances ? "₹" : ""}{mask(format(summary.highestBill))}
+                      Max Ticket: {showBalances ? sym : ""}{mask(format(summary.highestBill))}
                     </div>
                   </div>
                 </div>
@@ -632,7 +636,7 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                         <span style={{ fontSize: "0.55rem", fontWeight: 800, color: "var(--kravy-text-muted)", background: "var(--kravy-bg-2)", padding: "2px 6px", borderRadius: "6px" }}>{periodStr}</span>
                       </div>
                       <div style={{ fontSize: "1.5rem", fontWeight: 950, color: "var(--kravy-text-primary)", marginTop: "4px" }}>
-                        {showBalances ? "₹" : ""}{mask(format(summary.lowestBill))}
+                        {showBalances ? sym : ""}{mask(format(summary.lowestBill))}
                       </div>
                     </div>
                     <div style={{ fontSize: "0.7rem", fontWeight: 850, color: "var(--kravy-purple)", background: "rgba(139,92,246,0.1)", padding: "6px 12px", borderRadius: "8px" }}>
@@ -660,7 +664,7 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                             <div key={mode} style={{ flex: 1, minWidth: "100px", background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", padding: "12px", borderRadius: "14px", display: "flex", flexDirection: "column", gap: "4px" }}>
                               <span style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--kravy-text-muted)" }}>{mode}</span>
                               <span style={{ fontSize: "1rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>
-                                {showBalances ? "₹" : ""}{mask(format(sales))}
+                                {showBalances ? sym : ""}{mask(format(sales))}
                               </span>
                               <span style={{ fontSize: "0.65rem", fontWeight: 850, color: "var(--kravy-brand)" }}>{pct.toFixed(0)}% share</span>
                             </div>
@@ -680,7 +684,7 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                             <div key={type} style={{ flex: 1, minWidth: "100px", background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", padding: "12px", borderRadius: "14px", display: "flex", flexDirection: "column", gap: "4px" }}>
                               <span style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--kravy-text-muted)" }}>{type}</span>
                               <span style={{ fontSize: "1rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>
-                                {showBalances ? "₹" : ""}{mask(format(sales))}
+                                {showBalances ? sym : ""}{mask(format(sales))}
                               </span>
                               <span style={{ fontSize: "0.65rem", fontWeight: 850, color: "var(--kravy-purple)" }}>{pct.toFixed(0)}% share</span>
                             </div>
@@ -698,7 +702,7 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                       <div style={{ padding: "16px", background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "16px" }}>
                         <span style={{ fontSize: "0.65rem", fontWeight: 950, color: "var(--kravy-brand)", textTransform: "uppercase" }}>Volume Yield Recommendation</span>
                         <p style={{ fontSize: "0.85rem", color: "var(--kravy-text-primary)", fontWeight: 700, marginTop: "6px" }}>
-                          Your average ticket is ₹{format(summary.avgBill)}. Consider creating high-yield combo items valued around ₹{format(summary.avgBill * 1.4)} to maximize order metrics.
+                          Your average ticket is {sym}{format(summary.avgBill)}. Consider creating high-yield combo items valued around {sym}{format(summary.avgBill * 1.4)} to maximize order metrics.
                         </p>
                       </div>
 
@@ -804,12 +808,12 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                           </td>
                           <td style={{ padding: "20px 24px", textAlign: "right" }}>
                             <div style={{ fontSize: "1.1rem", fontWeight: 950, color: "var(--kravy-text-primary)" }}>
-                              ₹{format(b.total)}
+                              {sym}{format(b.total)}
                             </div>
                             {(b.paymentStatus || "").toUpperCase() === "PARTIAL" && (
                               <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: "4px", fontSize: "0.65rem", fontWeight: 800 }}>
-                                <span style={{ color: "#10B981" }}>Paid: ₹{format(b.amountPaid || 0)}</span>
-                                <span style={{ color: "#EF4444" }}>Unpaid: ₹{format(b.balanceDue || 0)}</span>
+                                <span style={{ color: "#10B981" }}>Paid: {sym}{format(b.amountPaid || 0)}</span>
+                                <span style={{ color: "#EF4444" }}>Unpaid: {sym}{format(b.balanceDue || 0)}</span>
                               </div>
                             )}
                           </td>
@@ -863,7 +867,7 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                         >
                           <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>{item.label}</td>
                           <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>{item.count}</td>
-                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>₹{format(item.sales)}</td>
+                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>{sym}{format(item.sales)}</td>
                           <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 850 }}>
                             {momGrowth !== null ? (
                               momGrowth > 0 ? (
@@ -877,9 +881,9 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                               <span style={{ color: "var(--kravy-text-muted)" }}>▲ n/a</span>
                             )}
                           </td>
-                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-text-secondary)" }}>₹{format(item.sales / item.count)}</td>
-                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-green)" }}>₹{format(item.collected)}</td>
-                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: item.outstanding > 0 ? "#EF4444" : "var(--kravy-text-muted)" }}>₹{format(item.outstanding)}</td>
+                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-text-secondary)" }}>{sym}{format(item.sales / item.count)}</td>
+                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-green)" }}>{sym}{format(item.collected)}</td>
+                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: item.outstanding > 0 ? "#EF4444" : "var(--kravy-text-muted)" }}>{sym}{format(item.outstanding)}</td>
                           <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-text-secondary)" }}>{upiPct > 0 ? `${upiPct}%` : "—"}</td>
                           <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-text-secondary)" }}>{cashPct > 0 ? `${cashPct}%` : "—"}</td>
                           <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-text-secondary)" }}>{cardPct > 0 ? `${cardPct}%` : "—"}</td>
@@ -938,10 +942,10 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                         <div style={{ textAlign: "right" }}>
                           <div style={{ fontSize: "1.3rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1px" }}>
-                            ₹{format(item.sales)}
+                            {sym}{format(item.sales)}
                           </div>
                           <div style={{ fontSize: "0.68rem", color: "var(--kravy-text-muted)" }}>
-                            avg ₹{format(item.sales / item.count)}
+                            avg {sym}{format(item.sales / item.count)}
                           </div>
                         </div>
                         <ChevronRight size={16} className="text-slate-400 group-hover:translate-x-1 transition-transform" />
@@ -998,7 +1002,7 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--kravy-border)", paddingBottom: "14px" }}>
               <div style={{ display: "flex", flexDirection: "column" }}>
-                <span style={{ fontSize: "0.68rem", fontWeight: 900, color: "var(--kravy-text-muted)", uppercase: true, letterSpacing: "1px" }}>AUDITED FINANCIAL ASSET</span>
+                <span style={{ fontSize: "0.68rem", fontWeight: 900, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "1px" }}>AUDITED FINANCIAL ASSET</span>
                 <span style={{ fontSize: "1.2rem", fontWeight: 950, color: "var(--kravy-brand)", fontFamily: "monospace" }}>#{selectedBill.billNumber}</span>
               </div>
               <button 
@@ -1037,7 +1041,7 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                       <span style={{ fontWeight: 800, color: "var(--kravy-text-primary)" }}>{it.name}</span>
                       <span style={{ color: "var(--kravy-brand)", fontWeight: 900, marginLeft: "8px" }}>×{it.qty || it.quantity}</span>
                     </div>
-                    <span style={{ fontWeight: 850, color: "var(--kravy-text-primary)", fontFamily: "monospace" }}>₹{format((it.qty || it.quantity) * (it.price || it.rate || 0))}</span>
+                    <span style={{ fontWeight: 850, color: "var(--kravy-text-primary)", fontFamily: "monospace" }}>{sym}{format((it.qty || it.quantity) * (it.price || it.rate || 0))}</span>
                   </div>
                 ))}
               </div>
@@ -1045,30 +1049,30 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
 
             {/* Financial Ledger Audit */}
             <div style={{ display: "flex", flexDirection: "column", gap: "8px", borderTop: "1px solid var(--kravy-border)", paddingTop: "14px" }}>
-              <div style={{ display: "flex", justify: "space-between", fontSize: "0.8rem", color: "var(--kravy-text-muted)", display: "flex", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", fontSize: "0.8rem", color: "var(--kravy-text-muted)", justifyContent: "space-between" }}>
                 <span>Subtotal (Net Assets)</span>
-                <span style={{ fontFamily: "monospace" }}>₹{format(selectedBill.subtotal)}</span>
+                <span style={{ fontFamily: "monospace" }}>{sym}{format(selectedBill.subtotal)}</span>
               </div>
               {selectedBill.discountAmount > 0 && (
-                <div style={{ display: "flex", justify: "space-between", fontSize: "0.8rem", color: "#EF4444", display: "flex", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", fontSize: "0.8rem", color: "#EF4444", justifyContent: "space-between" }}>
                   <span>Discounts Applied</span>
-                  <span style={{ fontFamily: "monospace" }}>-₹{format(selectedBill.discountAmount)}</span>
+                  <span style={{ fontFamily: "monospace" }}>-{sym}{format(selectedBill.discountAmount)}</span>
                 </div>
               )}
               {selectedBill.tax > 0 && (
-                <div style={{ display: "flex", justify: "space-between", fontSize: "0.8rem", color: "var(--kravy-text-muted)", display: "flex", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", fontSize: "0.8rem", color: "var(--kravy-text-muted)", justifyContent: "space-between" }}>
                   <span>Tax (CGST + SGST)</span>
-                  <span style={{ fontFamily: "monospace" }}>₹{format(selectedBill.tax)}</span>
+                  <span style={{ fontFamily: "monospace" }}>{sym}{format(selectedBill.tax)}</span>
                 </div>
               )}
-              <div style={{ display: "flex", justify: "space-between", fontSize: "1.1rem", fontWeight: 950, color: "var(--kravy-text-primary)", borderTop: "1px dashed var(--kravy-border)", paddingTop: "8px", display: "flex", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", fontSize: "1.1rem", fontWeight: 950, color: "var(--kravy-text-primary)", borderTop: "1px dashed var(--kravy-border)", paddingTop: "8px", justifyContent: "space-between" }}>
                 <span>Net Total Settled</span>
-                <span style={{ fontFamily: "monospace", color: "var(--kravy-brand)" }}>₹{format(selectedBill.total)}</span>
+                <span style={{ fontFamily: "monospace", color: "var(--kravy-brand)" }}>{sym}{format(selectedBill.total)}</span>
               </div>
             </div>
 
             {/* Clearing info */}
-            <div style={{ display: "flex", justify: "space-between", alignItems: "center", borderTop: "1px solid var(--kravy-border)", paddingTop: "14px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--kravy-border)", paddingTop: "14px" }}>
               <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--kravy-text-muted)" }}>Payment Method: <span style={{ color: "var(--kravy-text-primary)" }}>{(selectedBill.paymentMode || "").toUpperCase()}</span></span>
               <span style={{ fontSize: "0.7rem", fontWeight: 950, color: "#10B981", background: "rgba(16,185,129,0.1)", padding: "4px 10px", borderRadius: "8px" }}>
                 ✓ {(selectedBill.paymentStatus || "").toUpperCase()}

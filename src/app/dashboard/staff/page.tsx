@@ -40,7 +40,8 @@ import {
   IndianRupee,
   Edit3,
   CheckCircle2,
-  MessageCircle
+  MessageCircle,
+  ChefHat
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
@@ -56,11 +57,26 @@ const PERMISSION_GROUPS = [
     paths: [
       { path: "/dashboard", label: "Store Dashboard" },
       { path: "/dashboard/billing/checkout", label: "Quick POS Billing" },
+      { path: "/dashboard/terminal", label: "Floor Management" },
+      { path: "/dashboard/kds", label: "Kitchen Display (KDS)" },
       { path: "/dashboard/kitchen", label: "Kitchen Terminal" },
       { path: "/dashboard/tables", label: "Table Settings" },
       { path: "/dashboard/qr-orders", label: "QR Order Terminal" },
       { path: "/dashboard/rooms", label: "Hotel Room Stay" },
       { path: "/dashboard/workflow", label: "Legacy Kitchen Workflow" },
+    ]
+  },
+  {
+    title: "Kitchen Display (KDS) Actions",
+    icon: <ChefHat className="text-amber-500" size={18} />,
+    paths: [
+      { path: "kds-start-cooking", label: "Allow: Start Cooking / Prepare" },
+      { path: "kds-item-prepared", label: "Allow: Mark Individual Item Ready" },
+      { path: "kds-mark-ready", label: "Allow: Mark Full KOT Ready" },
+      { path: "kds-complete-order", label: "Allow: Complete / Serve Ticket" },
+      { path: "kds-recall-order", label: "Allow: Recall Completed KOTs" },
+      { path: "kds-item-summary", label: "Allow: View Item Summary Drawer" },
+      { path: "kds-settings", label: "Allow: Customize KDS Layout & Settings" },
     ]
   },
   {
@@ -124,6 +140,8 @@ const PERMISSION_GROUPS = [
     icon: <Settings className="text-slate-400" size={18} />,
     paths: [
       { path: "/dashboard/parties", label: "Customer Parties" },
+      { path: "view-customer-phone", label: "Allow: View Customer Phone" },
+      { path: "print-customer-phone", label: "Allow: Print Customer Phone" },
       { path: "/dashboard/staff", label: "Staff Management" },
       { path: "/dashboard/combos", label: "Marketing Hub" },
       { path: "/dashboard/gallery", label: "Gallery Manager" },
@@ -362,40 +380,45 @@ export default function StaffManagementPage() {
   );
 
   return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b dark:border-slate-800 pb-6">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 dark:text-white">Manage Staff Access</h1>
-          <p className="text-slate-500 dark:text-slate-400 font-medium">Control what your restaurant staff can see and do.</p>
+    <div className="w-full space-y-6">
+      <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 sm:gap-4 border-b border-slate-200 dark:border-slate-800 pb-4 sm:pb-5">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+            Manage Staff Access
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium mt-1">
+            Control what your restaurant staff can see and do.
+          </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
           {isAdmin && (
             <button 
               onClick={async () => router.push("/dashboard/docs/staff-access")}
-              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-2xl border border-indigo-700 hover:bg-indigo-500 transition-all font-bold text-sm shadow-lg shadow-indigo-200"
+              className="flex items-center gap-2 bg-indigo-600 text-white px-3.5 py-2 sm:px-4 sm:py-2 rounded-xl border border-indigo-700 hover:bg-indigo-500 transition-all font-bold text-xs sm:text-sm shadow-sm whitespace-nowrap shrink-0"
             >
-              <Zap size={16} /> Technical Docs
+              <Zap size={15} className="shrink-0" /> 
+              <span>Technical Docs</span>
             </button>
           )}
-          <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/30 px-4 py-2 rounded-2xl border border-indigo-100 dark:border-indigo-900/50">
-            <Shield className="text-indigo-600 dark:text-indigo-400" size={18} />
-            <span className="text-sm font-bold text-indigo-900 dark:text-indigo-100">Owner Controls Active</span>
+          <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/30 px-3.5 py-2 sm:px-4 sm:py-2 rounded-xl border border-indigo-100 dark:border-indigo-900/50 whitespace-nowrap shrink-0">
+            <Shield className="text-indigo-600 dark:text-indigo-400 shrink-0" size={16} />
+            <span className="text-xs sm:text-sm font-bold text-indigo-900 dark:text-indigo-100">Owner Controls Active</span>
           </div>
         </div>
       </header>
 
-      <div className="grid lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-7 space-y-8">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        <div className="xl:col-span-7 space-y-6">
           {canManage && (
-            <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden relative">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden relative">
               <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none text-slate-900 dark:text-white">
                 <UserPlus size={80} />
               </div>
-              <h2 className="text-xl font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2">
+              <h2 className="text-lg sm:text-xl font-black text-slate-800 dark:text-white mb-5 flex items-center gap-2">
                 <UserPlus className="text-indigo-600 dark:text-indigo-400" size={20} />
                 Add New Staff Member
               </h2>
-              <form onSubmit={handleAddStaff} className="grid sm:grid-cols-2 gap-4">
+              <form onSubmit={handleAddStaff} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Full Name</label>
                   <input
@@ -404,7 +427,7 @@ export default function StaffManagementPage() {
                     placeholder="e.g. Rahul Singh"
                     value={newStaff.name}
                     onChange={e => setNewStaff({ ...newStaff, name: e.target.value })}
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
                   />
                 </div>
                 <div className="space-y-1">
@@ -414,9 +437,9 @@ export default function StaffManagementPage() {
                       required
                       type="email"
                       placeholder="rahul@kravypos.com"
-                       value={newStaff.email}
+                      value={newStaff.email}
                       onChange={e => setNewStaff({ ...newStaff, email: e.target.value })}
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
+                      className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl pl-3.5 pr-24 py-2.5 text-xs sm:text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
                     />
                     <button 
                       type="button"
@@ -424,38 +447,38 @@ export default function StaffManagementPage() {
                         const random = Math.random().toString(36).slice(-5);
                         setNewStaff({...newStaff, email: `staff.${random}@kravypos.com`});
                       }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold bg-white dark:bg-slate-700 px-2 py-1 rounded-lg border dark:border-slate-600 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-600 dark:text-white"
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold bg-white dark:bg-slate-700 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-white"
                     >
-                      Auto-Generate
+                      Auto-Gen
                     </button>
                   </div>
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1 sm:col-span-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Phone Number (Optional)</label>
                   <input
                     type="tel"
                     placeholder="e.g. 9876543210"
-                     value={newStaff.phone}
+                    value={newStaff.phone}
                     onChange={e => setNewStaff({ ...newStaff, phone: e.target.value })}
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
                   />
                 </div>
                 <div className="space-y-1 sm:col-span-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Generate Password</label>
                   <div className="relative">
-                     <input
+                    <input
                       required
                       type={showPassword ? "text" : "password"}
                       placeholder="Set a secure password"
-                       value={newStaff.password}
+                      value={newStaff.password}
                       onChange={e => setNewStaff({ ...newStaff, password: e.target.value })}
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
+                      className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl pl-3.5 pr-20 py-2.5 text-xs sm:text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
                     />
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
                       <button 
                         type="button"
                         onClick={async () => setShowPassword(!showPassword)}
-                        className="text-slate-400 hover:text-indigo-600 p-1.5"
+                        className="text-slate-400 hover:text-indigo-600 p-1"
                       >
                         {showPassword ? <UserX size={14} /> : <Lock size={14} />}
                       </button>
@@ -466,7 +489,7 @@ export default function StaffManagementPage() {
                           setNewStaff({...newStaff, password: pass});
                           setShowPassword(true);
                         }}
-                        className="text-[10px] font-bold bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-lg border dark:border-slate-600 shadow-sm hover:bg-slate-200 dark:hover:bg-slate-600 dark:text-white"
+                        className="text-[10px] font-bold bg-white dark:bg-slate-700 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-white"
                       >
                         Auto
                       </button>
@@ -476,9 +499,9 @@ export default function StaffManagementPage() {
                 <button
                   type="submit"
                   disabled={isAdding}
-                  className="sm:col-span-2 bg-slate-900 dark:bg-white dark:text-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 dark:hover:bg-slate-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="sm:col-span-2 bg-slate-900 dark:bg-white dark:text-slate-900 text-white font-bold py-2.5 sm:py-3 rounded-xl hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-xs sm:text-sm shadow-md"
                 >
-                  {isAdding ? <Loader2 className="animate-spin" size={18} /> : <Check size={18} />}
+                  {isAdding ? <Loader2 className="animate-spin" size={16} /> : <Check size={16} />}
                   Add Staff to Restaurant
                 </button>
               </form>
@@ -501,21 +524,21 @@ export default function StaffManagementPage() {
                   <motion.div
                     key={member.id}
                     layoutId={member.id}
-                    className={`bg-white dark:bg-slate-900 border rounded-2xl p-4 flex items-center justify-between transition-all ${selectedStaff?.id === member.id ? 'ring-2 ring-indigo-500 border-indigo-500' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm'}`}
+                    className={`bg-white dark:bg-slate-900 border rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 transition-all ${selectedStaff?.id === member.id ? 'ring-2 ring-indigo-500 border-indigo-500' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm'}`}
                   >
-                    <div className="flex items-center gap-4">
-                     <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${member.isDisabled ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600' : 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400'}`}>
-                          {member.isDisabled ? <UserX size={20} /> : <UserCheck size={20} />}
-                       </div>
-                       <div>
-                          <div className={`font-bold transition-all ${member.isDisabled ? 'text-slate-400 dark:text-slate-600' : 'text-slate-900 dark:text-white'}`}>
-                            {member.name}
-                            {member.isDisabled && <span className="ml-2 text-[8px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded-md uppercase font-black">Blocked</span>}
-                          </div>
-                          <div className={`text-xs font-medium transition-all ${member.isDisabled ? 'text-slate-300 dark:text-slate-700' : 'text-slate-500 dark:text-slate-400'}`}>{member.email}</div>
-                       </div>
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all ${member.isDisabled ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600' : 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400'}`}>
+                        {member.isDisabled ? <UserX size={20} /> : <UserCheck size={20} />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className={`font-bold text-sm sm:text-base flex items-center flex-wrap gap-1.5 transition-all ${member.isDisabled ? 'text-slate-400 dark:text-slate-600' : 'text-slate-900 dark:text-white'}`}>
+                          <span className="truncate">{member.name}</span>
+                          {member.isDisabled && <span className="text-[8px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded-md uppercase font-black shrink-0">Blocked</span>}
+                        </div>
+                        <div className={`text-xs font-medium truncate transition-all ${member.isDisabled ? 'text-slate-300 dark:text-slate-700' : 'text-slate-500 dark:text-slate-400'}`}>{member.email}</div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 justify-end shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100 dark:border-slate-800">
                       <button
                         onClick={async () => toggleBlockStaff(member)}
                         title={member.isDisabled ? "Unblock Staff" : "Block Staff"}
@@ -536,7 +559,7 @@ export default function StaffManagementPage() {
                           setIsEditingInfo(false);
                           setEditInfoData({ name: member.name, phone: (member as any).phone || "" });
                         }}
-                        className="ml-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all"
+                        className="px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all"
                       >
                         Settings
                       </button>
@@ -548,7 +571,7 @@ export default function StaffManagementPage() {
           </div>
         </div>
 
-        <div className="lg:col-span-5">
+        <div className="xl:col-span-5">
            <AnimatePresence mode="wait">
              {selectedStaff ? (
                <motion.div
@@ -556,16 +579,16 @@ export default function StaffManagementPage() {
                  initial={{ opacity: 0, x: 20 }}
                  animate={{ opacity: 1, x: 0 }}
                  exit={{ opacity: 0, x: 20 }}
-                 className="bg-slate-900 rounded-3xl border border-slate-800 shadow-xl p-6 sticky top-8 h-fit"
+                 className="bg-slate-900 rounded-2xl sm:rounded-3xl border border-slate-800 shadow-xl p-3 sm:p-5 xl:sticky xl:top-6 h-fit"
                >
-                 <div className="flex items-center justify-between mb-8">
-                    <div className="flex items-center gap-3">
-                       <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center text-white">
+                 <div className="flex items-center justify-between gap-2 mb-6 sm:mb-8">
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                       <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center text-white shrink-0">
                           <Lock size={16} />
                        </div>
-                       <h3 className="text-white font-black">Edit Visibility: <span className="text-orange-400">{selectedStaff.name}</span></h3>
+                       <h3 className="text-white font-black text-sm sm:text-base truncate">Edit: <span className="text-orange-400">{selectedStaff.name}</span></h3>
                     </div>
-                    <button onClick={async () => setSelectedStaff(null)} className="text-slate-500 hover:text-white transition-colors">
+                    <button onClick={async () => setSelectedStaff(null)} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors shrink-0">
                        <X size={20} />
                     </button>
                  </div>
@@ -573,13 +596,13 @@ export default function StaffManagementPage() {
                   <div className="flex bg-slate-800/50 p-1 rounded-xl mb-6">
                     <button 
                       onClick={async () => setIsEditingInfo(false)}
-                      className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${!isEditingInfo ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
+                      className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${!isEditingInfo ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
                     >
                       Permissions
                     </button>
                     <button 
                       onClick={async () => setIsEditingInfo(true)}
-                      className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${isEditingInfo ? 'bg-orange-600 text-white' : 'text-slate-400'}`}
+                      className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${isEditingInfo ? 'bg-orange-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
                     >
                       Profile Info
                     </button>
@@ -587,10 +610,10 @@ export default function StaffManagementPage() {
 
                   {!isEditingInfo ? (
                     <>
-                      <p className="text-slate-400 text-xs mb-6 font-medium leading-relaxed">
+                      <p className="text-slate-400 text-xs mb-5 font-medium leading-relaxed">
                         Select the modules this staff member can access. Unticked items will be hidden from their sidebar immediately.
                       </p>
-                      <div className="mb-8 p-4 bg-white/5 border border-white/10 rounded-2xl space-y-3">
+                      <div className="mb-6 p-3.5 sm:p-4 bg-white/5 border border-white/10 rounded-2xl space-y-2.5">
                         <label className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2">
                            <Key size={12} className="text-orange-400" />
                            Reset Staff Password
@@ -616,7 +639,7 @@ export default function StaffManagementPage() {
                         )}
                       </div>
 
-                      <div className="space-y-4 mb-8 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
+                      <div className="space-y-4 mb-6 max-h-[450px] overflow-y-auto pr-1 sm:pr-2 custom-scrollbar">
                           {PERMISSION_GROUPS.map((group, idx) => {
                             const groupPaths = group.paths.map(p => p.path);
                             const allSelected = groupPaths.every(p => selectedStaff.allowedPaths?.includes(p));
@@ -624,26 +647,26 @@ export default function StaffManagementPage() {
                             
                             return (
                               <div key={idx} className="bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden">
-                                <div className="flex items-center justify-between p-4 bg-slate-800/80 border-b border-slate-700/50">
+                                <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 sm:p-3.5 bg-slate-800/80 border-b border-slate-700/50">
                                   <div className="flex items-center gap-3">
                                     {group.icon}
-                                    <h4 className="text-sm font-black text-white">{group.title}</h4>
+                                    <h4 className="text-xs sm:text-sm font-black text-white truncate">{group.title}</h4>
                                   </div>
                                   <button
                                     onClick={() => handleToggleGroup(groupPaths)}
-                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${allSelected ? 'bg-indigo-500 text-white' : someSelected ? 'bg-indigo-500/30 text-indigo-300' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                                    className={`px-2 sm:px-2.5 py-1 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-wider shrink-0 whitespace-nowrap transition-all ${allSelected ? 'bg-indigo-500 text-white' : someSelected ? 'bg-indigo-500/30 text-indigo-300' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
                                   >
                                     {allSelected ? 'Deselect All' : 'Select All'}
                                   </button>
                                 </div>
-                                <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div className="p-2 sm:p-2.5 grid grid-cols-1 2xl:grid-cols-2 gap-1.5 sm:gap-2">
                                   {group.paths.map(item => {
                                     const isActive = selectedStaff.allowedPaths?.includes(item.path);
                                     return (
                                       <button
                                         key={item.path}
                                         onClick={async () => handleTogglePath(item.path)}
-                                        className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${isActive ? 'bg-indigo-600/20 border-indigo-500/50 text-white' : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'}`}
+                                        className={`w-full flex items-center justify-between gap-2 p-2.5 rounded-xl border text-left transition-all ${isActive ? 'bg-indigo-600/20 border-indigo-500/50 text-white' : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'}`}
                                       >
                                         <div className="flex items-center gap-3">
                                           <span className="text-xs font-bold text-left leading-tight">{item.label}</span>
@@ -663,7 +686,7 @@ export default function StaffManagementPage() {
                       <button
                          onClick={savePermissions}
                          disabled={savingPermissions}
-                         className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/20"
+                         className="w-full bg-indigo-600 text-white font-black py-3 sm:py-3.5 rounded-xl sm:rounded-2xl hover:bg-indigo-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/20 text-xs sm:text-sm"
                       >
                          {savingPermissions ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
                          Update Permissions
@@ -698,7 +721,7 @@ export default function StaffManagementPage() {
                       <button
                          onClick={saveProfileInfo}
                          disabled={savingPermissions}
-                         className="w-full bg-orange-600 text-white font-black py-4 rounded-2xl hover:bg-orange-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-900/20"
+                         className="w-full bg-orange-600 text-white font-black py-3 sm:py-3.5 rounded-xl sm:rounded-2xl hover:bg-orange-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-900/20 text-xs sm:text-sm"
                       >
                          {savingPermissions ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
                          Save Profile Changes

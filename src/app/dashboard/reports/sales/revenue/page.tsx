@@ -1,3 +1,4 @@
+import { getServerCurrency } from '@/lib/server-currency';
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveClerkId } from "@/lib/auth-utils";
@@ -13,6 +14,7 @@ export default async function RevenueReportPage({
   searchParams: Promise<{ range?: string }>;
 }) {
   const effectiveId = await getEffectiveClerkId();
+  const { sym } = await getServerCurrency();
   if (!effectiveId) redirect("/auth/custom");
 
   const { range: rangeParam } = await searchParams;
@@ -122,7 +124,7 @@ export default async function RevenueReportPage({
                   <div style={{ background: "rgba(255,255,255,0.15)", padding: "10px 24px", borderRadius: "99px", fontSize: "0.75rem", fontWeight: 950, letterSpacing: "4px" }}>NET CORE REVENUE</div>
                   <div style={{ height: "1px", flex: 1, background: "rgba(255,255,255,0.15)" }} />
                </div>
-               <div style={{ fontSize: "7.5rem", fontWeight: 950, letterSpacing: "-6px", lineHeight: 0.8, marginBottom: "48px" }}>₹{format(totalRevenue)}</div>
+               <div style={{ fontSize: "7.5rem", fontWeight: 950, letterSpacing: "-6px", lineHeight: 0.8, marginBottom: "48px" }}>{sym}{format(totalRevenue)}</div>
                
                <div style={{ gridTemplateColumns: "repeat(3, 1fr)", display: "grid", gap: "52px" }}>
                   <div>
@@ -131,7 +133,7 @@ export default async function RevenueReportPage({
                   </div>
                   <div>
                      <div style={{ fontSize: "0.75rem", fontWeight: 800, opacity: 0.6, textTransform: "uppercase", letterSpacing: "2px", marginBottom: "12px" }}>Yield Pattern</div>
-                     <div style={{ fontSize: "2.5rem", fontWeight: 950 }}>₹{format(avgTicket)} <span style={{ fontSize: "0.9rem", opacity: 0.5 }}>/BILL</span></div>
+                     <div style={{ fontSize: "2.5rem", fontWeight: 950 }}>{sym}{format(avgTicket)} <span style={{ fontSize: "0.9rem", opacity: 0.5 }}>/BILL</span></div>
                   </div>
                   <div>
                      <div style={{ fontSize: "0.75rem", fontWeight: 800, opacity: 0.6, textTransform: "uppercase", letterSpacing: "2px", marginBottom: "12px" }}>Audit Count</div>
@@ -144,9 +146,9 @@ export default async function RevenueReportPage({
          {/* Secondary Breakdown Stack */}
          <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
             {[
-              { label: "Encrypted Digital", value: `₹${format(upiTotal)}`, icon: <Zap />, color: "#8B5CF6", sub: `${((upiTotal / (totalRevenue || 1)) * 100).toFixed(0)}% SHARE`, target: 60 },
-              { label: "Physical Liquidity", value: `₹${format(cashTotal)}`, icon: <Wallet />, color: "#10B981", sub: `${((cashTotal / (totalRevenue || 1)) * 100).toFixed(0)}% SHARE`, target: 40 },
-              { label: "Revenue Leakage", value: `₹${format(totalDiscount)}`, icon: <Target />, color: "#EF4444", sub: "APPLIED DISCOUNTS", target: 5 },
+              { label: "Encrypted Digital", value: `${sym}${format(upiTotal)}`, icon: <Zap />, color: "#8B5CF6", sub: `${((upiTotal / (totalRevenue || 1)) * 100).toFixed(0)}% SHARE`, target: 60 },
+              { label: "Physical Liquidity", value: `${sym}${format(cashTotal)}`, icon: <Wallet />, color: "#10B981", sub: `${((cashTotal / (totalRevenue || 1)) * 100).toFixed(0)}% SHARE`, target: 40 },
+              { label: "Revenue Leakage", value: `${sym}${format(totalDiscount)}`, icon: <Target />, color: "#EF4444", sub: "APPLIED DISCOUNTS", target: 5 },
             ].map((s, i) => (
                <div key={i} style={{ 
                  background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", 
@@ -232,7 +234,7 @@ export default async function RevenueReportPage({
                           </span>
                        </td>
                        <td style={{ padding: "32px 56px", textAlign: "right" }}>
-                          <div style={{ fontSize: "2rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-2px" }}>₹{format(b.total)}</div>
+                          <div style={{ fontSize: "2rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-2px" }}>{sym}{format(b.total)}</div>
                           <div style={{ fontSize: "0.75rem", fontWeight: 900, color: "#10B981", marginTop: "4px" }}>CLEARED & SETTLED</div>
                        </td>
                     </tr>
