@@ -534,6 +534,7 @@ model BusinessProfile {
   
   // ✅ Atomic Bill Counter
   billCounter      Int     @default(1)
+  lastBillMonth    String?
 
   createdAt DateTime @default(now())
   syncQuickPosWithKitchen Boolean @default(false)
@@ -721,6 +722,8 @@ model BillManager {
   isHeld        Boolean @default(false)
   tokenNumber   Int?    // Legacy support
   kotNumbers    Int[]   // Array of KOT/Token numbers
+  isTaxInclusive Boolean? // ✅ Added for locking tax settings
+  isTaxEnabled   Boolean? @default(false) // ✅ Added to track if tax was enabled when bill was generated
 
   customerName    String?
   customerPhone   String?
@@ -742,6 +745,8 @@ model BillManager {
   tableName       String? // ✅ Added to track source (Table Name or "POS")
   zoneName        String? // ✅ Multi-zone menu support: Track which zone this order came from
   auditNote       String? // SaaS Feature: Audit trail for tax corrections
+  loyaltyEarned   Int? @default(0)
+  loyaltyRedeemed Int? @default(0)
 
   // WhatsApp Tracking
   whatsappSent   Boolean   @default(false)
