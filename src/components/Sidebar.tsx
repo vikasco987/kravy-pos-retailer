@@ -142,12 +142,7 @@ const navGroups = [
     items: [
       { icon: <Home size={18} />, label: "Store Dashboard", href: "/dashboard" },
       { icon: <ShoppingCart size={18} />, label: "Quick POS Billing", href: "/dashboard/billing/checkout" },
-      { icon: <LayoutDashboard size={18} />, label: "Floor Management", href: "/dashboard/terminal" },
-      { icon: <Activity size={18} />, label: "Kitchen Workflow", href: "/dashboard/kitchen" },
-      { icon: <ChefHat size={18} />, label: "Kitchen Display (KDS)", href: "/dashboard/kds" },
       { icon: <Receipt size={18} />, label: "Past Bills / History", href: "/dashboard/billing" },
-      { icon: <LayoutGrid size={18} />, label: "Table Status", href: "/dashboard/tables" },
-      { icon: <Building size={18} />, label: "Hotel Room Stay", href: "/dashboard/rooms" },
       { icon: <Fuel size={18} />, label: "Fuel Billing", href: "/dashboard/fuel" },
     ]
   },

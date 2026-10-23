@@ -7,8 +7,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   Clock, Trash2, Play, X, Search, ChevronDown, User, Printer, ArrowLeft,
   Save, PauseCircle, RefreshCw, Eye, ZoomIn, ZoomOut, Plus,
-  LayoutGrid, Columns, StickyNote, Layers, Utensils, ShoppingBag, Truck, Star, Zap, Pencil, Settings, Check, Mic, MicOff, Split, Menu
+  LayoutGrid, Columns, StickyNote, Layers, Utensils, ShoppingBag, Truck, Star, Zap, Pencil, Settings, Check, Mic, MicOff, Split, Menu,
+  AlertOctagon, AlertTriangle, ExternalLink, PackageX, Keyboard
 } from "lucide-react";
+import KeyboardShortcutsModal from "@/app/dashboard/billing/components/KeyboardShortcutsModal";
 import { calculateDiscount } from "@/lib/discount-utils";
 import { toast } from "sonner";
 import { kravy } from "@/lib/sounds";
@@ -26,6 +28,7 @@ import { getQRCodeDataUrl } from "@/lib/qrHelper";
 import { v4 as uuidv4 } from "uuid";
 import { formatCurrency } from "@/lib/currency";
 import { Capacitor } from "@capacitor/core";
+import { getInventorySettings } from "@/lib/inventory-utils";
 
 /* ================= TYPES ================= */
 
@@ -50,6 +53,9 @@ type MenuItem = {
   isActive?: boolean;
   variants?: any;
   inventoryCode?: string;
+  currentStock?: number | null;
+  reorderLevel?: number | null;
+  openingStock?: number | null;
 };
 
 type BillItem = {
@@ -68,6 +74,80 @@ type BillItem = {
   kotNumber?: number | null;
 };
 
+export function isItemTracked(
+  m: { currentStock?: number | null; reorderLevel?: number | null; openingStock?: number | null },
+  isStockCompulsory?: boolean
+): boolean {
+  if (m.currentStock === null || m.currentStock === undefined || typeof m.currentStock !== "number" || isNaN(m.currentStock)) {
+    return false;
+  }
+  if (isStockCompulsory) return true;
+  if (m.currentStock > 0 || m.currentStock < 0) return true;
+  if (typeof m.reorderLevel === "number" && m.reorderLevel > 0) return true;
+  if (typeof m.openingStock === "number" && m.openingStock > 0) return true;
+  return false;
+}
+
+export function getStockInfo(
+  m: { currentStock?: number | null; reorderLevel?: number | null; openingStock?: number | null; unit?: string | null },
+  invSettings?: { enabled?: boolean; lowStockAlerts?: boolean; isStockCompulsory?: boolean }
+) {
+  // 1. When inventory is disabled globally, DO NOT render any stock info or badges in Quick Views
+  if (invSettings && invSettings.enabled === false) {
+    return null;
+  }
+
+  // 2. Must have a valid numeric stock number
+  if (m.currentStock === null || m.currentStock === undefined || typeof m.currentStock !== "number" || isNaN(m.currentStock)) {
+    return null;
+  }
+
+  const stock = m.currentStock;
+
+  // 3. Deficit (negative stock)
+  if (stock < 0) {
+    return {
+      status: "out" as const,
+      stock,
+      label: `Deficit (${stock})`,
+      badgeClass: "bg-rose-500/10 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-500/20",
+    };
+  }
+
+  // 4. Out of Stock (0 stock)
+  if (stock === 0) {
+    return {
+      status: "out" as const,
+      stock,
+      label: "Out of Stock",
+      badgeClass: "bg-rose-500/10 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-500/20",
+    };
+  }
+
+  // 5. Low stock threshold (item's reorderLevel if set > 0, otherwise default 5)
+  const threshold = (typeof m.reorderLevel === "number" && !isNaN(m.reorderLevel) && m.reorderLevel > 0)
+    ? m.reorderLevel
+    : 5;
+
+  const showLowStock = invSettings ? invSettings.lowStockAlerts !== false : true;
+  if (showLowStock && stock <= threshold) {
+    return {
+      status: "low" as const,
+      stock,
+      label: `Low Stock: ${stock}`,
+      badgeClass: "bg-amber-500/10 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-500/20",
+    };
+  }
+
+  // 6. Normal stock
+  return {
+    status: "normal" as const,
+    stock,
+    label: `Stock: ${stock}`,
+    badgeClass: "bg-slate-100 text-slate-600 dark:bg-white/5 dark:text-slate-400 border border-slate-200/80 dark:border-white/10",
+  };
+}
+
 function normalizeMenuItems(data: any[]): MenuItem[] {
   return (data || []).map((it: any) => {
     const sPrice = Number(it.sellingPrice);
@@ -81,7 +161,32 @@ function normalizeMenuItems(data: any[]): MenuItem[] {
       } catch (e) { }
     }
 
-    return { ...it, price: finalPrice, gst: it.gst, hsnCode: it.hsnCode, taxStatus: it.taxStatus, shortCode: it.shortCode, variants: parsedVariants };
+    const currentStock = it.currentStock !== null && it.currentStock !== undefined && !isNaN(Number(it.currentStock))
+      ? Number(it.currentStock)
+      : null;
+
+    const reorderLevel = it.reorderLevel !== null && it.reorderLevel !== undefined && !isNaN(Number(it.reorderLevel))
+      ? Number(it.reorderLevel)
+      : null;
+
+    const openingStock = it.openingStock !== null && it.openingStock !== undefined && !isNaN(Number(it.openingStock))
+      ? Number(it.openingStock)
+      : null;
+
+    return {
+      ...it,
+      price: finalPrice,
+      gst: it.gst,
+      hsnCode: it.hsnCode,
+      taxStatus: it.taxStatus,
+      shortCode: it.shortCode,
+      variants: parsedVariants,
+      currentStock,
+      reorderLevel,
+      openingStock,
+      unit: it.unit || null,
+      inventoryCode: it.inventoryCode || undefined,
+    };
   });
 }
 
@@ -133,13 +238,13 @@ const InlineAmountEdit = ({ item, updateAmount, sym }: any) => {
 
   if (isEditing) {
     return (
-      <div className="flex items-center gap-1">
-        <span className="text-xs font-black">{sym}</span>
+      <div className="flex items-center justify-end gap-1">
+        <span className="text-sm font-bold text-[var(--kravy-text-primary)]">{sym}</span>
         <input
           autoFocus
           type="number"
           step="any"
-          className="w-16 text-sm font-black text-slate-900 dark:text-white bg-[var(--kravy-surface)] border border-[var(--kravy-border-strong)] rounded px-1 outline-none text-right"
+          className="w-16 text-[16px] lg:text-[14px] font-bold text-[var(--kravy-text-primary)] bg-[var(--kravy-surface)] border border-[var(--kravy-brand)] rounded px-1 outline-none text-right"
           value={val}
           onChange={(e) => setVal(e.target.value)}
           onBlur={handleSave}
@@ -152,7 +257,7 @@ const InlineAmountEdit = ({ item, updateAmount, sym }: any) => {
   return (
     <span
       onClick={() => { setVal(currentAmount.toString()); setIsEditing(true); }}
-      className="font-black text-[var(--kravy-text-primary)] text-sm min-w-[52px] text-right flex-shrink-0 cursor-pointer hover:text-[var(--kravy-brand)] hover:underline transition-colors"
+      className="font-bold text-[var(--kravy-text-primary)] text-[16px] lg:text-[14px] leading-tight text-right flex-shrink-0 cursor-pointer hover:text-[var(--kravy-brand)] hover:underline transition-colors tracking-tight font-sans"
       title="Edit final amount to auto-calculate quantity"
     >
       {sym}{currentAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -177,12 +282,12 @@ const InlineRateEdit = ({ item, updateRate, taxActive, perProductEnabled, global
 
   if (isEditing) {
     return (
-      <div className="flex items-center gap-1 mt-1">
-        <span className="text-xs font-black text-[var(--kravy-brand)]">{Number.isInteger(Number(item.qty)) ? item.qty : Number(item.qty).toFixed(2)} × {sym}</span>
+      <div className="flex items-center gap-1 mt-0.5">
+        <span className="text-[13px] font-semibold text-[var(--kravy-brand)]">{sym}</span>
         <input
           autoFocus
           type="number"
-          className="w-16 text-xs font-black text-[var(--kravy-brand)] bg-[var(--kravy-surface)] border border-[var(--kravy-brand)] rounded px-1 outline-none no-arrows"
+          className="w-16 text-[14px] sm:text-[15px] font-semibold text-[var(--kravy-brand)] bg-[var(--kravy-surface)] border border-[var(--kravy-brand)] rounded px-1.5 py-0.5 outline-none no-arrows"
           value={val}
           onChange={(e) => setVal(e.target.value)}
           onBlur={handleSave}
@@ -193,17 +298,18 @@ const InlineRateEdit = ({ item, updateRate, taxActive, perProductEnabled, global
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+    <div className="flex flex-wrap items-center gap-1 mt-0.5">
       <button
         onClick={() => { setVal(item.rate?.toString() || ""); setIsEditing(true); }}
-        className="text-[11px] sm:text-xs font-black text-[var(--kravy-brand)] hover:underline cursor-pointer flex items-center gap-1 text-left"
+        className="text-[15px] lg:text-[14px] font-semibold text-[var(--kravy-brand)] hover:underline cursor-pointer flex items-center gap-0.5 text-left leading-normal"
         title="Edit Price"
       >
-        {Number.isInteger(Number(item.qty)) ? item.qty : Number(item.qty).toFixed(2)} × {formatCurrency(item.rate ?? 0, sym)} <Pencil size={9} className="inline opacity-50 hover:opacity-100" />
+        <span>{Number.isInteger(Number(item.qty)) ? item.qty : Number(item.qty).toFixed(2)} × {formatCurrency(item.rate ?? 0, sym)}</span>
+        <Pencil size={10} className="inline opacity-60 hover:opacity-100 ml-0.5" />
       </button>
       {taxActive && (
-        <span className="text-[7.5px] sm:text-[8px] font-black px-1 py-0.2 bg-[var(--kravy-brand)]/5 text-[var(--kravy-brand)] border border-[var(--kravy-brand)]/10 rounded uppercase tracking-tighter">
-          GST: {(perProductEnabled && item.gst !== null) ? item.gst : globalRate}% {item.taxStatus === "With Tax" ? "(Incl)" : "(Excl)"}
+        <span className="text-[11px] lg:text-[10px] font-semibold px-1.5 py-0.5 bg-[var(--kravy-brand)]/8 text-[var(--kravy-brand)] border border-[var(--kravy-brand)]/20 rounded-md uppercase tracking-tight leading-none">
+          GST: {(perProductEnabled && item.gst !== null) ? item.gst : globalRate}% {item.taxStatus === "With Tax" ? "(INCL)" : "(EXCL)"}
         </span>
       )}
     </div>
@@ -211,7 +317,7 @@ const InlineRateEdit = ({ item, updateRate, taxActive, perProductEnabled, global
 };
 
 
-const MenuItemCard = React.memo(({ m, items, addToCart, reduceFromCart, expiryTrackingEnabled, sym, hideImage = false, isWideRow = false }: {
+const MenuItemCard = React.memo(({ m, items, addToCart, reduceFromCart, expiryTrackingEnabled, sym, hideImage = false, isWideRow = false, invSettings }: {
   m: MenuItem,
   items: BillItem[],
   addToCart: (item: MenuItem) => void,
@@ -219,13 +325,15 @@ const MenuItemCard = React.memo(({ m, items, addToCart, reduceFromCart, expiryTr
   expiryTrackingEnabled?: boolean,
   sym?: string,
   hideImage?: boolean,
-  isWideRow?: boolean
+  isWideRow?: boolean,
+  invSettings?: any
 }) => {
   const isVirtual = (m as any).isVirtualGroup;
   const groupedIds = isVirtual ? ((m as any).groupedItems || []).map((g: any) => g.id) : [m.id];
   const inCartItems = items.filter((i) => groupedIds.includes(i.id) || (!isVirtual && i.id.startsWith(`${m.id}-`)));
   const totalQtyInCart = inCartItems.reduce((acc, i) => acc + i.qty, 0);
   const lastInCartItem = inCartItems[inCartItems.length - 1];
+  const stockInfo = getStockInfo(m, invSettings);
 
   // 🌟 WIDE ROW (Landscape Classic View for Card 3)
   if (isWideRow) {
@@ -274,11 +382,18 @@ const MenuItemCard = React.memo(({ m, items, addToCart, reduceFromCart, expiryTr
                 {m.name.replace(/\s?\((V|NV|R)\)/gi, "").trim()}
               </p>
             </div>
-            {m.unit && (
-              <span className="text-[10px] text-[var(--kravy-text-muted)] font-bold uppercase tracking-wider block">
-                {m.unit}
-              </span>
-            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              {m.unit && (
+                <span className="text-[10px] text-[var(--kravy-text-muted)] font-bold uppercase tracking-wider block">
+                  {m.unit}
+                </span>
+              )}
+              {stockInfo && (
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${stockInfo.badgeClass}`}>
+                  {stockInfo.label}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -346,10 +461,17 @@ const MenuItemCard = React.memo(({ m, items, addToCart, reduceFromCart, expiryTr
       )}
 
       <div className="p-1.5 min-[330px]:p-2 md:p-3 flex flex-col gap-0.5 min-[330px]:gap-1 flex-shrink-0">
-        <div className={`w-3.5 h-3.5 min-[330px]:w-4 min-[330px]:h-4 md:w-[14px] md:h-[14px] border-[1.5px] rounded-sm flex items-center justify-center ${m.isVeg && !m.name.includes("(NV)") && !m.name.toLowerCase().includes("egg") ? "border-green-600" : (m.isEgg || m.name.toLowerCase().includes("egg") || m.name.includes("(E)")) ? "border-amber-500" : "border-red-600"}`}>
-          <div className={`w-1.5 h-1.5 min-[330px]:w-2 min-[330px]:h-2 md:w-[6px] md:h-[6px] rounded-full ${m.isVeg && !m.name.includes("(NV)") && !m.name.toLowerCase().includes("egg") ? "bg-green-600" : (m.isEgg || m.name.toLowerCase().includes("egg") || m.name.includes("(E)")) ? "bg-amber-500" : "bg-red-600"}`} />
+        <div className="flex items-center justify-between gap-1">
+          <div className={`w-3.5 h-3.5 min-[330px]:w-4 min-[330px]:h-4 md:w-[14px] md:h-[14px] border-[1.5px] rounded-sm flex items-center justify-center shrink-0 ${m.isVeg && !m.name.includes("(NV)") && !m.name.toLowerCase().includes("egg") ? "border-green-600" : (m.isEgg || m.name.toLowerCase().includes("egg") || m.name.includes("(E)")) ? "border-amber-500" : "border-red-600"}`}>
+            <div className={`w-1.5 h-1.5 min-[330px]:w-2 min-[330px]:h-2 md:w-[6px] md:h-[6px] rounded-full ${m.isVeg && !m.name.includes("(NV)") && !m.name.toLowerCase().includes("egg") ? "bg-green-600" : (m.isEgg || m.name.toLowerCase().includes("egg") || m.name.includes("(E)")) ? "bg-amber-500" : "bg-red-600"}`} />
+          </div>
+          {stockInfo && (
+            <span className={`text-[8px] min-[330px]:text-[9px] font-bold px-1.5 py-0.2 rounded-md truncate max-w-[120px] ${stockInfo.badgeClass}`}>
+              {stockInfo.label}
+            </span>
+          )}
         </div>
-        <p className={`text-[11px] min-[330px]:text-xs md:text-xs font-black leading-tight line-clamp-2 transition-colors
+        <p className={`text-[15px] sm:text-[16px] font-bold leading-snug line-clamp-2 transition-colors
           ${totalQtyInCart > 0 ? "text-[var(--kravy-brand)]" : "text-[var(--kravy-text-primary)] group-hover:text-[var(--kravy-brand)]"}`}>
           {m.name.replace(/\s?\((V|NV|R)\)/gi, "").trim()}
         </p>
@@ -393,7 +515,9 @@ const MenuItemCard = React.memo(({ m, items, addToCart, reduceFromCart, expiryTr
 
   return prev.m === next.m &&
     prevQty === nextQty &&
-    prev.expiryTrackingEnabled === next.expiryTrackingEnabled;
+    prev.expiryTrackingEnabled === next.expiryTrackingEnabled &&
+    prev.m.currentStock === next.m.currentStock &&
+    prev.m.reorderLevel === next.m.reorderLevel;
 });
 
 const QuickAddCard = ({ cat, onClick }: { cat: { id: string, name: string }, onClick: () => void }) => {
@@ -434,6 +558,33 @@ const QuickAddAddonChip = ({ onClick }: { onClick: () => void }) => {
 export default function CheckoutClient() {
   const { confirm } = useConfirm();
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+  const [isCheckoutFooterCollapsed, setIsCheckoutFooterCollapsed] = useState(false);
+  const [checkoutLayout, setCheckoutLayout] = useState<'scroll' | 'sticky'>('scroll');
+  const footerTouchStartY = useRef<number | null>(null);
+
+  // 🛑 ATTRACTIVE INSUFFICIENT STOCK SHORTAGE MODAL STATE
+  const [stockModalData, setStockModalData] = useState<{
+    isOpen: boolean;
+    code: "INSUFFICIENT_STOCK_BLOCK" | "INSUFFICIENT_STOCK_WARN";
+    message: string;
+    items: Array<{
+      id: string;
+      itemId?: string;
+      name: string;
+      requestedQty: number;
+      availableStock: number;
+      type?: "item" | "material";
+      unit?: string;
+    }>;
+    allowManagerOverride?: boolean;
+    onProceedOverride?: () => void;
+    onProceedWarning?: () => void;
+  }>({
+    isOpen: false,
+    code: "INSUFFICIENT_STOCK_BLOCK",
+    message: "",
+    items: [],
+  });
 
   useEffect(() => {
     const handlePopState = (e: PopStateEvent) => {
@@ -524,8 +675,12 @@ export default function CheckoutClient() {
     posWebBtPrintEnabled?: boolean;
     currencySymbol?: string;
     posKotEnabled?: boolean;
+    posDiningEnabled?: boolean;
+    posTakeawayEnabled?: boolean;
+    posDeliveryEnabled?: boolean;
     posCounterEnabled?: boolean;
     posWalletEnabled?: boolean;
+    posCheckoutLayout?: 'scroll' | 'sticky';
     greetingMessage?: string;
     contactPersonPhone?: string;
     contactPhone?: string;
@@ -535,6 +690,7 @@ export default function CheckoutClient() {
     businessNameSize?: number;
     phonePrefixType?: string;
     printSettings?: any;
+    inventorySettings?: any;
     zones?: string[];
     expiryTrackingEnabled?: boolean;
     loyaltyValueInRupees?: number;
@@ -558,6 +714,12 @@ export default function CheckoutClient() {
 
   const applyBusinessProfile = (data: any) => {
     if (!data) return;
+    let ps = data.printSettings;
+    if (typeof ps === 'string') {
+      try { ps = JSON.parse(ps); } catch { ps = {}; }
+    } else if (!ps || typeof ps !== 'object') {
+      ps = {};
+    }
     setBusiness({
       id: data.id,
       businessName: data.businessName,
@@ -602,6 +764,10 @@ export default function CheckoutClient() {
       posWebBtPrintEnabled: data.posWebBtPrintEnabled ?? true,
       currencySymbol: data.currencySymbol || sym,
       posKotEnabled: data.posKotEnabled ?? true,
+      posDiningEnabled: data.posDiningEnabled ?? true,
+      posTakeawayEnabled: data.posTakeawayEnabled ?? true,
+      posDeliveryEnabled: data.posDeliveryEnabled ?? true,
+      posCheckoutLayout: data.posCheckoutLayout || 'scroll',
       expiryTrackingEnabled: data.expiryTrackingEnabled ?? false,
       multiZoneMenuEnabled: data.multiZoneMenuEnabled ?? false,
       greetingMessage: data.greetingMessage,
@@ -612,7 +778,8 @@ export default function CheckoutClient() {
       tokenNumberSize: data.tokenNumberSize,
       businessNameSize: data.businessNameSize,
       phonePrefixType: data.phonePrefixType || "TEXT",
-      printSettings: data.printSettings,
+      printSettings: ps,
+      inventorySettings: data.inventorySettings || ps?.inventorySettings,
       zones: data.zones || [],
       loyaltyValueInRupees: data.loyaltyValueInRupees ?? 1,
       enableLoyaltyProgram: data.enableLoyaltyProgram !== false,
@@ -628,6 +795,8 @@ export default function CheckoutClient() {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryLayout, setCategoryLayout] = useState<'horizontal' | 'vertical' | 'full'>('vertical');
   const [rawLayout, setRawLayout] = useState<string>('image-grid-side');
+  const [kotMode, setKotMode] = useState<boolean>(true);
+  const [billingView, setBillingView] = useState<"image" | "listing">("image");
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [showLayoutModal, setShowLayoutModal] = useState(false);
   const [catSearch, setCatSearch] = useState("");
@@ -846,6 +1015,25 @@ export default function CheckoutClient() {
   // Load layout preference & listen to cross-page updates
   useEffect(() => {
     const applySaved = () => {
+      const savedKot = localStorage.getItem('pos_kot_mode');
+      if (savedKot !== null) {
+        setKotMode(savedKot === 'true');
+      } else if (business?.posKotEnabled !== undefined) {
+        setKotMode(business.posKotEnabled !== false);
+      }
+
+      const savedView = localStorage.getItem('pos_billing_view');
+      if (savedView === 'listing' || savedView === 'image') {
+        setBillingView(savedView);
+      }
+
+      const savedCheckout = localStorage.getItem('pos_checkout_layout');
+      if (savedCheckout === 'sticky' || savedCheckout === 'scroll') {
+        setCheckoutLayout(savedCheckout);
+      } else if (business?.posCheckoutLayout) {
+        setCheckoutLayout(business.posCheckoutLayout);
+      }
+
       const saved = localStorage.getItem('pos_category_layout');
       if (saved) {
         setRawLayout(saved);
@@ -866,6 +1054,15 @@ export default function CheckoutClient() {
     applySaved();
 
     const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'pos_kot_mode' && e.newValue !== null) {
+        setKotMode(e.newValue === 'true');
+      }
+      if (e.key === 'pos_checkout_layout' && (e.newValue === 'sticky' || e.newValue === 'scroll')) {
+        setCheckoutLayout(e.newValue as 'sticky' | 'scroll');
+      }
+      if (e.key === 'pos_billing_view' && (e.newValue === 'image' || e.newValue === 'listing')) {
+        setBillingView(e.newValue as any);
+      }
       if (e.key === 'pos_category_layout' && e.newValue) {
         setRawLayout(e.newValue);
         if (e.newValue === 'vertical' || e.newValue === 'image-grid-side' || e.newValue === 'text-grid-side') {
@@ -879,7 +1076,7 @@ export default function CheckoutClient() {
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
-  }, []);
+  }, [business?.posKotEnabled, business?.posCheckoutLayout]);
 
   // Save layout preference when explicitly switched inside checkout
   useEffect(() => {
@@ -896,7 +1093,20 @@ export default function CheckoutClient() {
   const resumeBillId = searchParams.get("resumeBillId");
   const [activeBillId, setActiveBillId] = useState<string | null>(null);
   const activeBillIdRef = useRef<string | null>(null);
-  const [syncedOrderId, setSyncedOrderId] = useState<string | null>(null);
+  const [syncedOrderId, setSyncedOrderId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const paramOrderId = urlParams.get("orderId");
+        if (paramOrderId) return paramOrderId;
+        const isTableFlow = urlParams.has("tableId") || urlParams.has("returnTo") || urlParams.has("resumeBillId");
+        if (!isTableFlow) {
+          return localStorage.getItem("kravy_quick_pos_order_id") || null;
+        }
+      } catch (e) {}
+    }
+    return null;
+  });
   const [activeRecordType, setActiveRecordType] = useState<"BILL" | "ORDER" | null>(null);
 
   // Invariant: If resumed entity is a finalized BillManager invoice, never treat it as an active order
@@ -925,6 +1135,9 @@ export default function CheckoutClient() {
   const [variantModalItem, setVariantModalItem] = useState<MenuItem | null>(null);
   const [selectedVariants, setSelectedVariants] = useState<{ [groupId: string]: any[] }>({});
   const [showAddCategory, setShowAddCategory] = useState(false);
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const phoneInputRef = useRef<HTMLInputElement>(null);
 
   /* ================= PARTIES (CUSTOMERS) STATE ================= */
   const [parties, setParties] = useState<any[]>([]);
@@ -937,6 +1150,106 @@ export default function CheckoutClient() {
   const { tablesList: tables, emitUpdate } = useTerminalContext();
   const [selectedTable, setSelectedTable] = useState<string>("POS");
   const [orderType, setOrderType] = useState<"DINING" | "TAKEAWAY" | "DELIVERY">("DINING");
+
+  // Order Modes Visibility Settings (Dining, Takeaway, Delivery)
+  const [orderModes, setOrderModes] = useState({
+    dining: true,
+    takeaway: true,
+    delivery: true,
+  });
+
+  useEffect(() => {
+    const loadOrderModes = () => {
+      try {
+        const saved = localStorage.getItem("pos_order_modes");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setOrderModes({
+            dining: parsed.dining !== false,
+            takeaway: parsed.takeaway !== false,
+            delivery: parsed.delivery !== false,
+          });
+          return;
+        }
+      } catch (e) {}
+
+      if (business) {
+        setOrderModes({
+          dining: (business as any).posDiningEnabled !== false,
+          takeaway: (business as any).posTakeawayEnabled !== false,
+          delivery: (business as any).posDeliveryEnabled !== false,
+        });
+      }
+    };
+
+    loadOrderModes();
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "pos_order_modes" && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setOrderModes({
+            dining: parsed.dining !== false,
+            takeaway: parsed.takeaway !== false,
+            delivery: parsed.delivery !== false,
+          });
+        } catch (err) {}
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [business]);
+
+  // If currently active order type is disabled, auto-switch to an enabled mode
+  useEffect(() => {
+    if (orderType === "DELIVERY" && !orderModes.delivery) {
+      if (orderModes.dining) {
+        setOrderType("DINING");
+        if (selectedTable === "DELIVERY") setSelectedTable("POS");
+      } else if (orderModes.takeaway) {
+        setOrderType("TAKEAWAY");
+        setSelectedTable("TAKEAWAY");
+      }
+    } else if (orderType === "TAKEAWAY" && !orderModes.takeaway) {
+      if (orderModes.dining) {
+        setOrderType("DINING");
+        if (selectedTable === "TAKEAWAY") setSelectedTable("POS");
+      } else if (orderModes.delivery) {
+        setOrderType("DELIVERY");
+        setSelectedTable("DELIVERY");
+      }
+    } else if (orderType === "DINING" && !orderModes.dining) {
+      if (orderModes.takeaway) {
+        setOrderType("TAKEAWAY");
+        setSelectedTable("TAKEAWAY");
+      } else if (orderModes.delivery) {
+        setOrderType("DELIVERY");
+        setSelectedTable("DELIVERY");
+      }
+    }
+  }, [orderModes, orderType, selectedTable]);
+
+  const availableOrderTypes = useMemo(() => {
+    const list = [];
+    if (orderModes.dining) {
+      list.push({ id: 'DINING' as const, label: 'Dining', icon: <Utensils size={13} />, activeClass: 'bg-indigo-600 shadow-indigo-500/20' });
+    }
+    if (orderModes.takeaway) {
+      list.push({ id: 'TAKEAWAY' as const, label: 'Takeaway', icon: <ShoppingBag size={13} />, activeClass: 'bg-amber-600 shadow-amber-500/20' });
+    }
+    if (orderModes.delivery) {
+      list.push({ id: 'DELIVERY' as const, label: 'Delivery', icon: <Truck size={13} />, activeClass: 'bg-rose-600 shadow-rose-500/20' });
+    }
+    if (list.length === 0) {
+      list.push(
+        { id: 'DINING' as const, label: 'Dining', icon: <Utensils size={13} />, activeClass: 'bg-indigo-600 shadow-indigo-500/20' },
+        { id: 'TAKEAWAY' as const, label: 'Takeaway', icon: <ShoppingBag size={13} />, activeClass: 'bg-amber-600 shadow-amber-500/20' },
+        { id: 'DELIVERY' as const, label: 'Delivery', icon: <Truck size={13} />, activeClass: 'bg-rose-600 shadow-rose-500/20' }
+      );
+    }
+    return list;
+  }, [orderModes]);
+
   const [showTableSelect, setShowTableSelect] = useState(false);
   const [manualDeliveryCharge, setManualDeliveryCharge] = useState<number>(0);
   const [deliveryChargeType, setDeliveryChargeType] = useState<'FLAT' | 'PERCENT'>('FLAT');
@@ -974,8 +1287,10 @@ export default function CheckoutClient() {
     setDeliveryChargeType('FLAT');
     setManualPackagingCharge(0);
     setPackagingChargeType('FLAT');
-    setSelectedTable("POS");
-    setOrderType("DINING");
+    const defaultMode = orderModes.dining ? "DINING" : orderModes.takeaway ? "TAKEAWAY" : "DELIVERY";
+    const defaultTable = defaultMode === "DINING" ? "POS" : defaultMode;
+    setSelectedTable(defaultTable);
+    setOrderType(defaultMode);
 
     // Generate new bill number for next session
     const now = new Date();
@@ -989,6 +1304,10 @@ export default function CheckoutClient() {
     setActiveRecordType(null);
     if (typeof window !== "undefined") {
       try {
+        localStorage.removeItem("kravy_quick_pos_cart");
+        localStorage.removeItem("kravy_quick_pos_token");
+        localStorage.removeItem("kravy_quick_pos_kot_numbers");
+        localStorage.removeItem("kravy_quick_pos_order_id");
         const url = new URL(window.location.href);
         if (url.searchParams.has("resumeBillId")) {
           url.searchParams.delete("resumeBillId");
@@ -1052,10 +1371,37 @@ export default function CheckoutClient() {
 
   const [billNumber, setBillNumber] = useState("");
   const [billDate, setBillDate] = useState("");
-  const [tokenNumber, setTokenNumber] = useState<number | null>(null);
-  const tokenNumberRef = useRef<number | null>(null);
-  const [kotNumbers, setKotNumbers] = useState<number[]>([]);
-  const kotNumbersRef = useRef<number[]>([]);
+  const [tokenNumber, setTokenNumber] = useState<number | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const isTableFlow = urlParams.has("tableId") || urlParams.has("returnTo") || urlParams.has("orderId") || urlParams.has("resumeBillId");
+        if (!isTableFlow) {
+          const savedToken = localStorage.getItem("kravy_quick_pos_token");
+          if (savedToken) return Number(savedToken);
+        }
+      } catch (e) {}
+    }
+    return null;
+  });
+  const tokenNumberRef = useRef<number | null>(tokenNumber);
+  const [kotNumbers, setKotNumbers] = useState<number[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const isTableFlow = urlParams.has("tableId") || urlParams.has("returnTo") || urlParams.has("orderId") || urlParams.has("resumeBillId");
+        if (!isTableFlow) {
+          const savedKots = localStorage.getItem("kravy_quick_pos_kot_numbers");
+          if (savedKots) {
+            const parsed = JSON.parse(savedKots);
+            if (Array.isArray(parsed)) return parsed;
+          }
+        }
+      } catch (e) {}
+    }
+    return [];
+  });
+  const kotNumbersRef = useRef<number[]>(kotNumbers);
   const idempotencyKeyRef = useRef<string>(uuidv4());
   const { setOrders } = useTerminalContext();
   const [isSaving, setIsSaving] = useState(false);
@@ -1375,6 +1721,12 @@ export default function CheckoutClient() {
       setOrderType("DINING");
     }
 
+    if (!orderId && (tableId || returnTo)) {
+      // Starting a fresh/new order from Floor Management / Tables: ensure cart starts clean
+      setItems([]);
+      setSyncedOrderId(null);
+    }
+
     if (orderId) {
       async function loadActiveOrder() {
         // ✅ Instant Edit Handoff: Check for cached order first
@@ -1531,6 +1883,8 @@ export default function CheckoutClient() {
     return activeCats;
   }, [categoriesList, activeZone, menuItems]);
 
+  const invSettings = useMemo(() => getInventorySettings(business), [business]);
+
   const filteredMenuItems = useMemo(() => {
     const rawFiltered = menuItems
       .filter((i) => i.isActive !== false) // 🛡️ Filter Offline Items
@@ -1571,6 +1925,8 @@ export default function CheckoutClient() {
         finalItems.push(group[0]);
       } else {
         const minPrice = Math.min(...group.map(i => Number(i.price) || 0));
+        const groupStocks = group.map(i => i.currentStock).filter((s): s is number => typeof s === "number" && !isNaN(s));
+        const virtualCurrentStock = groupStocks.length > 0 ? groupStocks.reduce((a, b) => a + b, 0) : null;
         const virtualVariants = [{
           id: 'virtual_group',
           groupName: 'Size / Portion',
@@ -1607,7 +1963,8 @@ export default function CheckoutClient() {
           price: minPrice,
           variants: virtualVariants,
           isVirtualGroup: true,
-          groupedItems: group
+          groupedItems: group,
+          currentStock: virtualCurrentStock
         } as any);
       }
     });
@@ -1837,6 +2194,57 @@ export default function CheckoutClient() {
 
   /* ================= CUSTOMER ================= */
   const [showCustomer, setShowCustomer] = useState(false);
+  const [showMobileCustomerModal, setShowMobileCustomerModal] = useState(false);
+  const [saveAsRegularCustomer, setSaveAsRegularCustomer] = useState(false);
+  const [modalCustomerSuggestions, setModalCustomerSuggestions] = useState<any[]>([]);
+  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
+  const [showSuggestionsDropdown, setShowSuggestionsDropdown] = useState(false);
+  const modalSearchTimeoutRef = useRef<any>(null);
+
+  // Search function specifically for Add Details popup with live search on name or phone
+  const searchModalCustomers = (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setModalCustomerSuggestions([]);
+      setShowSuggestionsDropdown(false);
+      setIsSearchingCustomer(false);
+      return;
+    }
+
+    const cleanNum = trimmed.replace(/[^\d+]/g, "");
+    const localMatches = parties.filter(p => {
+      const matchPhone = cleanNum.length > 0 && p.phone && p.phone.replace(/[^\d+]/g, "").includes(cleanNum);
+      const matchName = p.name && p.name.toLowerCase().includes(trimmed.toLowerCase());
+      return matchPhone || matchName;
+    });
+
+    setModalCustomerSuggestions(localMatches.slice(0, 8));
+    setShowSuggestionsDropdown(true);
+
+    if (modalSearchTimeoutRef.current) clearTimeout(modalSearchTimeoutRef.current);
+    if (trimmed.length >= 2) {
+      setIsSearchingCustomer(true);
+      modalSearchTimeoutRef.current = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/parties?search=${encodeURIComponent(trimmed)}`);
+          if (res.ok) {
+            const data = await res.json();
+            setModalCustomerSuggestions(prev => {
+              const map = new Map();
+              prev.forEach(p => map.set(p.id || p.phone, p));
+              (data || []).forEach((p: any) => map.set(p.id || p.phone, p));
+              return Array.from(map.values()).slice(0, 8);
+            });
+          }
+        } catch (e) {
+        } finally {
+          setIsSearchingCustomer(false);
+        }
+      }, 300);
+    } else {
+      setIsSearchingCustomer(false);
+    }
+  };
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
@@ -1927,7 +2335,56 @@ export default function CheckoutClient() {
   };
 
   /* ================= CART STATE ================= */
-  const [items, setItems] = useState<BillItem[]>([]);
+  const [items, setItems] = useState<BillItem[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const isTableFlow = urlParams.has("tableId") || urlParams.has("returnTo") || urlParams.has("orderId") || urlParams.has("resumeBillId");
+        
+        // Only restore quick pos cart if we are on pure Quick POS Billing
+        if (!isTableFlow) {
+          const saved = localStorage.getItem("kravy_quick_pos_cart");
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load saved cart", e);
+      }
+    }
+    return [];
+  });
+
+  // Sync cart items, tokenNumber, and kotNumbers to localStorage so tab changes or navigating away don't lose the Quick POS cart
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const isTableFlow = searchParams.has("tableId") || searchParams.has("returnTo") || searchParams.has("orderId") || !!resumeBillId;
+        if (!isTableFlow) {
+          if (items.length > 0) {
+            localStorage.setItem("kravy_quick_pos_cart", JSON.stringify(items));
+            if (tokenNumber) {
+              localStorage.setItem("kravy_quick_pos_token", String(tokenNumber));
+            }
+            if (kotNumbers && kotNumbers.length > 0) {
+              localStorage.setItem("kravy_quick_pos_kot_numbers", JSON.stringify(kotNumbers));
+            }
+            if (syncedOrderId) {
+              localStorage.setItem("kravy_quick_pos_order_id", syncedOrderId);
+            }
+          } else {
+            localStorage.removeItem("kravy_quick_pos_cart");
+            localStorage.removeItem("kravy_quick_pos_token");
+            localStorage.removeItem("kravy_quick_pos_kot_numbers");
+            localStorage.removeItem("kravy_quick_pos_order_id");
+          }
+        }
+      } catch (e) {
+        console.error("Failed to save cart to localStorage", e);
+      }
+    }
+  }, [items, tokenNumber, kotNumbers, syncedOrderId, resumeBillId, searchParams]);
   const inc = (id: string) => { kravy.click(); setItems((s) => s.map((i) => i.id === id ? { ...i, qty: i.qty + 1, overriddenAmount: undefined } : i)); };
   const dec = (id: string) => {
     const item = items.find(i => i.id === id);
@@ -1993,8 +2450,8 @@ export default function CheckoutClient() {
     fetchBusinessProfile();
 
     const handleFocus = () => fetchBusinessProfile();
-    // window.addEventListener("focus", handleFocus);
-    // return () => window.removeEventListener("focus", handleFocus);
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
   }, []);
 
   const handleDeposit = async (amount: number) => {
@@ -2253,7 +2710,7 @@ export default function CheckoutClient() {
   const [resumeConfirmId, setResumeConfirmId] = useState<string | null>(null);
 
   /* ================= SAVE BILL ================= */
-  async function saveBill(isHeld: boolean = false, onValidationSuccess?: () => void) {
+  async function saveBill(isHeld: boolean = false, onValidationSuccess?: () => void, inventoryFlags?: { confirmedWarning?: boolean; isManagerOverride?: boolean }) {
     if (isSaving) return null;
     if (items.length === 0) { toast.error("No items to save"); return null; }
 
@@ -2445,14 +2902,14 @@ export default function CheckoutClient() {
         amountPaid: finalAmountPaid,
         idempotencyKey: idempotencyKeyRef.current,
         currencySymbol: business?.currencySymbol || sym,
+        orderId: syncedOrderId || searchParams.get("orderId") || null,
+        confirmedWarning: inventoryFlags?.confirmedWarning === true,
+        isManagerOverride: inventoryFlags?.isManagerOverride === true,
       };
 
       const targetBillId = activeBillId || resumeBillId;
       const url = targetBillId ? `/api/bill-manager/${targetBillId}` : "/api/bill-manager";
       const method = targetBillId ? "PUT" : "POST";
-
-      // OPTIMISTIC UI: Clear form only after all validations pass, right before fetch
-      if (onValidationSuccess) onValidationSuccess();
 
       const tApiStart = performance.now();
       console.log(`🚀 [PERF] 1. Sending ${method} ${url} request...`);
@@ -2468,6 +2925,67 @@ export default function CheckoutClient() {
 
       if (!res.ok) {
         const err = await res.json();
+        if (err.code === "INSUFFICIENT_STOCK_WARN") {
+          setIsSaving(false);
+          try { kravy.error?.(); } catch {}
+          let itemsList = Array.isArray(err.insufficientItems) ? err.insufficientItems : [];
+          if (itemsList.length === 0 && err.error) {
+            const match = err.error.match(/for (.+?)\s*\((?:Available|Avail):\s*(\d+(?:\.\d+)?)\)/i);
+            if (match) {
+              itemsList = [{
+                id: "fallback-item",
+                name: match[1],
+                requestedQty: 1,
+                availableStock: parseFloat(match[2]),
+                type: "item"
+              }];
+            }
+          }
+          setStockModalData({
+            isOpen: true,
+            code: "INSUFFICIENT_STOCK_WARN",
+            message: err.error || "Some items exceed available inventory stock.",
+            items: itemsList,
+            onProceedWarning: async () => {
+              setStockModalData((prev) => ({ ...prev, isOpen: false }));
+              return await saveBill(isHeld, onValidationSuccess, { confirmedWarning: true });
+            },
+          });
+          return null;
+        }
+        if (err.code === "INSUFFICIENT_STOCK_BLOCK" || (typeof err.error === "string" && err.error.toLowerCase().includes("insufficient stock"))) {
+          setIsSaving(false);
+          try { kravy.error?.(); } catch {}
+          const currentInv = getInventorySettings(business);
+          const canOverride = Boolean(currentInv?.enabled && currentInv?.allowManagerOverride);
+          let itemsList = Array.isArray(err.insufficientItems) ? err.insufficientItems : [];
+          if (itemsList.length === 0 && err.error) {
+            const match = err.error.match(/for (.+?)\s*\((?:Available|Avail):\s*(\d+(?:\.\d+)?)\)/i);
+            if (match) {
+              itemsList = [{
+                id: "fallback-item",
+                name: match[1],
+                requestedQty: 1,
+                availableStock: parseFloat(match[2]),
+                type: "item"
+              }];
+            }
+          }
+          setStockModalData({
+            isOpen: true,
+            code: "INSUFFICIENT_STOCK_BLOCK",
+            message: err.error || "Sale blocked due to insufficient inventory stock.",
+            items: itemsList,
+            allowManagerOverride: canOverride,
+            onProceedOverride: canOverride
+              ? async () => {
+                  setStockModalData((prev) => ({ ...prev, isOpen: false }));
+                  return await saveBill(isHeld, onValidationSuccess, { isManagerOverride: true });
+                }
+              : undefined,
+          });
+          return null;
+        }
         toast.error(err.error || "Failed to save bill");
         setIsSaving(false);
         return null;
@@ -2511,6 +3029,31 @@ export default function CheckoutClient() {
           setTokenNumber(savedBill.tokenNumber);
           tokenNumberRef.current = savedBill.tokenNumber;
         }
+      }
+
+      // Clear form only after server has successfully confirmed and saved the bill
+      if (onValidationSuccess) onValidationSuccess();
+
+      // 📦 Optimistically update local stock quantities for inventory-tracked items
+      const shouldOptimisticallyDeduct = invSettings.enabled && !isHeld && !activeBillId && !resumeBillId && !(syncedOrderId && invSettings.deductionTiming === "kot") && items.length > 0;
+      if (shouldOptimisticallyDeduct) {
+        const soldQtyMap = new Map<string, number>();
+        items.forEach(i => {
+          const rawId = i.itemId || i.id;
+          const match = rawId ? String(rawId).match(/^[0-9a-fA-F]{24}/) : null;
+          const itemId = match ? match[0] : (i.itemId || i.id);
+          if (itemId) {
+            soldQtyMap.set(itemId, (soldQtyMap.get(itemId) || 0) + Number(i.qty || 1));
+          }
+        });
+
+        setMenuItems(prev => prev.map(m => {
+          if (m.currentStock !== null && m.currentStock !== undefined && soldQtyMap.has(m.id)) {
+            const sold = soldQtyMap.get(m.id) || 0;
+            return { ...m, currentStock: m.currentStock - sold };
+          }
+          return m;
+        }));
       }
 
       // ✅ COMPETE LINKED ORDER (Prevent Duplicates in History)
@@ -2583,21 +3126,26 @@ export default function CheckoutClient() {
     }
 
     const billHtml = receiptRef.current.innerHTML;
-    const kotHtml = kotRef.current?.innerHTML || "";
-
     const isKOTEnabled = forceBoth;
     console.log("PRINT TRIGGERED - KOT:", isKOTEnabled);
+
+    if (isKOTEnabled && kotRef.current) {
+      const tNum = customBill?.tokenNumber || tokenNumber;
+      if (tNum) {
+        const kotTokenDisplay = kotRef.current.querySelector('.kot-token-display');
+        if (kotTokenDisplay) {
+          kotTokenDisplay.innerHTML = `#${tNum}`;
+        }
+      }
+    }
+
+    const kotHtml = kotRef.current?.innerHTML || "";
 
     const ps = (business as any)?.printSettings || {};
     const spoolerDelay = ps.spoolerDelay !== undefined && ps.spoolerDelay !== null ? Number(ps.spoolerDelay) : 0;
 
     if (isKOTEnabled && kotHtml) {
       let finalKotHtml = kotHtml;
-      const tNum = customBill?.tokenNumber || tokenNumber;
-      if (tNum) {
-        finalKotHtml = finalKotHtml.replace(/#KOT_PLACEHOLDER/g, `#${tNum}`);
-        finalKotHtml = finalKotHtml.replace(/#---/g, `#${tNum}`);
-      }
       // KOT Print
       if (spoolerDelay > 0) {
         runPrintJob("kot", finalKotHtml, () => {
@@ -2687,17 +3235,22 @@ export default function CheckoutClient() {
     }
   };
 
-  const handlePrintKOT = async (isWebBt: boolean | any = false) => {
+  const handlePrintKOT = async (isWebBt: boolean | any = false, skipPrint: boolean = false) => {
     if (isSaving || items.length === 0) return;
 
     const useWebBt = typeof isWebBt === "boolean" ? isWebBt : false;
 
-    if (useWebBt) {
+    if (useWebBt && !skipPrint) {
       try {
         const { ensurePrinterConnected } = await import("@/lib/web-bluetooth");
-        await ensurePrinterConnected();
+        // First try reconnecting to saved device; if that fails, prompt pairing dialog
+        try {
+          await ensurePrinterConnected(false, 'kot');
+        } catch {
+          await ensurePrinterConnected(true, 'kot');
+        }
       } catch (e: any) {
-        toast.error(e.message || "Failed to connect to printer");
+        toast.error(e.message || "Failed to connect to Bluetooth printer");
         return;
       }
     }
@@ -2731,26 +3284,43 @@ export default function CheckoutClient() {
         // Finalized invoice: strictly reuse existing token if available; NEVER reserve a new token or increment sequence
         tokenNumberToUse = tokenNumberRef.current || tokenNumber || null;
       } else if (!syncedOrderId || hasNewItems) {
-        const reserveRes = await fetch(`/api/orders/reserve-token?profileId=${business?.id || ""}`, { method: "POST" });
-        reserveTokenStatus = `HTTP_${reserveRes.status}`;
-        if (reserveRes.ok) {
-          const resData = await reserveRes.json();
-          tokenNumberToUse = resData.tokenNumber;
-          orderNumberToUse = resData.orderNumber;
-          setTokenNumber(tokenNumberToUse);
-          tokenNumberRef.current = tokenNumberToUse;
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 2500);
+          const reserveRes = await fetch(`/api/orders/reserve-token?profileId=${business?.id || ""}`, { 
+            method: "POST",
+            signal: controller.signal 
+          });
+          clearTimeout(timeoutId);
+          reserveTokenStatus = `HTTP_${reserveRes.status}`;
+          if (reserveRes.ok) {
+            const resData = await reserveRes.json();
+            tokenNumberToUse = resData.tokenNumber;
+            orderNumberToUse = resData.orderNumber;
+            setTokenNumber(tokenNumberToUse);
+            tokenNumberRef.current = tokenNumberToUse;
 
-          if (tokenNumberToUse !== null) {
-            setKotNumbers(prev => {
-              const updated = [...prev, tokenNumberToUse as number];
-              kotNumbersRef.current = updated;
-              return updated;
-            });
+            if (tokenNumberToUse !== null) {
+              setKotNumbers(prev => {
+                const updated = [...prev, tokenNumberToUse as number];
+                kotNumbersRef.current = updated;
+                return updated;
+              });
+            }
+            setBusiness(prev => prev ? { ...prev, lastTokenNumber: tokenNumberToUse } as any : prev);
           }
-          setBusiness(prev => prev ? { ...prev, lastTokenNumber: tokenNumberToUse } as any : prev);
+        } catch(e) {
+          console.warn("Reserve token timed out or failed, proceeding with local token:", e);
         }
       } else {
         tokenNumberToUse = tokenNumber;
+      }
+
+      // Guarantee tokenNumberToUse is NEVER null or 0 for KOT printing
+      if (!tokenNumberToUse) {
+        tokenNumberToUse = (business?.lastTokenNumber ? Number(business.lastTokenNumber) + 1 : 1);
+        setTokenNumber(tokenNumberToUse);
+        tokenNumberRef.current = tokenNumberToUse;
       }
       console.info(`[KOT_TRACE] RESERVE_TOKEN_END: ${(performance.now() - tReserveStart).toFixed(2)} ms`);
       console.info(`[KOT_TRACE] RESERVE_TOKEN_STATUS: ${reserveTokenStatus}`);
@@ -2800,17 +3370,17 @@ export default function CheckoutClient() {
         setIsSaving(false);
       }
 
-      // 5. INJECT HTML & PRINT IMMEDIATELY
-      if (htmlToPrint) {
-        console.info("[KOT_TRACE] REGEX_START");
-        const tRegexStart = performance.now();
-        let finalHtmlToPrint = htmlToPrint;
-        if (tokenNumberToUse) {
-          finalHtmlToPrint = finalHtmlToPrint.replace(/#KOT_PLACEHOLDER/g, `#${tokenNumberToUse}`);
-          finalHtmlToPrint = finalHtmlToPrint.replace(/#---/g, `#${tokenNumberToUse}`);
+      // Synchronously update KOT DOM with tokenNumberToUse so that the printed slip ALWAYS displays the exact reserved token
+      if (kotRef.current && tokenNumberToUse) {
+        const kotTokenDisplay = kotRef.current.querySelector('.kot-token-display');
+        if (kotTokenDisplay) {
+          kotTokenDisplay.innerHTML = `#${tokenNumberToUse}`;
         }
-        console.info(`[KOT_TRACE] REGEX_END: ${(performance.now() - tRegexStart).toFixed(2)} ms`);
+      }
 
+      // 5. CAPTURE FRESH HTML WITH ACCURATE TOKEN & PRINT IMMEDIATELY
+      const finalHtmlToPrint = kotRef.current?.innerHTML || htmlToPrint;
+      if (finalHtmlToPrint) {
         console.info("[KOT_TRACE] PRINT_START");
         const tPrintStart = performance.now();
 
@@ -2829,17 +3399,36 @@ export default function CheckoutClient() {
               }
             }
 
-            const tableId = searchParams.get("tableId");
-            const tableName = searchParams.get("tableName");
+            // If syncPromise didn't resolve an id yet, sync right now to get real MongoDB Order ID
+            if (!finalOrderId && !isFinalizedBill) {
+              try {
+                const data = await syncOrderToBackend(orderData, tokenNumberToUse || 0, orderNumberToUse);
+                if (data && data.id) finalOrderId = data.id;
+              } catch (e) {
+                console.error("Direct sync fallback failed:", e);
+              }
+            }
+
+            const tableId = searchParams.get("tableId") || orderData.tableId;
+            const tableName = searchParams.get("tableName") || selectedTable;
 
             // OPTIMISTIC UPDATE FOR FLOOR MANAGEMENT
             if (finalOrderId && setOrders) {
+              const assignedTableId = tableId || null;
+              const assignedTableName = tableName || selectedTable;
+              const optimisticOrder = {
+                id: finalOrderId,
+                ...orderData,
+                tableId: assignedTableId,
+                table: assignedTableId ? { id: assignedTableId, name: assignedTableName } : undefined,
+                createdAt: new Date().toISOString()
+              };
               setOrders(prev => {
                 const existing = prev.find(o => o.id === finalOrderId);
                 if (existing) {
-                  return prev.map(o => o.id === finalOrderId ? { ...o, items: orderData.items } : o);
+                  return prev.map(o => (o.id === existing.id) ? { ...o, ...optimisticOrder, items: orderData.items } : o);
                 } else {
-                  return [...prev, { id: finalOrderId, ...orderData } as any];
+                  return [...prev, optimisticOrder as any];
                 }
               });
             }
@@ -2856,7 +3445,10 @@ export default function CheckoutClient() {
           }
         };
 
-        if (useWebBt) {
+        if (skipPrint) {
+          toast.success("KOT Saved Successfully! 👍");
+          await finishPrintAction();
+        } else if (useWebBt) {
           try {
             const { printReceiptData } = await import("@/lib/web-bluetooth");
             const orderToPrint = {
@@ -2866,7 +3458,7 @@ export default function CheckoutClient() {
               tokenNumber: tokenNumberToUse || tokenNumber,
               customerName, customerAddress, items, discountAmount: discountAmt, tax: totalGst, total: finalTotal, paymentMode, paymentStatus
             };
-            await printReceiptData(orderToPrint, business, kotRef.current);
+            await printReceiptData(orderToPrint, business, kotRef.current, 'kot');
             await finishPrintAction();
           } catch (err: any) {
             toast.error(err.message || "Web BT Print failed");
@@ -2885,7 +3477,7 @@ export default function CheckoutClient() {
     }
   };
 
-  const handleSaveAndPrintBill = async (useWebBT: boolean = false) => {
+  const handleSaveAndPrintBill = async (useWebBT: boolean = false, billOnly: boolean = false) => {
     if (items.length === 0) { toast.error("No items to save"); return; }
 
     if (buyerGSTIN) {
@@ -2899,7 +3491,7 @@ export default function CheckoutClient() {
     if (useWebBT) {
       try {
         const { ensurePrinterConnected } = await import("@/lib/web-bluetooth");
-        await ensurePrinterConnected();
+        await ensurePrinterConnected(false, 'bill');
       } catch (e: any) {
         toast.error(e.message || "Failed to connect to printer");
         return;
@@ -2939,6 +3531,7 @@ export default function CheckoutClient() {
     }
 
     const finishPrintAction = () => {
+      closeMobileCart();
       if (returnTo) {
         const tableId = searchParams.get("tableId");
         const orderId = searchParams.get("orderId") || syncedOrderId || bill.id;
@@ -2968,7 +3561,7 @@ export default function CheckoutClient() {
           serviceCharge: bill.serviceCharge || 0
         };
 
-        await printReceiptData(orderToPrint, business, receiptRef.current);
+        await printReceiptData(orderToPrint, business, receiptRef.current, 'bill');
         finishPrintAction();
       } catch (err: any) {
         toast.error(err.message || "Web BT Print failed");
@@ -2977,7 +3570,7 @@ export default function CheckoutClient() {
       const configuredDelay = (business as any)?.printSettings?.spoolerDelay;
       const spoolerDelay = configuredDelay !== undefined && configuredDelay !== null ? Number(configuredDelay) : 0;
 
-      if (business?.enableKOTWithBill && finalKotHtml) {
+      if (!billOnly && business?.enableKOTWithBill && finalKotHtml) {
         if (spoolerDelay > 0) {
           runPrintJob("kot", finalKotHtml, () => {
             setTimeout(() => {
@@ -3429,6 +4022,180 @@ export default function CheckoutClient() {
     }
   };
 
+  /* ================= KEYBOARD SHORTCUTS FOR ULTRA-FAST BILLING ================= */
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      // Support both Ctrl (Windows) and Command/Cmd ⌘ (Mac)
+      const isCmdOrCtrl = e.ctrlKey || e.metaKey;
+      const keyLower = (e.code ? e.code.replace('Key', '').toLowerCase() : '') || e.key.toLowerCase();
+
+      // F1 or '?' outside text inputs or Cmd/Ctrl+/ -> Toggle Shortcuts Modal
+      if (e.key === "F1" || (isCmdOrCtrl && e.key === "/") || (!isInput && e.key === "?")) {
+        e.preventDefault();
+        setShowShortcutsModal(prev => !prev);
+        return;
+      }
+
+      // Escape -> close open modals, or blur input, or clear search
+      if (e.key === "Escape") {
+        if (showShortcutsModal) {
+          setShowShortcutsModal(false);
+          return;
+        }
+        if (showHeldBills) {
+          setShowHeldBills(false);
+          return;
+        }
+        if (showNotesModal) {
+          setShowNotesModal(false);
+          return;
+        }
+        if (isInput) {
+          (target as HTMLInputElement).blur();
+          return;
+        }
+        if (searchQuery) {
+          setSearchQuery("");
+          return;
+        }
+      }
+
+      // F2 or '/' (when not already inside an input) -> Focus Search Bar
+      if (e.key === "F2" || (!isInput && e.key === "/")) {
+        e.preventDefault();
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+          searchInputRef.current.select();
+        }
+        return;
+      }
+
+      // F3 or Alt/Option+P or Cmd/Ctrl+P -> Focus Customer Phone Input
+      if (e.key === "F3" || ((e.altKey || isCmdOrCtrl) && keyLower === "p")) {
+        e.preventDefault();
+        if (phoneInputRef.current) {
+          phoneInputRef.current.focus();
+          phoneInputRef.current.select();
+        }
+        return;
+      }
+
+      // F4 or Alt/Option+C -> Cash Payment
+      if (e.key === "F4" || (e.altKey && keyLower === "c")) {
+        e.preventDefault();
+        kravy.toggle();
+        setPaymentMode("Cash");
+        toast.info("Payment: Cash [F4]");
+        return;
+      }
+
+      // F5 or Alt/Option+U -> UPI Payment
+      if (e.key === "F5" || (e.altKey && keyLower === "u")) {
+        e.preventDefault();
+        kravy.toggle();
+        setShowMorePayments(true);
+        setPaymentMode("UPI");
+        toast.info("Payment: UPI [F5]");
+        return;
+      }
+
+      // F6 or Alt/Option+D -> Card Payment
+      if (e.key === "F6" || (e.altKey && keyLower === "d")) {
+        e.preventDefault();
+        kravy.toggle();
+        setShowMorePayments(true);
+        setPaymentMode("Card");
+        toast.info("Payment: Card [F6]");
+        return;
+      }
+
+      // Alt/Option+W -> Wallet Payment
+      if (e.altKey && keyLower === "w") {
+        e.preventDefault();
+        kravy.toggle();
+        setShowMorePayments(true);
+        setPaymentMode("Wallet");
+        toast.info("Payment: Wallet [Alt+W]");
+        return;
+      }
+
+      // F7 or Alt/Option+H -> Hold Current Bill or View Held Bills
+      if (e.key === "F7" || (e.altKey && keyLower === "h")) {
+        e.preventDefault();
+        if (items.length > 0 && !isSaving) {
+          saveBill(true).then((bill) => {
+            if (bill) {
+              kravy.ping();
+              resetForm();
+              fetchHeldBills();
+              if (resumeBillId) router.replace("/dashboard/billing/checkout");
+              toast.success("Current Bill Held [F7] ⏸️");
+            }
+          });
+        } else {
+          kravy.click();
+          setShowHeldBills(true);
+          fetchHeldBills();
+          toast.info("Viewing Held Orders [F7]");
+        }
+        return;
+      }
+
+      // F8 or Cmd/Ctrl+Enter -> Settle & Print Bill
+      if (e.key === "F8" || (isCmdOrCtrl && e.key === "Enter")) {
+        e.preventDefault();
+        if (items.length === 0) {
+          toast.error("Cart is empty! Add items first.");
+          return;
+        }
+        if (isSaving) return;
+        handleSaveAndPrintBill(false);
+        return;
+      }
+
+      // F9 or Cmd/Ctrl+K -> Kitchen KOT
+      if (e.key === "F9" || (isCmdOrCtrl && e.key.toLowerCase() === "k")) {
+        e.preventDefault();
+        if (items.length === 0) {
+          toast.error("Cart is empty! Add items first.");
+          return;
+        }
+        if (isSaving) return;
+        handlePrintKOT(false, false);
+        return;
+      }
+
+      // F10 -> Direct Bluetooth Print
+      if (e.key === "F10") {
+        e.preventDefault();
+        if (items.length === 0) {
+          toast.error("Cart is empty! Add items first.");
+          return;
+        }
+        if (isSaving) return;
+        handleSaveAndPrintBill(true);
+        return;
+      }
+
+      // Alt/Option+X or Cmd/Ctrl+Shift+Backspace -> Clear Cart
+      if ((e.altKey && keyLower === "x") || (isCmdOrCtrl && e.shiftKey && e.key === "Backspace")) {
+        e.preventDefault();
+        if (items.length > 0) {
+          if (window.confirm("Clear all items from the current cart?")) {
+            resetForm();
+            toast.success("Cart cleared");
+          }
+        }
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [items, isSaving, showShortcutsModal, showHeldBills, showNotesModal, searchQuery, resumeBillId, paymentMode, paymentStatus]);
+
   /* ================= UI ================= */
   const totalItems = items.reduce((s, i) => s + i.qty, 0);
 
@@ -3608,7 +4375,7 @@ export default function CheckoutClient() {
                         title="View Held Bills"
                       >
                         <Clock size={13} className="text-amber-500" />
-                        <span className="text-[10px] font-black uppercase tracking-wider">Held</span>
+                        <span className="text-[10px] font-black uppercase tracking-wider">On Hold</span>
                         {heldBills.length > 0 && (
                           <span className="bg-amber-500 text-white text-[9px] font-black min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full shadow">
                             {heldBills.length}
@@ -3618,13 +4385,23 @@ export default function CheckoutClient() {
                     )}
                   </div>
 
-                  {/* Combined Search & New Category — COMPACT & FULLY RESPONSIVE */}
-                  <div className="flex items-center gap-1.5 w-full sm:w-auto sm:min-w-[220px] sm:max-w-[320px] flex-1 sm:flex-initial">
+                  {/* Combined Search, Keyboard Help & New Category */}
+                  <div className="flex items-center gap-1.5 w-full sm:w-auto sm:min-w-[240px] sm:max-w-[360px] flex-1 sm:flex-initial">
+                    <button
+                      type="button"
+                      onClick={() => { kravy.click(); setShowShortcutsModal(true); }}
+                      className="hidden sm:flex items-center gap-1 px-2 h-8 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-lg text-[10px] font-bold text-[var(--kravy-text-muted)] hover:text-indigo-600 hover:border-indigo-500 transition-all shrink-0 shadow-xs"
+                      title="Keyboard Shortcuts Cheat Sheet (Press F1 or ?)"
+                    >
+                      <Keyboard size={13} className="text-indigo-500" />
+                      <span className="font-mono text-[9px] font-black uppercase tracking-tight">Keys [F1]</span>
+                    </button>
                     <div className="relative flex-1 min-w-[140px]">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--kravy-text-faint)]" size={12} />
                       <input
+                        ref={searchInputRef}
                         type="text"
-                        placeholder={isListening ? "🎙️ Listening... Speak item..." : "Search menu / Shortcode…"}
+                        placeholder={isListening ? "🎙️ Listening... Speak item..." : "Search menu / Shortcode… [/]"}
                         value={searchQuery}
                         onFocus={(e) => e.target.select()}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -3682,6 +4459,21 @@ export default function CheckoutClient() {
                       </button>
                     )}
                     <button
+                      type="button"
+                      onClick={() => { kravy.click(); setShowMobileCustomerModal(true); }}
+                      className={`h-8 px-2.5 rounded-lg border transition-all flex items-center gap-1.5 shrink-0 shadow-xs ${
+                        customerPhone || customerName
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-indigo-500/20"
+                          : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700 hover:bg-slate-50"
+                      }`}
+                      title="Customer Details"
+                    >
+                      <User size={13} strokeWidth={2.5} />
+                      <span className="text-[10px] font-black uppercase tracking-wider max-w-[80px] sm:max-w-[110px] truncate">
+                        {customerName || customerPhone || "Customer"}
+                      </span>
+                    </button>
+                    <button
                       onClick={async () => {
                         setMenuLoading(true);
                         fetch(`/api/menu/items?t=${Date.now()}`, { cache: "no-store" })
@@ -3705,23 +4497,23 @@ export default function CheckoutClient() {
 
                 {/* Horizontal Categories — ONLY IF layout is horizontal */}
                 {categoryLayout === 'horizontal' && rawLayout !== 'image-wide-classic' && (
-                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-3 pb-2">
+                  <div className="flex items-center gap-2 lg:gap-3 overflow-x-auto no-scrollbar pt-2.5 pb-2 font-sans select-none">
                     <button
                       onClick={async () => { kravy.click(); setActiveCategory("All"); }}
-                      className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border transition-all whitespace-nowrap ${activeCategory === "All"
-                        ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                        : "bg-[var(--kravy-surface)] border-[var(--kravy-border)] text-[var(--kravy-text-secondary)] hover:border-indigo-500/50"
+                      className={`h-[40px] lg:h-[46px] px-[16px] lg:px-[22px] rounded-[22px] lg:rounded-[24px] text-[13px] lg:text-[15px] font-bold uppercase tracking-wide border transition-all whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${activeCategory === "All"
+                        ? "bg-[var(--kravy-brand)] border-[var(--kravy-brand)] text-white shadow-md shadow-[var(--kravy-brand)]/25"
+                        : "bg-[var(--kravy-surface)] border-[var(--kravy-border)] text-[var(--kravy-text-secondary)] hover:border-[var(--kravy-brand)]/50 hover:text-[var(--kravy-text-primary)]"
                         }`}
                     >
-                      All
+                      ALL
                     </button>
                     {categories.map((cat) => (
                       <button
                         key={cat}
                         onClick={async () => { kravy.click(); setActiveCategory(cat); }}
-                        className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border transition-all whitespace-nowrap ${activeCategory === cat
-                          ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                          : "bg-[var(--kravy-surface)] border-[var(--kravy-border)] text-[var(--kravy-text-secondary)] hover:border-indigo-500/50"
+                        className={`h-[40px] lg:h-[46px] px-[16px] lg:px-[22px] rounded-[22px] lg:rounded-[24px] text-[13px] lg:text-[15px] font-bold uppercase tracking-wide border transition-all whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${activeCategory === cat
+                          ? "bg-[var(--kravy-brand)] border-[var(--kravy-brand)] text-white shadow-md shadow-[var(--kravy-brand)]/25"
+                          : "bg-[var(--kravy-surface)] border-[var(--kravy-border)] text-[var(--kravy-text-secondary)] hover:border-[var(--kravy-brand)]/50 hover:text-[var(--kravy-text-primary)]"
                           }`}
                       >
                         {cat}
@@ -3730,10 +4522,10 @@ export default function CheckoutClient() {
                     {canEdit && (
                       <button
                         onClick={async () => setShowAddCategory(true)}
-                        className="px-2 py-1 rounded-full bg-white border border-[var(--kravy-border)] text-indigo-600 hover:border-indigo-500 transition-all shadow-sm shrink-0"
+                        className="h-[40px] lg:h-[46px] px-3.5 lg:px-4 rounded-[22px] lg:rounded-[24px] bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-brand)] hover:border-[var(--kravy-brand)] transition-all shadow-sm shrink-0 flex items-center justify-center"
                         title="Add Category"
                       >
-                        <Plus size={12} strokeWidth={3} />
+                        <Plus size={16} strokeWidth={2.8} />
                       </button>
                     )}
                   </div>
@@ -3875,17 +4667,17 @@ export default function CheckoutClient() {
                   </div>
                 )}
 
-                {/* Menu Grid: Scrollable Container */}
-                <div className="flex-1 overflow-y-auto overflow-x-hidden md:scrollbar-default scrollbar-hide">
+                {/* Menu Grid: Scrollable Container with Independent Scrolling on Laptops */}
+                <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2 md:px-5 py-4 scrollbar-hide">
                   {menuLoading ? (
-                    <div className="flex-1 flex items-center justify-center">
+                    <div className="flex-1 flex items-center justify-center min-h-[300px]">
                       <div className="flex flex-col items-center gap-3">
                         <div className="w-8 h-8 border-4 border-[var(--kravy-brand)]/20 border-t-[var(--kravy-brand)] rounded-full animate-spin" />
                         <p className="text-sm font-bold text-[var(--kravy-text-muted)] animate-pulse">Loading menu…</p>
                       </div>
                     </div>
                   ) : filteredMenuItems.length === 0 && searchQuery ? (
-                    <div className="flex-1 flex items-center justify-center p-8 text-center">
+                    <div className="flex-1 flex items-center justify-center p-8 text-center min-h-[300px]">
                       <div className="opacity-40">
                         <Search size={40} className="mx-auto mb-3 text-[var(--kravy-text-muted)]" />
                         <p className="font-bold text-[var(--kravy-text-primary)]">No items found</p>
@@ -3893,7 +4685,7 @@ export default function CheckoutClient() {
                       </div>
                     </div>
                   ) : (
-                    <div className="min-h-0 flex-1 overflow-y-auto px-2 md:px-5 py-4 scrollbar-hide">
+                    <div className="space-y-6">
                       {activeCategory === "All" && !searchQuery ? (
                         categories.map(catName => {
                           const catItems = filteredMenuItems.filter(i => (i.category?.name || "Uncategorised") === catName);
@@ -3910,7 +4702,7 @@ export default function CheckoutClient() {
                               </h3>
                               <div className={rawLayout === 'image-wide-classic' ? "grid grid-cols-1 gap-2 mb-6" : "grid grid-cols-2 min-[330px]:grid-cols-3 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 gap-1.5 min-[330px]:gap-2 sm:gap-3 mb-6"}>
                                 {catItems.map(m => (
-                                  <MenuItemCard key={m.id} m={m} items={items} addToCart={addToCart} reduceFromCart={reduceFromCart} expiryTrackingEnabled={business?.expiryTrackingEnabled} sym={sym} hideImage={rawLayout === 'text-grid-side' || rawLayout === 'text-grid-classic'} isWideRow={rawLayout === 'image-wide-classic'} />
+                                  <MenuItemCard key={m.id} m={m} items={items} addToCart={addToCart} reduceFromCart={reduceFromCart} expiryTrackingEnabled={business?.expiryTrackingEnabled} sym={sym} hideImage={rawLayout === 'text-grid-side' || rawLayout === 'text-grid-classic'} isWideRow={rawLayout === 'image-wide-classic'} invSettings={invSettings} />
                                 ))}
                                 {canEdit && <QuickAddCard cat={catObj} onClick={async () => { setQuickAddCat(catObj); toast.info(`Quick add to ${catName}`); }} />}
                               </div>
@@ -3987,7 +4779,7 @@ export default function CheckoutClient() {
                         <div className="space-y-6">
                           <div className={rawLayout === 'image-wide-classic' ? "grid grid-cols-1 gap-2" : "grid grid-cols-2 min-[330px]:grid-cols-3 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 gap-1.5 min-[330px]:gap-2 sm:gap-3"}>
                             {filteredMenuItems.map((m) => (
-                              <MenuItemCard key={m.id} m={m} items={items} addToCart={addToCart} reduceFromCart={reduceFromCart} expiryTrackingEnabled={business?.expiryTrackingEnabled} sym={sym} hideImage={rawLayout === 'text-grid-side' || rawLayout === 'text-grid-classic'} isWideRow={rawLayout === 'image-wide-classic'} />
+                              <MenuItemCard key={m.id} m={m} items={items} addToCart={addToCart} reduceFromCart={reduceFromCart} expiryTrackingEnabled={business?.expiryTrackingEnabled} sym={sym} hideImage={rawLayout === 'text-grid-side' || rawLayout === 'text-grid-classic'} isWideRow={rawLayout === 'image-wide-classic'} invSettings={invSettings} />
                             ))}
                             {!searchQuery && activeCategory !== "All" && (() => {
                               const fallbackCat = categoriesList.find(c => c.name.toLowerCase() === activeCategory.toLowerCase()) || { id: "", name: activeCategory };
@@ -4132,20 +4924,164 @@ export default function CheckoutClient() {
                 </div>
               )}
 
-              {/* Mobile View Cart Bar (Sticky Bottom) - Only shown when items are added to cart */}
+              {/* Mobile Bottom Action Bar (Sticky Bottom) - Dynamic buttons based on KOT Mode */}
               {items.length > 0 && (
-                <div className="lg:hidden flex-none bg-indigo-600 px-4 py-3 pb-safe flex items-center justify-between text-white shadow-[0_-4px_20px_rgba(79,70,229,0.3)] z-20 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-200">Cart Total</p>
-                    <p className="text-lg font-black">{formatCurrency(finalTotal, sym)}</p>
+                <div className="lg:hidden flex-none bg-white dark:bg-slate-900 border-t border-[var(--kravy-border)] p-2.5 pb-safe z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] animate-in fade-in slide-in-from-bottom-2 duration-200">
+                  {/* Cart Total Summary Row */}
+                  <div className="flex items-center justify-between px-1 mb-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => openMobileCart()}
+                        className="flex items-center gap-1.5 text-left group shrink-0"
+                      >
+                        <div className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-[11px] font-black tracking-wide">
+                          View Cart <span className="ml-1 px-1.5 py-0.2 rounded-full bg-indigo-600 text-white text-[10px]">{totalItems}</span>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => { kravy.click(); setShowMobileCustomerModal(true); }}
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-bold transition-all max-w-[130px] truncate ${
+                          customerPhone || customerName
+                            ? "bg-emerald-50 dark:bg-emerald-950/50 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300"
+                            : "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
+                        }`}
+                        title="Customer Details"
+                      >
+                        <User size={11} className="shrink-0" />
+                        <span className="truncate">
+                          {customerName || customerPhone || "+ Customer"}
+                        </span>
+                      </button>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 mr-1.5">Total:</span>
+                      <span className="text-sm font-black text-[var(--kravy-text-primary)]">{formatCurrency(finalTotal, sym)}</span>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => openMobileCart()}
-                    className="bg-white text-indigo-600 px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wide active:scale-95 transition-transform flex items-center gap-2"
-                  >
-                    View Cart
-                    <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md text-[10px]">{totalItems}</span>
-                  </button>
+
+                  {/* Dynamic Action Buttons Grid */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {kotMode ? (
+                      /* KOT Mode ENABLED: KOT & Hold + KOT & Bill */
+                      <>
+                        <button
+                          type="button"
+                          disabled={items.length === 0 || isSaving}
+                          onClick={async () => {
+                            kravy.click();
+                            try {
+                              // 1. First print KOT via Bluetooth — if this fails, abort hold
+                              await handlePrintKOT(true, false);
+
+                              // 2. Perform hold order workflow identical to Hold [F7] button
+                              const bill = await saveBill(true);
+                              if (bill) {
+                                kravy.ping();
+                                toast.success("KOT Printed & Order Held! ⏸️");
+                                closeMobileCart();
+                                fetchHeldBills();
+
+                                const returnTo = searchParams.get("returnTo");
+                                if (returnTo) {
+                                  const tableId = searchParams.get("tableId");
+                                  const orderId = searchParams.get("orderId") || syncedOrderId || bill.id;
+                                  const query = new URLSearchParams();
+                                  if (tableId) query.set("tableId", tableId);
+                                  if (orderId) query.set("orderId", orderId);
+                                  router.replace(`${returnTo.split("?")[0]}?${query.toString()}`);
+                                  return;
+                                }
+
+                                resetForm();
+                                if (resumeBillId) router.replace("/dashboard/billing/checkout");
+                              }
+                            } catch (e: any) {
+                              toast.error(e?.message || "KOT & Hold failed");
+                            }
+                          }}
+                          className="w-full py-3 px-3 rounded-xl border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-900 dark:text-white font-black text-xs sm:text-sm tracking-wide shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        >
+                          {isSaving ? <RefreshCw size={15} className="animate-spin" /> : <span>KOT & Hold</span>}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={items.length === 0 || isSaving}
+                          onClick={async () => {
+                            kravy.click();
+                            try {
+                              // Print KOT via Bluetooth first, then open cart/billing to complete & bill
+                              await handlePrintKOT(true, false);
+                              toast.success("KOT Printed! Proceeding to bill...");
+                              openMobileCart();
+                            } catch (e: any) {
+                              toast.error(e?.message || "KOT & Bill failed");
+                              openMobileCart();
+                            }
+                          }}
+                          className="w-full py-3 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs sm:text-sm tracking-wide shadow-md shadow-blue-500/25 active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        >
+                          {isSaving ? <RefreshCw size={15} className="animate-spin" /> : <span>KOT & Bill</span>}
+                        </button>
+                      </>
+                    ) : (
+                      /* KOT Mode DISABLED: Save & Hold + Save & Bill */
+                      <>
+                        <button
+                          type="button"
+                          disabled={items.length === 0 || isSaving}
+                          onClick={async () => {
+                            kravy.click();
+                            try {
+                              // Save & Hold without KOT
+                              const bill = await saveBill(true);
+                              if (!bill) return;
+                              kravy.success();
+                              toast.success("Order Saved & Held! ⏸️");
+                              closeMobileCart();
+                              const returnTo = searchParams.get("returnTo");
+                              if (returnTo) {
+                                const tableId = searchParams.get("tableId");
+                                const orderId = searchParams.get("orderId") || syncedOrderId || bill.id;
+                                const query = new URLSearchParams();
+                                if (tableId) query.set("tableId", tableId);
+                                if (orderId) query.set("orderId", orderId);
+                                router.replace(`${returnTo.split('?')[0]}?${query.toString()}`);
+                                return;
+                              }
+                              resetForm();
+                              if (resumeBillId) router.replace("/dashboard/billing/checkout");
+                            } catch (e: any) {
+                              toast.error(e?.message || "Save & Hold failed");
+                            }
+                          }}
+                          className="w-full py-3 px-3 rounded-xl border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-900 dark:text-white font-black text-xs sm:text-sm tracking-wide shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        >
+                          {isSaving ? <RefreshCw size={15} className="animate-spin" /> : <span>Save & Hold</span>}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={items.length === 0 || isSaving}
+                          onClick={async () => {
+                            kravy.click();
+                            try {
+                              // Directly open mobile cart to review and finalize Bluetooth Bill print, or direct BT print if ready
+                              openMobileCart();
+                            } catch (e: any) {
+                              toast.error(e?.message || "Save & Bill failed");
+                            }
+                          }}
+                          className="w-full py-3 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs sm:text-sm tracking-wide shadow-md shadow-blue-500/25 active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        >
+                          {isSaving ? <RefreshCw size={15} className="animate-spin" /> : <span>Save & Bill</span>}
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -4156,8 +5092,15 @@ export default function CheckoutClient() {
         ══════════════════════════════ */}
             <div
               ref={checkoutSidebarRef}
-              className={`flex-col border-l border-[var(--kravy-border)] min-h-0
-          ${isMobileCartOpen ? "fixed inset-0 z-[100] flex bg-white dark:bg-slate-950 overflow-y-auto" : "hidden lg:flex lg:static bg-[var(--kravy-surface)] overflow-hidden"}
+              className={`flex-col border-l border-[var(--kravy-border)]
+          ${isMobileCartOpen
+            ? checkoutLayout === 'sticky'
+              ? "fixed inset-0 z-[10001] flex flex-col h-full overflow-hidden bg-white dark:bg-slate-950"
+              : "fixed inset-0 z-[10001] flex bg-white dark:bg-slate-950 overflow-y-auto"
+            : checkoutLayout === 'sticky'
+              ? "hidden lg:flex lg:static bg-[var(--kravy-surface)] lg:overflow-hidden lg:h-full lg:min-h-0"
+              : "hidden lg:flex lg:static bg-[var(--kravy-surface)] lg:overflow-y-auto lg:h-full"
+          }
           transition-transform duration-300`}
             >
 
@@ -4166,9 +5109,10 @@ export default function CheckoutClient() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => closeMobileCart()}
-                    className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm"
+                    className="w-8 h-8 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center shadow-sm active:scale-95 transition-all text-indigo-600 dark:text-indigo-400"
+                    title="Close Cart"
                   >
-                    <ArrowLeft size={16} className="text-indigo-600" />
+                    <ArrowLeft size={16} />
                   </button>
                   <div>
                     <p className="text-sm font-black text-[var(--kravy-text-primary)]">Billing Invoice</p>
@@ -4177,6 +5121,16 @@ export default function CheckoutClient() {
                     </p>
                   </div>
                 </div>
+
+                {/* Close Cart Button */}
+                <button
+                  onClick={() => closeMobileCart()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-900/60 shadow-sm text-indigo-700 dark:text-indigo-300 active:scale-95 transition-all"
+                  title="Close Cart"
+                >
+                  <span className="text-xs font-black uppercase tracking-wider">Close</span>
+                  <ChevronDown size={15} strokeWidth={2.5} />
+                </button>
               </div>
 
               {/* Cart Header */}
@@ -4225,7 +5179,7 @@ export default function CheckoutClient() {
                       title="View Held Bills"
                     >
                       <Clock size={16} />
-                      <span className="text-xs font-black hidden sm:block">Held</span>
+                      <span className="text-xs font-black hidden sm:block">On Hold</span>
                       {heldBills.length > 0 && (
                         <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-white text-[9px] font-black
                       w-4 h-4 flex items-center justify-center rounded-full border-2 border-[var(--kravy-surface)] shadow">
@@ -4240,11 +5194,7 @@ export default function CheckoutClient() {
               {/* Order Type Selection - COMPACT */}
               <div className="px-4 md:px-5 py-2 border-b border-[var(--kravy-border)] bg-[var(--kravy-bg)]/20">
                 <div className="flex items-center gap-1 p-0.5 bg-[var(--kravy-bg)] rounded-xl border border-[var(--kravy-border)] shadow-inner">
-                  {[
-                    { id: 'DINING', label: 'Dining', icon: <Utensils size={13} />, activeClass: 'bg-indigo-600 shadow-indigo-500/20' },
-                    { id: 'TAKEAWAY', label: 'Takeaway', icon: <ShoppingBag size={13} />, activeClass: 'bg-amber-600 shadow-amber-500/20' },
-                    { id: 'DELIVERY', label: 'Delivery', icon: <Truck size={13} />, activeClass: 'bg-rose-600 shadow-rose-500/20' }
-                  ].map((type) => (
+                  {availableOrderTypes.map((type) => (
                     <button
                       key={type.id}
                       onClick={async () => {
@@ -4289,14 +5239,17 @@ export default function CheckoutClient() {
                 )}
               </div>
 
-              {/* Scrollable Middle Content (Customer + Items) */}
-              <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col">
-                {/* Customer Section Toggle */}
-                <button
-                  onClick={async () => { kravy.click(); setShowCustomer(!showCustomer); }}
-                  className="px-4 md:px-5 py-3 text-left border-b border-[var(--kravy-border)]
-                flex items-center justify-between hover:bg-[var(--kravy-bg)] transition-colors flex-shrink-0"
-                >
+              {/* Middle Content (Customer + Items) */}
+              <div className={`w-full flex flex-col ${
+                checkoutLayout === 'sticky' ? "flex-1 min-h-0 overflow-y-auto no-scrollbar" : ""
+              }`}>
+                {/* Customer Details — Normal in-flow on mobile */}
+                <div className="w-full bg-[var(--kravy-surface)] border-b border-[var(--kravy-border)]">
+                  <button
+                    onClick={async () => { kravy.click(); setShowCustomer(!showCustomer); }}
+                    className="w-full px-4 md:px-5 py-3 text-left
+                  flex items-center justify-between hover:bg-[var(--kravy-bg)] transition-colors flex-shrink-0"
+                  >
                   <div className="flex items-center gap-2">
                     <User size={13} className="text-[var(--kravy-text-muted)]" />
                     <span className="text-[14px] md:text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)]">
@@ -4341,8 +5294,12 @@ export default function CheckoutClient() {
                       />
                     </div>
                     <div className="space-y-1 relative">
-                      <label className="text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider ml-0.5">Phone</label>
+                      <div className="flex items-center justify-between ml-0.5">
+                        <label className="text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">Phone</label>
+                        <span className="hidden sm:inline text-[9px] font-mono text-[var(--kravy-brand)] font-bold">[F3]</span>
+                      </div>
                       <input
+                        ref={phoneInputRef}
                         placeholder="Phone number"
                         value={customerPhone}
                         autoComplete="off"
@@ -4471,6 +5428,7 @@ export default function CheckoutClient() {
                     )}
                   </div>
                 )}
+                </div>
 
 
                 {/* Cart Items List */}
@@ -4490,176 +5448,249 @@ export default function CheckoutClient() {
                       {items.map((i, idx) => (
                         <div
                           key={`${i.id || i.itemId || 'item'}-${idx}`}
-                          className="flex items-center gap-1.5 sm:gap-2.5 py-1.5 px-2 sm:px-2.5 rounded-xl
-                        bg-[var(--kravy-bg)] border border-[var(--kravy-border)]
-                        hover:border-[var(--kravy-brand)]/30 transition-all group shrink-0 shadow-sm"
+                          className="p-2 lg:p-1.5 rounded-lg bg-[var(--kravy-surface)] border border-[var(--kravy-border)] hover:border-[var(--kravy-brand)]/40 transition-all shadow-xs flex flex-col justify-between gap-0.5 font-sans"
                         >
-                          <div className="flex-1 min-w-0 pr-1">
-                            <p className="font-bold text-[var(--kravy-text-primary)] text-xs sm:text-sm line-clamp-2 leading-tight">{i.name}</p>
-                            <InlineRateEdit item={i} updateRate={updateRate} taxActive={taxActive} perProductEnabled={perProductEnabled} globalRate={globalRate} sym={sym} />
+                          {/* Row 1: Item Name (14-15px font-semibold on laptop, 16px on mobile - Max 2 lines clamp) */}
+                          <div className="w-full">
+                            <p className="font-semibold text-[var(--kravy-text-primary)] text-[15px] sm:text-[16px] lg:text-[14.5px] leading-snug line-clamp-2 break-words tracking-tight">
+                              {i.name}
+                            </p>
                           </div>
 
-                          {/* Qty Controls */}
-                          <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
-                            <button
-                              onClick={async () => dec(i.id)}
-                              className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg border border-[var(--kravy-border)] bg-[var(--kravy-surface)]
-                            text-[var(--kravy-text-secondary)] font-black text-sm sm:text-base flex items-center justify-center
-                            hover:bg-rose-50 hover:border-rose-200 hover:text-rose-500 transition-all"
-                            >
-                              −
-                            </button>
-                            <div className="flex flex-col items-center">
-                              <input
-                                type="number"
-                                step="any"
-                                value={Number.isInteger(Number(i.qty)) ? i.qty : Number(i.qty).toFixed(2)}
-                                onChange={(e) => updateQty(i.id, e.target.value)}
-                                onBlur={(e) => {
-                                  let val = parseFloat(e.target.value);
-                                  if (isNaN(val) || val <= 0) {
-                                    if (userRole === "STAFF" && !userPermissions.includes("pos-delete-item")) {
-                                      toast.error("Permission Denied: Cannot delete item from cart.");
-                                      updateQty(i.id, 1);
-                                    } else {
-                                      remove(i.id);
-                                    }
-                                  } else {
-                                    updateQty(i.id, val);
-                                  }
-                                }}
-                                className="w-8 sm:w-10 text-center font-black text-xs sm:text-sm text-[var(--kravy-text-primary)] bg-transparent outline-none border-b border-transparent focus:border-[var(--kravy-brand)] transition-colors"
+                          {/* Row 2: CSS Grid / Flex with fixed slots for rock-solid vertical alignment */}
+                          <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                            {/* Slot 1: Unit Price (14px on laptop) & GST Badge (10-11px) */}
+                            <div className="flex-1 min-w-0 pr-1">
+                              <InlineRateEdit
+                                item={i}
+                                updateRate={updateRate}
+                                taxActive={taxActive}
+                                perProductEnabled={perProductEnabled}
+                                globalRate={globalRate}
+                                sym={sym}
                               />
                             </div>
-                            <button
-                              onClick={async () => inc(i.id)}
-                              className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg border border-[var(--kravy-border)] bg-[var(--kravy-surface)]
-                            text-[var(--kravy-text-secondary)] font-black text-sm sm:text-base flex items-center justify-center
-                            hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-500 transition-all"
-                            >
-                              +
-                            </button>
+
+                            {/* Slot 2: Strictly Aligned Controls Cluster (Compact Qty + Price + Remove) */}
+                            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                              {/* Quantity Controls - Compact fixed width across all cards */}
+                              <div className="flex items-center bg-[var(--kravy-bg)] p-0.5 rounded-md border border-[var(--kravy-border)] shadow-2xs w-[76px] lg:w-[74px] justify-between">
+                                <button
+                                  type="button"
+                                  onClick={async () => dec(i.id)}
+                                  className="w-5 h-5 lg:w-5 lg:h-5 rounded bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] font-bold text-[15px] lg:text-[14px] flex items-center justify-center hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 active:scale-95 transition-all shrink-0 leading-none select-none"
+                                >
+                                  −
+                                </button>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={Number.isInteger(Number(i.qty)) ? i.qty : Number(i.qty).toFixed(2)}
+                                  onChange={(e) => updateQty(i.id, e.target.value)}
+                                  onBlur={(e) => {
+                                    let val = parseFloat(e.target.value);
+                                    if (isNaN(val) || val <= 0) {
+                                      if (userRole === "STAFF" && !userPermissions.includes("pos-delete-item")) {
+                                        toast.error("Permission Denied: Cannot delete item from cart.");
+                                        updateQty(i.id, 1);
+                                      } else {
+                                        remove(i.id);
+                                      }
+                                    } else {
+                                      updateQty(i.id, val);
+                                    }
+                                  }}
+                                  className="w-6 text-center font-bold text-[14px] sm:text-[15px] lg:text-[14px] text-[var(--kravy-text-primary)] bg-transparent outline-none focus:border-b focus:border-[var(--kravy-brand)] transition-colors leading-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={async () => inc(i.id)}
+                                  className="w-5 h-5 lg:w-5 lg:h-5 rounded bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] font-bold text-[15px] lg:text-[14px] flex items-center justify-center hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600 active:scale-95 transition-all shrink-0 leading-none select-none"
+                                >
+                                  +
+                                </button>
+                              </div>
+
+                              {/* Total Amount - Fixed min-width for uniform column alignment without overlap */}
+                              <div className="text-right min-w-[65px] lg:min-w-[68px] shrink-0 font-bold">
+                                <InlineAmountEdit item={i} updateAmount={updateAmount} sym={sym} />
+                              </div>
+
+                              {/* Remove Icon - Fixed subtle appearance */}
+                              <button
+                                type="button"
+                                onClick={async () => remove(i.id)}
+                                className="w-5 h-5 lg:w-5 lg:h-5 rounded flex items-center justify-center text-[var(--kravy-text-muted)] hover:bg-rose-50 hover:text-rose-600 active:scale-95 transition-all border border-transparent hover:border-rose-200 shrink-0"
+                                title="Remove Item"
+                              >
+                                <X size={14} strokeWidth={2.4} />
+                              </button>
+                            </div>
                           </div>
-
-                          <InlineAmountEdit item={i} updateAmount={updateAmount} sym={sym} />
-
-                          <button
-                            onClick={async () => remove(i.id)}
-                            className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center
-                          text-[var(--kravy-text-muted)] hover:bg-rose-50 hover:text-rose-500 transition-all flex-shrink-0"
-                          >
-                            <X size={12} />
-                          </button>
                         </div>
                       ))}
 
                       {/* Subtle Density Filler at bottom of list */}
-                      <div className="pt-4 pb-2 text-center">
+                      <div className="pt-2 pb-1 text-center">
                         <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-50 dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800">
                           <Zap size={10} className="text-amber-500" />
                           <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Kravy Smart Terminal Active</span>
                         </div>
+                      </div>
+
+                      {/* 🧾 Totals & Bill Summary (Moved into Scrollable Section directly below items) */}
+                      <div className="bg-slate-50/80 dark:bg-slate-900/40 p-2.5 rounded-xl border border-[var(--kravy-border)] space-y-1 font-sans mt-1">
+                        <div className="flex justify-between items-center text-[14px] lg:text-[13.5px] font-bold text-[var(--kravy-text-muted)]">
+                          <span>Subtotal</span>
+                          <span className="text-[var(--kravy-text-primary)] font-bold text-[14px] lg:text-[13.5px]">{formatCurrency(subtotal, sym)}</span>
+                        </div>
+                        {(discountAmt > 0) && (
+                          <div className="flex justify-between items-center text-[12.5px] lg:text-[12px] font-semibold text-rose-600">
+                            <span>Discount</span>
+                            <span>- {formatCurrency(discountAmt, sym)}</span>
+                          </div>
+                        )}
+                        {(totalExclusiveGst > 0) && (
+                          (() => {
+                            const isInterState = placeOfSupply && business?.state &&
+                              placeOfSupply.trim().toLowerCase() !== business.state.trim().toLowerCase();
+                            if (isInterState) {
+                              return (
+                                <div className="flex justify-between items-center text-[12.5px] lg:text-[12px] font-bold text-emerald-600">
+                                  <span>IGST (Extra)</span>
+                                  <span className="text-[12px] lg:text-[11.5px] font-semibold">+ {formatCurrency(totalExclusiveGst, sym)}</span>
+                                </div>
+                              );
+                            }
+                            return (
+                              <>
+                                <div className="flex justify-between items-center text-[12.5px] lg:text-[12px] font-bold text-emerald-600">
+                                  <span>GST (Extra)</span>
+                                  <span className="text-[12.5px] lg:text-[12px] font-bold">+ {formatCurrency(totalExclusiveGst, sym)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-[11.5px] lg:text-[11px] font-semibold text-emerald-600 pl-2">
+                                  <span>↳ CGST{taxBreakup.length === 1 ? ` (${(taxBreakup[0] as any).rate / 2}%)` : ''}</span>
+                                  <span>+ {formatCurrency(Math.round(totalExclusiveGst * 50) / 100, sym)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-[11.5px] lg:text-[11px] font-semibold text-emerald-600 pl-2">
+                                  <span>↳ SGST{taxBreakup.length === 1 ? ` (${(taxBreakup[0] as any).rate / 2}%)` : ''}</span>
+                                  <span>+ {formatCurrency(totalExclusiveGst - (Math.round(totalExclusiveGst * 50) / 100), sym)}</span>
+                                </div>
+                              </>
+                            );
+                          })()
+                        )}
+                        {(totalInclusiveGst > 0) && (() => {
+                          const displayIncCGST = Math.round(totalInclusiveGst * 50) / 100;
+                          const displayIncSGST = totalInclusiveGst - displayIncCGST;
+                          return (
+                            <div className="flex flex-col gap-0.5">
+                              <div className="flex justify-between items-center text-[12.5px] lg:text-[12px] font-bold text-indigo-600 dark:text-indigo-400">
+                                <span>GST (Included in Subtotal)</span>
+                                <span className="text-[11.5px] lg:text-[11.5px] font-semibold">({formatCurrency(totalInclusiveGst, sym)})</span>
+                              </div>
+                              <div className="flex justify-between items-center text-[11.5px] lg:text-[11px] font-semibold text-indigo-600/80 dark:text-indigo-400/80 pl-2 border-l-2 border-indigo-200 dark:border-indigo-800 ml-1">
+                                <span>↳ CGST (Included){taxBreakup.length === 1 ? ` (${(taxBreakup[0] as any).rate / 2}%)` : ''}</span>
+                                <span>({formatCurrency(displayIncCGST, sym)})</span>
+                              </div>
+                              <div className="flex justify-between items-center text-[11.5px] lg:text-[11px] font-semibold text-indigo-600/80 dark:text-indigo-400/80 pl-2 border-l-2 border-indigo-200 dark:border-indigo-800 ml-1">
+                                <span>↳ SGST (Included){taxBreakup.length === 1 ? ` (${(taxBreakup[0] as any).rate / 2}%)` : ''}</span>
+                                <span>({formatCurrency(displayIncSGST, sym)})</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        {(deliveryCharge > 0 || packagingCharge > 0 || serviceCharge > 0) && (
+                          <div className="flex justify-between items-center text-[12.5px] lg:text-[12px] font-semibold text-blue-600">
+                            <span>Other Charges</span>
+                            <span>+ {formatCurrency((totalCharges + totalChargesGst), sym)}</span>
+                          </div>
+                        )}
+                        {Math.abs(roundOff) > 0.01 && (
+                          <div className="flex justify-between items-center text-[11.5px] lg:text-[11px] font-semibold text-[var(--kravy-text-muted)]">
+                            <span>Round Off</span>
+                            <span>{roundOff > 0 ? "+" : "-"}{sym}{Math.abs(roundOff).toFixed(2)}</span>
+                          </div>
+                        )}
                       </div>
                     </>
                   )}
                 </div>
               </div>
 
-              {/* Checkout Footer (Pinned at Bottom) */}
-              <div className="border-t border-[var(--kravy-border)] px-4 md:px-5 pt-2 pb-3 sm:pb-3 pb-safe bg-[var(--kravy-surface)] space-y-1.5 shrink-0 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.05)]">
+              {/* Checkout Footer (Pinned at Bottom in Sticky Mode, Normal flow in Scroll Mode) */}
+              <div
+                onTouchStart={(e) => {
+                  footerTouchStartY.current = e.touches[0].clientY;
+                }}
+                onTouchEnd={(e) => {
+                  if (footerTouchStartY.current !== null) {
+                    const deltaY = e.changedTouches[0].clientY - footerTouchStartY.current;
+                    // Swipe Down (deltaY > 35) -> Collapse / Minimize
+                    if (deltaY > 35 && !isCheckoutFooterCollapsed) {
+                      kravy.click();
+                      setIsCheckoutFooterCollapsed(true);
+                    }
+                    // Swipe Up (deltaY < -35) -> Expand / Unhide
+                    else if (deltaY < -35 && isCheckoutFooterCollapsed) {
+                      kravy.click();
+                      setIsCheckoutFooterCollapsed(false);
+                    }
+                    footerTouchStartY.current = null;
+                  }
+                }}
+                className={`border-t border-[var(--kravy-border)] bg-[var(--kravy-surface)] w-full transition-all duration-300 ${
+                  checkoutLayout === 'sticky'
+                    ? "px-3 md:px-4 pt-1.5 pb-2 sm:pb-2 pb-safe space-y-1.5 shrink-0 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] z-10 max-h-[55vh] overflow-y-auto no-scrollbar"
+                    : "px-4 md:px-6 pt-3 pb-36 lg:pb-10 pb-safe space-y-2.5 lg:space-y-2"
+                }`}
+              >
 
-                {/* Totals - Dynamic Height */}
-                <div className="space-y-0">
-                  <div className="flex justify-between items-center text-xs md:text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)]">
-                    <span>Subtotal (Menu Prices)</span>
-                    <span>{formatCurrency(subtotal, sym)}</span>
+                {/* 🌟 Payable Total Header Card with Expand/Compress Toggle Button */}
+                <div
+                  onClick={() => {
+                    if (checkoutLayout === 'sticky') {
+                      kravy.click();
+                      setIsCheckoutFooterCollapsed(prev => !prev);
+                    }
+                  }}
+                  className={`flex items-center justify-between px-3 py-1.5 lg:py-2 rounded-xl bg-gradient-to-r from-[var(--kravy-brand)]/10 via-indigo-500/10 to-[var(--kravy-brand)]/5 border border-[var(--kravy-brand)]/20 shadow-xs font-sans ${
+                    checkoutLayout === 'sticky' ? "cursor-pointer select-none group" : ""
+                  }`}
+                  title={checkoutLayout === 'sticky' ? (isCheckoutFooterCollapsed ? "Tap to open payment options" : "Tap to compress payment options") : undefined}
+                >
+                  <div>
+                    <span className="text-[12.5px] lg:text-[13px] font-extrabold uppercase tracking-wider text-[var(--kravy-brand)] block leading-snug">TOTAL AMOUNT</span>
+                    <span className="text-[12px] lg:text-[12.5px] font-semibold text-[var(--kravy-text-muted)] mt-0.5 block">{totalItems} item{totalItems === 1 ? '' : 's'}</span>
                   </div>
-                  {(discountAmt > 0) && (
-                    <div className="flex justify-between items-center text-xs md:text-[10px] font-black uppercase tracking-widest text-rose-600">
-                      <span>Discount</span>
-                      <span>- {formatCurrency(discountAmt, sym)}</span>
+                  <div className="flex items-center gap-2">
+                    <div className="text-right">
+                      <span className="text-[10px] font-bold text-[var(--kravy-text-muted)] uppercase tracking-wider block leading-none">PAYABLE</span>
+                      <span className="text-[24px] sm:text-[26px] lg:text-[26px] font-extrabold text-[var(--kravy-brand)] leading-tight block tracking-tight">{formatCurrency(finalTotal, sym)}</span>
                     </div>
-                  )}
-                  {(totalExclusiveGst > 0) && (
-                    (() => {
-                      const isInterState = placeOfSupply && business?.state &&
-                        placeOfSupply.trim().toLowerCase() !== business.state.trim().toLowerCase();
-                      if (isInterState) {
-                        return (
-                          <div className="flex justify-between items-center text-xs md:text-[10px] font-black uppercase tracking-widest text-emerald-600">
-                            <span>IGST (Extra)</span>
-                            <span>+ {formatCurrency(totalExclusiveGst, sym)}</span>
-                          </div>
-                        );
-                      }
-                      return (
-                        <>
-                          <div className="flex justify-between items-center text-xs md:text-[10px] font-black uppercase tracking-widest text-emerald-600">
-                            <span>CGST (Extra){taxBreakup.length === 1 ? ` (${(taxBreakup[0] as any).rate / 2}%)` : ''}</span>
-                            <span>+ {formatCurrency(Math.round(totalExclusiveGst * 50) / 100, sym)}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs md:text-[10px] font-black uppercase tracking-widest text-emerald-600">
-                            <span>SGST (Extra){taxBreakup.length === 1 ? ` (${(taxBreakup[0] as any).rate / 2}%)` : ''}</span>
-                            <span>+ {formatCurrency(totalExclusiveGst - (Math.round(totalExclusiveGst * 50) / 100), sym)}</span>
-                          </div>
-                        </>
-                      );
-                    })()
-                  )}
-                  {(totalInclusiveGst > 0) && (() => {
-                    const displayIncCGST = Math.round(totalInclusiveGst * 50) / 100;
-                    const displayIncSGST = totalInclusiveGst - displayIncCGST;
-                    return (
-                      <div className="flex flex-col gap-1">
-                        <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-indigo-500 opacity-80">
-                          <span>GST (Included in Subtotal)</span>
-                          <span>({formatCurrency(totalInclusiveGst, sym)})</span>
-                        </div>
-                        <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-widest text-indigo-500 opacity-70 pl-2 border-l-2 border-indigo-200 ml-1">
-                          <span>↳ CGST (Included){taxBreakup.length === 1 ? ` (${(taxBreakup[0] as any).rate / 2}%)` : ''}</span>
-                          <span>({formatCurrency(displayIncCGST, sym)})</span>
-                        </div>
-                        <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-widest text-indigo-500 opacity-70 pl-2 border-l-2 border-indigo-200 ml-1">
-                          <span>↳ SGST (Included){taxBreakup.length === 1 ? ` (${(taxBreakup[0] as any).rate / 2}%)` : ''}</span>
-                          <span>({formatCurrency(displayIncSGST, sym)})</span>
-                        </div>
+                    {/* ↕️ Compress / Collapse / Expand Toggle Button in Sticky mode */}
+                    {checkoutLayout === 'sticky' && (
+                      <div
+                        className="flex items-center justify-center w-7 h-7 rounded-lg bg-white dark:bg-slate-800 text-[var(--kravy-brand)] border border-[var(--kravy-brand)]/30 shadow-xs transition-all active:scale-95 ml-0.5"
+                      >
+                        <ChevronDown
+                          size={16}
+                          strokeWidth={2.5}
+                          className={`transition-transform duration-200 ${isCheckoutFooterCollapsed ? "rotate-180" : ""}`}
+                        />
                       </div>
-                    );
-                  })()}
-                  {(deliveryCharge > 0 || packagingCharge > 0 || serviceCharge > 0) && (
-                    <div className="flex justify-between items-center text-xs md:text-[10px] font-black uppercase tracking-widest text-blue-600">
-                      <span>Other Charges</span>
-                      <span>+ {formatCurrency((totalCharges + totalChargesGst), sym)}</span>
-                    </div>
-                  )}
-                  {Math.abs(roundOff) > 0.01 && (
-                    <div className="flex justify-between items-center text-xs md:text-[10px] font-black uppercase tracking-widest text-[var(--kravy-text-muted)]">
-                      <span>Round Off</span>
-                      <span>{roundOff > 0 ? "+" : "-"}{sym}{Math.abs(roundOff).toFixed(2)}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex justify-between items-center border-b border-dashed border-[var(--kravy-border)] pb-1 gap-2">
-                  <div className="flex flex-wrap gap-x-2 gap-y-0 flex-1">
-                    <p className="text-[11px] md:text-[9px] font-bold text-[var(--kravy-text-muted)] uppercase tracking-tighter leading-none">Sub: {formatCurrency(subtotal, sym)}</p>
-                    {((totalExclusiveGst > 0 || totalInclusiveGst > 0) && totalTaxable > 0) && <p className="text-[11px] md:text-[9px] font-bold text-[var(--kravy-text-muted)] uppercase tracking-tighter leading-none">Taxable: {formatCurrency(totalTaxable, sym)}</p>}
-                    {discountAmt > 0 && <p className="text-[11px] md:text-[9px] font-bold text-rose-500 uppercase tracking-tighter leading-none">Disc: -{formatCurrency(discountAmt, sym)}</p>}
-                    {(totalExclusiveGst > 0) && <p className="text-[11px] md:text-[9px] font-bold text-[var(--kravy-text-muted)] uppercase tracking-tighter leading-none">Tax(Extra): {formatCurrency(totalExclusiveGst, sym)}</p>}
-                    {(totalInclusiveGst > 0) && <p className="text-[11px] md:text-[9px] font-bold text-[var(--kravy-text-muted)] uppercase tracking-tighter leading-none">Tax(Incl): {formatCurrency(totalInclusiveGst, sym)}</p>}
-                    {deliveryCharge > 0 && <p className="text-[11px] md:text-[9px] font-bold text-blue-500 uppercase tracking-tighter leading-none">Del: {formatCurrency(deliveryCharge, sym)}</p>}
-                    {packagingCharge > 0 && <p className="text-[11px] md:text-[9px] font-bold text-rose-500 uppercase tracking-tighter leading-none">Pkg: {formatCurrency(packagingCharge, sym)}</p>}
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-[11px] md:text-[9px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest leading-none mb-1 md:mb-0">PAYABLE</p>
-                    <p className="text-[20px] font-black text-[var(--kravy-brand)] leading-none">{formatCurrency(finalTotal, sym)}</p>
+                    )}
                   </div>
                 </div>
 
+                {(!isCheckoutFooterCollapsed || checkoutLayout !== 'sticky') && (
+                  <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200 font-sans">
                 {/* 🎟️ ADJUSTMENTS SECTION (Discount / Charges) */}
                 {!(selectedTable !== "POS" && selectedTable !== "TAKEAWAY" && selectedTable !== "DELIVERY" && searchParams.get("returnTo")) && (
                   <div className="space-y-1">
-                    <div className="flex border border-[var(--kravy-border)] rounded-lg overflow-hidden p-0.5 bg-[var(--kravy-bg-2)]">
+                    <div className="flex border border-[var(--kravy-border)] rounded-lg overflow-hidden p-0.5 bg-[var(--kravy-bg-2)] gap-1">
                       <button
+                        type="button"
                         onClick={async () => {
                           if (userRole === "STAFF" && !userPermissions.includes("pos-discount")) {
                             toast.error("Permission Denied: Cannot apply discounts.");
@@ -4668,11 +5699,12 @@ export default function CheckoutClient() {
                           kravy.click();
                           setDiscountMode(prev => prev === 'PROMO' ? null : 'PROMO');
                         }}
-                        className={`flex-1 py-0.5 rounded text-[11px] md:text-[9px] font-black uppercase transition-all ${discountMode === 'PROMO' ? 'bg-[var(--kravy-brand)] text-white' : 'text-[var(--kravy-text-muted)] hover:text-[var(--kravy-text-primary)]'}`}
+                        className={`flex-1 py-1.5 rounded-md text-[13px] font-bold uppercase transition-all ${discountMode === 'PROMO' ? 'bg-[var(--kravy-brand)] text-white shadow-xs' : 'text-[var(--kravy-text-muted)] hover:text-[var(--kravy-text-primary)]'}`}
                       >
-                        Promo
+                        🎟️ Promo
                       </button>
                       <button
+                        type="button"
                         onClick={async () => {
                           if (userRole === "STAFF" && !userPermissions.includes("pos-discount")) {
                             toast.error("Permission Denied: Cannot apply discounts.");
@@ -4681,18 +5713,19 @@ export default function CheckoutClient() {
                           kravy.click();
                           setDiscountMode(prev => prev === 'INSTANT' ? null : 'INSTANT');
                         }}
-                        className={`flex-1 py-0.5 rounded text-[11px] md:text-[9px] font-black uppercase transition-all ${discountMode === 'INSTANT' ? 'bg-[var(--kravy-brand)] text-white' : 'text-[var(--kravy-text-muted)] hover:text-[var(--kravy-text-primary)]'}`}
+                        className={`flex-1 py-1.5 rounded-md text-[13px] font-bold uppercase transition-all ${discountMode === 'INSTANT' ? 'bg-[var(--kravy-brand)] text-white shadow-xs' : 'text-[var(--kravy-text-muted)] hover:text-[var(--kravy-text-primary)]'}`}
                       >
-                        Discount
+                        🏷️ Discount
                       </button>
                       <button
+                        type="button"
                         onClick={async () => {
                           kravy.click();
                           setDiscountMode(prev => prev === 'CHARGES' ? null : 'CHARGES');
                         }}
-                        className={`flex-1 py-0.5 rounded text-[11px] md:text-[9px] font-black uppercase transition-all ${discountMode === 'CHARGES' ? 'bg-indigo-600 text-white' : 'text-[var(--kravy-text-muted)] hover:text-[var(--kravy-text-primary)]'}`}
+                        className={`flex-1 py-1.5 rounded-md text-[13px] font-bold uppercase transition-all ${discountMode === 'CHARGES' ? 'bg-indigo-600 text-white shadow-xs' : 'text-[var(--kravy-text-muted)] hover:text-[var(--kravy-text-primary)]'}`}
                       >
-                        Charges
+                        ⚡ Charges
                       </button>
                     </div>
 
@@ -4811,70 +5844,73 @@ export default function CheckoutClient() {
                 {/* 💳 PAYMENT METHODS AND ACTIONS */}
                 {!(selectedTable !== "POS" && selectedTable !== "TAKEAWAY" && selectedTable !== "DELIVERY" && searchParams.get("returnTo") && !resumeBillId) ? (
                   <>
-                    <div
-                      className="grid gap-[4px] mb-[6px] w-full"
-                      style={{ gridTemplateColumns: "repeat(auto-fit, minmax(56px, 1fr))" }}
-                    >
-                      {(!showMorePayments ? ["Cash"] : ["Cash", "UPI", "Card", "Pay on Counter", "Wallet", "Split"])
-                        .filter((mode: any) => {
-                          if (mode === "Cash") return business?.posCashEnabled !== false;
-                          if (mode === "UPI") return business?.posUpiEnabled !== false;
-                          if (mode === "Card") return business?.posCardEnabled !== false;
-                          if (mode === "Pay on Counter") return business?.posCounterEnabled !== false;
-                          if (mode === "Wallet") return business?.posWalletEnabled !== false;
-                          return true;
-                        })
-                        .map((mode: any) => (
-                          <button
-                            key={mode}
-                            onClick={async () => { kravy.toggle(); setPaymentMode(mode); }}
-                            className={`h-[38px] min-w-0 flex flex-col items-center justify-center p-1 rounded-xl border transition-all ${paymentMode === mode
-                              ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-600/20"
-                              : "bg-white border-[#e1e5ef] text-slate-900 hover:border-indigo-400 hover:bg-indigo-50/30"
-                              }`}
-                          >
-                            <span className="text-[14px] leading-[14px]">{mode === "Cash" ? "💵" : mode === "UPI" ? "📱" : mode === "Card" ? "💳" : mode === "Wallet" ? "👛" : mode === "Split" ? "🔀" : "🏪"}</span>
-                            <span className="text-[8px] md:text-[7.5px] font-[900] leading-[9px] whitespace-nowrap truncate w-full text-center uppercase tracking-tighter">{mode === "Pay on Counter" ? "Counter" : mode}</span>
-                          </button>
-                        ))}
-
-                      {!showMorePayments && (
-                        <button
-                          onClick={() => setShowMorePayments(true)}
-                          className="h-[38px] min-w-0 flex flex-col items-center justify-center p-1 rounded-xl border transition-all bg-slate-50 border-slate-200 text-slate-500 hover:border-indigo-400 hover:bg-indigo-50/30"
-                        >
-                          <span className="text-[14px] leading-[14px]">➡️</span>
-                          <span className="text-[8px] md:text-[7.5px] font-[900] leading-[9px] whitespace-nowrap truncate w-full text-center uppercase tracking-tighter">More</span>
-                        </button>
-                      )}
+                    <div className="space-y-1 font-sans">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[13px] font-bold text-[var(--kravy-text-muted)] ml-0.5">
+                          Select Payment Method
+                        </span>
+                        <span className="text-[10px] font-semibold text-[var(--kravy-text-muted)] opacity-60">
+                          ‹ scroll ›
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 w-full overflow-x-auto pb-1 pt-0.5 scroll-smooth [scrollbar-width:thin]">
+                        {["Cash", "UPI", "Card", "Pay on Counter", "Wallet", "Split"]
+                          .filter((mode: any) => {
+                            if (mode === "Cash") return business?.posCashEnabled !== false;
+                            if (mode === "UPI") return business?.posUpiEnabled !== false;
+                            if (mode === "Card") return business?.posCardEnabled !== false;
+                            if (mode === "Pay on Counter") return business?.posCounterEnabled !== false;
+                            if (mode === "Wallet") return business?.posWalletEnabled !== false;
+                            return true;
+                          })
+                          .map((mode: any) => {
+                            const displayName = mode === "Pay on Counter" ? "Counter" : mode;
+                            const isSelected = paymentMode === mode;
+                            return (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={async () => { kravy.toggle(); setPaymentMode(mode); }}
+                                className={`shrink-0 h-7.5 lg:h-7.5 px-2.5 rounded-lg border transition-all flex items-center justify-center active:scale-95 ${isSelected
+                                  ? "bg-blue-500/10 border-blue-600 text-blue-600 dark:bg-blue-500/20 dark:border-blue-400 dark:text-blue-400 font-semibold shadow-xs"
+                                  : "bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-slate-400 font-semibold"
+                                  }`}
+                              >
+                                <span className="text-[13.5px] lg:text-[13px] font-semibold tracking-normal text-center whitespace-nowrap">
+                                  {displayName}
+                                </span>
+                              </button>
+                            );
+                          })}
+                      </div>
                     </div>
 
-                    {/* ✅ Partial Payment (Khata/Udhaar) */}
-                    <div className="flex gap-2 items-center bg-[var(--kravy-surface)] border border-[var(--kravy-border)] p-1.5 rounded-lg mb-1.5">
+                    {/* ✅ Amount Paid / Partial Payment Card */}
+                    <div className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] p-2 sm:p-2.5 rounded-xl flex flex-col sm:flex-row gap-2 items-stretch sm:items-center justify-between shadow-2xs font-sans">
                       <div className="flex-1">
-                        <p className="text-[11px] md:text-[9px] font-black uppercase text-[var(--kravy-text-muted)] tracking-wider">Amount Paid ({sym})</p>
+                        <span className="text-[12px] lg:text-[12.5px] font-bold text-[var(--kravy-text-muted)] tracking-wide block">Amount Paid ({sym})</span>
                         <div className="flex items-center gap-1 mt-0.5">
                           <input
                             type="number"
                             value={amountPaid}
                             onChange={(e) => setAmountPaid(e.target.value === "" ? "" : Number(e.target.value))}
-                            placeholder={`Full: ${finalTotal.toFixed(2)}`}
-                            className="w-full bg-transparent border-b-2 border-[var(--kravy-border)] outline-none font-black text-sm md:text-xs text-[var(--kravy-text-primary)] focus:border-[var(--kravy-brand)] transition-colors"
+                            placeholder={`Full Amount: ${finalTotal.toFixed(2)}`}
+                            className="w-full bg-transparent border-b-2 border-[var(--kravy-border)] py-0.5 outline-none font-bold text-[18px] lg:text-[18px] text-[var(--kravy-text-primary)] focus:border-indigo-600 transition-colors"
                           />
                         </div>
                       </div>
                       {(amountPaid !== "" && Number(amountPaid) < finalTotal) && (
-                        <div className="flex-1 text-right bg-rose-50 dark:bg-rose-900/20 p-1.5 rounded-md border border-rose-100 dark:border-rose-900/50">
-                          <p className="text-[9px] font-black uppercase text-rose-500 tracking-wider">Unpaid Balance</p>
-                          <p className="text-xs font-black text-rose-600">{formatCurrency((finalTotal - Number(amountPaid)), sym)}</p>
-                          {!selectedParty && <p className="text-[7px] text-rose-500 font-bold mt-0.5 leading-tight">*Select customer required</p>}
+                        <div className="text-right bg-rose-50 dark:bg-rose-900/20 p-2 rounded-lg border border-rose-200 dark:border-rose-900/50 shrink-0 font-sans">
+                          <p className="text-[11px] font-bold uppercase text-rose-500 tracking-wider">Unpaid Balance</p>
+                          <p className="text-[15px] lg:text-[14px] font-bold text-rose-600">{formatCurrency((finalTotal - Number(amountPaid)), sym)}</p>
+                          {!selectedParty && <p className="text-[11px] text-rose-500 font-medium mt-0.5">*Select customer required</p>}
                         </div>
                       )}
                     </div>
 
                     {/* Split Payment Control Box */}
                     {paymentMode === "Split" && (
-                      <div className="space-y-2 p-2 rounded-xl bg-indigo-50/70 border border-indigo-200 dark:bg-white/5 dark:border-white/10 mb-2">
+                      <div className="space-y-1.5 p-2 rounded-xl bg-indigo-50/70 border border-indigo-200 dark:bg-white/5 dark:border-white/10 mb-1">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5 text-[10px] font-black text-indigo-700 dark:text-indigo-400">
                             <Split size={12} /> Split Breakdown
@@ -4884,7 +5920,7 @@ export default function CheckoutClient() {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                        <div className="grid grid-cols-2 gap-1 text-[10px]">
                           {/* Cash */}
                           <div className="bg-white dark:bg-black/20 p-1.5 rounded-lg border border-slate-200 dark:border-white/10">
                             <div className="flex items-center justify-between mb-0.5">
@@ -5010,8 +6046,8 @@ export default function CheckoutClient() {
 
                     {/* UPI Details - Conditional */}
                     {paymentMode === "UPI" && (
-                      <div className="space-y-1.5 p-2 rounded-xl bg-indigo-50 border border-indigo-200 mb-1.5">
-                        <div className="grid grid-cols-2 gap-1.5">
+                      <div className="space-y-1 p-2 rounded-xl bg-indigo-50 border border-indigo-200 mb-1">
+                        <div className="grid grid-cols-2 gap-1">
                           <a href={upiLink} className="text-center text-indigo-700 font-black text-[9px] py-1 border-2 border-dashed border-indigo-300 rounded-lg bg-white flex items-center justify-center gap-1.5">
                             📱 UPI App
                           </a>
@@ -5041,7 +6077,7 @@ export default function CheckoutClient() {
 
                     {/* 💎 SMART DYNAMIC ACTIONS: Prominent if few, Compact if many */}
                     {(() => {
-                      if (!business) return <div className="h-8 animate-pulse bg-slate-50 rounded-lg mb-1.5" />;
+                      if (!business) return <div className="h-7 animate-pulse bg-slate-50 rounded-lg mb-1" />;
 
                       const enabledActions = [
                         { id: 'hold', enabled: business.posHoldEnabled !== false },
@@ -5053,10 +6089,40 @@ export default function CheckoutClient() {
                       const isCompact = enabledActions.length > 2;
 
                       return (
-                        <div
-                          className="grid gap-[4px] mb-[6px] w-full"
-                          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(56px, 1fr))" }}
-                        >
+                        <div className="flex items-center gap-1 w-full pt-0.5 overflow-x-auto pb-1 scroll-smooth [scrollbar-width:thin] font-sans">
+                          {/* 🧾 KOT Buttons - Placed at the very start as requested */}
+                          {(business.posKotEnabled !== false) && (
+                            <>
+                              <button
+                                onClick={() => handlePrintKOT(false, false)}
+                                disabled={items.length === 0 || isSaving}
+                                className="hidden lg:flex shrink-0 h-7.5 lg:h-7.5 px-2 flex-row items-center justify-center gap-1 rounded-lg border border-orange-300 text-orange-800 bg-orange-50 hover:bg-orange-100 transition-all font-bold active:scale-95 whitespace-nowrap"
+                              >
+                                <span className="text-[11.5px] leading-none">🧾</span>
+                                <span className="text-[13px] lg:text-[12.5px] font-bold">USB KOT</span>
+                              </button>
+                              <button
+                                onClick={() => handlePrintKOT(true, false)}
+                                disabled={items.length === 0 || isSaving}
+                                className="flex shrink-0 h-7.5 lg:h-7.5 px-2 flex-row items-center justify-center gap-1 rounded-lg border border-orange-500 text-orange-600 bg-orange-50 hover:bg-orange-100 transition-all font-bold active:scale-95 shadow-2xs whitespace-nowrap"
+                              >
+                                <span className="text-[11.5px] leading-none">🖨️</span>
+                                <span className="text-[13px] lg:text-[12.5px] font-bold">BT KOT</span>
+                              </button>
+                              {searchParams.get("returnTo") && (
+                                <button
+                                  onClick={() => handlePrintKOT(false, true)}
+                                  disabled={items.length === 0 || isSaving}
+                                  className="flex shrink-0 h-7.5 lg:h-7.5 px-2 flex-row items-center justify-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-all font-bold active:scale-95 whitespace-nowrap"
+                                  title="Only Save KOT without printing"
+                                >
+                                  <span className="text-[11.5px] leading-none">💾</span>
+                                  <span className="text-[13px] lg:text-[12.5px] font-bold">Save KOT</span>
+                                </button>
+                              )}
+                            </>
+                          )}
+
                           {(business.posHoldEnabled !== false) && (
                             <button
                               onClick={async () => {
@@ -5064,14 +6130,17 @@ export default function CheckoutClient() {
                                 if (!bill) return;
                                 kravy.ping();
                                 resetForm();
+                                closeMobileCart();
                                 fetchHeldBills();
                                 if (resumeBillId) router.replace("/dashboard/billing/checkout");
                               }}
                               disabled={items.length === 0 || isSaving}
-                              className="flex h-[38px] min-w-0 flex-col items-center justify-center rounded-xl p-1 border border-amber-200 text-amber-800 bg-amber-50 hover:bg-amber-100 transition-all font-black active:scale-95"
+                              className="flex shrink-0 h-7.5 lg:h-7.5 px-2 flex-row items-center justify-center gap-1 rounded-lg border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 transition-all font-bold active:scale-95 shadow-2xs whitespace-nowrap"
                             >
-                              <span className="text-[12px] leading-[12px]">⏸️</span>
-                              <span className="text-[8px] font-[900] leading-[9px] uppercase tracking-wider">Hold</span>
+                              <span className="text-[11.5px] leading-none">⏸️</span>
+                              <span className="text-[13px] lg:text-[12.5px] font-bold">
+                                Hold<span className="hidden sm:inline ml-0.5 font-mono text-[9px] opacity-75">[F7]</span>
+                              </span>
                             </button>
                           )}
 
@@ -5085,6 +6154,7 @@ export default function CheckoutClient() {
                                 kravy.success();
                                 toast.success("Bill Saved Successfully! 💾");
 
+                                closeMobileCart();
                                 const returnTo = searchParams.get("returnTo");
                                 if (returnTo) {
                                   const tableId = searchParams.get("tableId");
@@ -5099,10 +6169,10 @@ export default function CheckoutClient() {
                                 if (resumeBillId) router.replace("/dashboard/billing/checkout");
                               }}
                               disabled={items.length === 0 || isSaving}
-                              className="flex h-[38px] min-w-0 flex-col items-center justify-center rounded-xl p-1 border border-slate-300 text-slate-900 bg-slate-50 hover:bg-slate-200 transition-all font-black active:scale-95"
+                              className="flex shrink-0 h-7.5 lg:h-7.5 px-2 flex-row items-center justify-center gap-1 rounded-lg border border-slate-300 text-slate-900 bg-slate-100 hover:bg-slate-200 transition-all font-bold active:scale-95 shadow-2xs whitespace-nowrap"
                             >
-                              <span className="text-[12px] leading-[12px]">💾</span>
-                              <span className="text-[8px] font-[900] leading-[9px] uppercase tracking-wider">Save</span>
+                              <span className="text-[11.5px] leading-none">💾</span>
+                              <span className="text-[13px] lg:text-[12.5px] font-bold">Save</span>
                             </button>
                           )}
 
@@ -5110,32 +6180,11 @@ export default function CheckoutClient() {
                             <button
                               onClick={async () => { kravy.open(); setPreviewZoom(1); setShowPreview(true); }}
                               disabled={items.length === 0 || isSaving}
-                              className="flex h-[38px] min-w-0 flex-col items-center justify-center rounded-xl p-1 border border-indigo-200 text-indigo-800 bg-indigo-50 hover:bg-indigo-100 transition-all font-black active:scale-95"
+                              className="flex shrink-0 h-7.5 lg:h-7.5 px-2 flex-row items-center justify-center gap-1 rounded-lg border border-indigo-200 text-indigo-800 bg-indigo-50 hover:bg-indigo-100 transition-all font-bold active:scale-95 shadow-2xs whitespace-nowrap"
                             >
-                              <span className="text-[12px] leading-[12px]">👁️</span>
-                              <span className="text-[8px] font-[900] leading-[9px] uppercase tracking-wider">Preview</span>
+                              <span className="text-[11.5px] leading-none">👁️</span>
+                              <span className="text-[13px] lg:text-[12.5px] font-bold">Preview</span>
                             </button>
-                          )}
-
-                          {(business.posKotEnabled !== false) && (
-                            <>
-                              <button
-                                onClick={() => handlePrintKOT(false)}
-                                disabled={items.length === 0 || isSaving}
-                                className="hidden lg:flex h-[38px] min-w-0 flex-col items-center justify-center rounded-xl p-1 border border-orange-300 text-orange-800 bg-orange-50 hover:bg-orange-100 transition-all font-black active:scale-95"
-                              >
-                                <span className="text-[12px] leading-[12px]">🧾</span>
-                                <span className="text-[8px] font-[900] leading-[9px] uppercase tracking-wider">HTML KOT</span>
-                              </button>
-                              <button
-                                onClick={() => handlePrintKOT(true)}
-                                disabled={items.length === 0 || isSaving}
-                                className="flex h-[38px] min-w-0 flex-col items-center justify-center rounded-xl p-1 border border-orange-500 text-orange-600 bg-orange-50 hover:bg-orange-100 transition-all font-black active:scale-95 shadow-sm"
-                              >
-                                <span className="text-[12px] leading-[12px]">🖨️</span>
-                                <span className="text-[8px] font-[900] leading-[9px] uppercase tracking-wider">BT KOT</span>
-                              </button>
-                            </>
                           )}
 
                           <button
@@ -5161,6 +6210,7 @@ export default function CheckoutClient() {
                                 toast.error(e.message || "WhatsApp Send Failed!");
                               }
 
+                              closeMobileCart();
                               const returnTo = searchParams.get("returnTo");
                               if (returnTo) {
                                 const tableId = searchParams.get("tableId");
@@ -5175,29 +6225,29 @@ export default function CheckoutClient() {
                               if (resumeBillId) router.replace("/dashboard/billing/checkout");
                             }}
                             disabled={items.length === 0 || isSaving}
-                            className="flex h-[38px] min-w-0 flex-col items-center justify-center rounded-xl p-1 border border-green-300 text-green-800 bg-green-50 hover:bg-green-100 transition-all font-black active:scale-95"
+                            className="flex shrink-0 h-7.5 lg:h-7.5 px-2 flex-row items-center justify-center gap-1 rounded-lg border border-green-300 text-green-800 bg-green-50 hover:bg-green-100 transition-all font-bold active:scale-95 shadow-2xs whitespace-nowrap"
                           >
-                            <span className="text-[12px] leading-[12px]">💬</span>
-                            <span className="text-[8px] font-[900] leading-[9px] uppercase tracking-wider">WhatsApp</span>
+                            <span className="text-[11.5px] leading-none">💬</span>
+                            <span className="text-[13px] lg:text-[12.5px] font-bold">WhatsApp</span>
                           </button>
                         </div>
                       );
                     })()}
 
-                    <div className="flex items-center gap-2 mt-2 w-full">
+                    <div className="flex flex-col sm:flex-row items-stretch gap-2 pt-1 w-full font-sans">
                       {((business as any)?.posHtmlPrintEnabled !== false) && (
                         <motion.button
                           whileHover={{ scale: 1.01 }}
                           whileTap={{ scale: 0.98 }}
-                          onClick={() => handleSaveAndPrintBill(false)}
+                          onClick={() => handleSaveAndPrintBill(false, true)}
                           disabled={items.length === 0 || (paymentMode === "UPI" && paymentStatus !== "Paid") || isSaving}
-                          className="flex flex-1 items-center justify-center py-1.5 h-[34px] md:h-[28px] rounded-lg
+                          className="hidden lg:flex flex-1 items-center justify-center py-2 h-[40px] rounded-xl
                     bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-600 bg-[length:200%_auto] hover:bg-right transition-all duration-500
-                    text-white shadow-lg shadow-emerald-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed px-1"
+                    text-white shadow-md shadow-emerald-600/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed px-3"
                         >
-                          <div className="flex items-center gap-1 font-black text-[10px] md:text-[9px] uppercase tracking-widest">
-                            {isSaving ? <RefreshCw size={12} className="animate-spin" /> : <Printer size={12} strokeWidth={3} />}
-                            {business?.enableKOTWithBill ? "HTML + KOT" : "HTML PRINT"}
+                          <div className="flex items-center gap-2 font-bold text-[16px] lg:text-[15px] tracking-wide">
+                            {isSaving ? <RefreshCw size={16} className="animate-spin" /> : <Printer size={16} strokeWidth={2.5} />}
+                            USB PRINT <span className="hidden sm:inline font-mono text-[10px] opacity-80">[F8]</span>
                           </div>
                         </motion.button>
                       )}
@@ -5208,53 +6258,14 @@ export default function CheckoutClient() {
                           whileTap={{ scale: 0.98 }}
                           onClick={() => handleSaveAndPrintBill(true)}
                           disabled={items.length === 0 || isSaving}
-                          className="flex-1 flex items-center justify-center py-1 h-[28px] rounded-lg
-                    bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed px-1"
+                          className="flex-1 flex items-center justify-center py-2 h-[40px] rounded-xl
+                    bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/25 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed px-3"
                         >
-                          <div className="flex items-center gap-1 font-black text-[9px] uppercase tracking-widest">
-                            <Printer size={12} strokeWidth={3} />
-                            BT PRINT
+                          <div className="flex items-center gap-2 font-bold text-[16px] lg:text-[15px] tracking-wide">
+                            <Printer size={16} strokeWidth={2.5} />
+                            BT PRINT<span className="hidden sm:inline font-mono text-[10px] opacity-80">[F10]</span>
                           </div>
                         </motion.button>
-                      )}
-
-                      {((business as any)?.posWebBtPrintEnabled !== false) && (
-                        <div className="flex gap-1.5 shrink-0">
-                          <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            title="Connect Bluetooth Printer"
-                            onClick={async () => {
-                              try {
-                                const { ensurePrinterConnected } = await import("@/lib/web-bluetooth");
-                                await ensurePrinterConnected(true);
-                                toast.success("Printer Paired Successfully! ✅");
-                              } catch (e: any) {
-                                toast.error(e.message || "Failed to pair printer");
-                              }
-                            }}
-                            className="w-[28px] h-[28px] shrink-0 flex items-center justify-center rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 active:scale-95 transition-all shadow-sm"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 7 10 10-5 5V2l5 5L7 17" /></svg>
-                          </motion.button>
-                          <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            title="Disconnect Bluetooth Printer"
-                            onClick={async () => {
-                              try {
-                                const { disconnectPrinter } = await import("@/lib/web-bluetooth");
-                                await disconnectPrinter();
-                                toast.success("Printer Disconnected! 🔌");
-                              } catch (e: any) {
-                                toast.error("Failed to disconnect printer");
-                              }
-                            }}
-                            className="w-[28px] h-[28px] shrink-0 flex items-center justify-center rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 active:scale-95 transition-all shadow-sm"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m17 17-5 5V12l-5 5" /><path d="m2 2 20 20" /><path d="M14.5 9.5 12 7V2l5 5-2.5 2.5" /></svg>
-                          </motion.button>
-                        </div>
                       )}
                     </div>
                   </>
@@ -5263,31 +6274,48 @@ export default function CheckoutClient() {
                     <motion.button
                       whileHover={{ scale: 1.01 }}
                       whileTap={{ scale: 0.98 }}
-                      onClick={handlePrintKOT}
+                      onClick={() => handlePrintKOT(false, false)}
                       disabled={items.length === 0 || isSaving}
-                      className="w-full mt-4 flex items-center justify-center gap-2 py-4 rounded-xl
+                      className="hidden sm:flex w-full mt-4 items-center justify-center gap-2 py-3.5 rounded-xl
                   bg-gradient-to-r from-orange-500 via-orange-400 to-orange-500 bg-[length:200%_auto] hover:bg-right transition-all duration-500
                   text-white font-black text-sm uppercase tracking-widest
                   shadow-lg shadow-orange-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isSaving ? <RefreshCw size={18} className="animate-spin" /> : <Printer size={18} strokeWidth={3} />}
-                      SAVE & PRINT KOT
+                      SAVE & PRINT KOT <span className="hidden sm:inline font-mono text-[10px] opacity-80">[F9]</span>
                     </motion.button>
 
-                    <motion.button
-                      whileHover={{ scale: 1.01 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => handlePrintKOT(true)}
-                      disabled={items.length === 0 || isSaving}
-                      className="w-full mt-3 flex items-center justify-center gap-2 py-3 rounded-xl
-                  border-2 border-orange-500 text-orange-500 font-black text-xs uppercase tracking-widest
-                  active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Printer size={16} strokeWidth={3} />
-                      DIRECT PRINT KOT (WEB BT)
-                    </motion.button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 sm:mt-2.5">
+                      <motion.button
+                        whileHover={{ scale: 1.01 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => handlePrintKOT(false, true)}
+                        disabled={items.length === 0 || isSaving}
+                        className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl
+                    bg-slate-800 hover:bg-slate-700 text-white font-black text-xs uppercase tracking-wider
+                    active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-slate-900/10"
+                      >
+                        <Check size={15} strokeWidth={3} />
+                        ONLY SAVE KOT
+                      </motion.button>
+
+                      <motion.button
+                        whileHover={{ scale: 1.01 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => handlePrintKOT(true, false)}
+                        disabled={items.length === 0 || isSaving}
+                        className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl
+                    border-2 border-orange-500 text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-950/20 font-black text-xs uppercase tracking-wider
+                    active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Printer size={15} strokeWidth={3} />
+                        DIRECT PRINT KOT (BT)
+                      </motion.button>
+                    </div>
                   </>
                 )}
+                    </div>
+                  )}
               </div>
             </div>
           </div>
@@ -5342,6 +6370,14 @@ export default function CheckoutClient() {
 
 
 
+
+          {/* ════════════════════════════════════════════
+          KEYBOARD SHORTCUTS MODAL
+      ════════════════════════════════════════════ */}
+          <KeyboardShortcutsModal
+            isOpen={showShortcutsModal}
+            onClose={() => setShowShortcutsModal(false)}
+          />
 
           {/* ════════════════════════════════════════════
           HELD BILLS DRAWER
@@ -6453,6 +7489,494 @@ export default function CheckoutClient() {
           )}
         </div>
       </div>
+
+      {/* 🛑 ATTRACTIVE POS-GRADE INSUFFICIENT STOCK SHORTAGE POPUP */}
+      <AnimatePresence>
+        {stockModalData.isOpen && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+            {/* Backdrop blur */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setStockModalData((p) => ({ ...p, isOpen: false }))}
+              className="fixed inset-0 bg-slate-950/75 backdrop-blur-md"
+            />
+
+            {/* Modal Card */}
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0, y: 16 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.94, opacity: 0, y: 12 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden z-10 my-auto"
+            >
+              {/* Glowing accent bar on top */}
+              <div
+                className={`h-2 w-full ${
+                  stockModalData.code === "INSUFFICIENT_STOCK_BLOCK"
+                    ? "bg-gradient-to-r from-rose-500 via-red-500 to-rose-600 shadow-[0_0_15px_rgba(244,63,94,0.5)]"
+                    : "bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]"
+                }`}
+              />
+
+              <div className="p-6 sm:p-7">
+                {/* Header row: Icon + Title + Close button */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div
+                      className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                        stockModalData.code === "INSUFFICIENT_STOCK_BLOCK"
+                          ? "bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50"
+                          : "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50"
+                      }`}
+                    >
+                      {stockModalData.code === "INSUFFICIENT_STOCK_BLOCK" ? (
+                        <AlertOctagon className="w-7 h-7 animate-pulse" strokeWidth={2.2} />
+                      ) : (
+                        <AlertTriangle className="w-7 h-7 animate-pulse" strokeWidth={2.2} />
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-[11px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                            stockModalData.code === "INSUFFICIENT_STOCK_BLOCK"
+                              ? "bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800"
+                              : "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800"
+                          }`}
+                        >
+                          {stockModalData.code === "INSUFFICIENT_STOCK_BLOCK" ? "Sale Blocked" : "Stock Alert"}
+                        </span>
+                        <span className="text-xs text-slate-400 font-medium">• Inventory Hub</span>
+                      </div>
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-1">
+                        {stockModalData.code === "INSUFFICIENT_STOCK_BLOCK"
+                          ? "Insufficient Stock Detected"
+                          : "Stock Warning Notice"}
+                      </h3>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setStockModalData((p) => ({ ...p, isOpen: false }))}
+                    className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Subtitle / Explanation */}
+                <p className="mt-3 text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                  {stockModalData.code === "INSUFFICIENT_STOCK_BLOCK"
+                    ? "Cannot complete this sale because item or ingredient stock is depleted in Inventory."
+                    : "Some items in this cart exceed current inventory on hand. Negative stock will be recorded if continued."}
+                </p>
+
+                {/* Itemized Stock Shortage List */}
+                <div className="mt-4">
+                  <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 px-1">
+                    <span>Affected Items & Stock</span>
+                    <span>Deficit Status</span>
+                  </div>
+
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {stockModalData.items && stockModalData.items.length > 0 ? (
+                      stockModalData.items.map((item, idx) => {
+                        const shortage = Math.max(0, (item.requestedQty || 0) - (item.availableStock || 0));
+                        return (
+                          <div
+                            key={item.id || idx}
+                            className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 transition-all hover:border-rose-300 dark:hover:border-rose-900/60"
+                          >
+                            <div className="min-w-0 pr-3">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                                  {item.name}
+                                </p>
+                                {item.type === "material" && (
+                                  <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 shrink-0">
+                                    Raw Material
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                <span>Cart: <strong className="text-slate-700 dark:text-slate-200">{item.requestedQty} {item.unit || "pcs"}</strong></span>
+                                <span>•</span>
+                                <span>In Stock: <strong className={item.availableStock <= 0 ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400"}>{item.availableStock} {item.unit || "pcs"}</strong></span>
+                              </div>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-xl text-xs font-black bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50">
+                                Short by {shortage > 0 ? shortage : item.requestedQty}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="p-3.5 rounded-2xl bg-rose-50/50 dark:bg-rose-950/30 border border-rose-200/60 dark:border-rose-900/40 text-xs text-rose-700 dark:text-rose-300">
+                        {stockModalData.message || "Insufficient stock for selected items."}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Manager override alert note if allowed */}
+                {stockModalData.code === "INSUFFICIENT_STOCK_BLOCK" && stockModalData.allowManagerOverride && (
+                  <div className="mt-3.5 p-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/50 flex items-center gap-2.5 text-xs text-amber-800 dark:text-amber-200">
+                    <span className="text-base">🔑</span>
+                    <span>Manager Override is active for this store. You may authorize this transaction.</span>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="mt-6 flex flex-col-reverse sm:flex-row items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try { kravy.click(); } catch {}
+                      setStockModalData((p) => ({ ...p, isOpen: false }));
+                    }}
+                    className="w-full sm:flex-1 py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+                  >
+                    Adjust Cart
+                  </button>
+
+                  {stockModalData.code === "INSUFFICIENT_STOCK_BLOCK" && stockModalData.allowManagerOverride && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try { kravy.click(); } catch {}
+                        stockModalData.onProceedOverride?.();
+                      }}
+                      className="w-full sm:flex-1 py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white shadow-lg shadow-rose-500/25 active:scale-95 transition-all"
+                    >
+                      Authorize & Override
+                    </button>
+                  )}
+
+                  {stockModalData.code === "INSUFFICIENT_STOCK_WARN" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try { kravy.click(); } catch {}
+                        stockModalData.onProceedWarning?.();
+                      }}
+                      className="w-full sm:flex-1 py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg shadow-amber-500/25 active:scale-95 transition-all"
+                    >
+                      Allow & Proceed
+                    </button>
+                  )}
+                </div>
+
+                {/* Quick Link to Inventory Hub */}
+                <div className="mt-3 text-center">
+                  <Link
+                    href="/dashboard/inventory"
+                    target="_blank"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+                  >
+                    <ExternalLink size={12} />
+                    Open Inventory Hub to Restock
+                  </Link>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ════════════════════════════════════════════
+          ADD DETAILS / CUSTOMER MODAL (Screenshot 3 Match - Fixed Layout)
+      ════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {showMobileCustomerModal && (
+          <div className="fixed inset-0 z-[10005] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+            {/* Backdrop with close icon above sheet */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setShowMobileCustomerModal(false);
+                setShowSuggestionsDropdown(false);
+              }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-start pt-8 sm:pt-16"
+            >
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMobileCustomerModal(false);
+                  setShowSuggestionsDropdown(false);
+                }}
+                className="w-10 h-10 rounded-full bg-neutral-800/90 text-white flex items-center justify-center shadow-xl hover:bg-neutral-700 transition-all active:scale-90"
+                title="Close"
+              >
+                <X size={20} strokeWidth={2.5} />
+              </button>
+            </motion.div>
+
+            {/* Modal Dialog Card: Visible input, relative suggestions dropdown below */}
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-sm sm:max-w-md bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 shadow-2xl z-20 border border-slate-100 dark:border-white/10 my-auto"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
+                  Add Details
+                </h3>
+                {(customerName || customerPhone) && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+                    Active
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-3.5">
+                {/* 1. Customer Number Input (Never Overlapped, Always Visible) */}
+                <div className="space-y-1 relative">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                      Customer Number
+                    </label>
+                    {isSearchingCustomer && (
+                      <span className="text-[10px] text-blue-500 flex items-center gap-1 font-medium animate-pulse">
+                        <RefreshCw size={10} className="animate-spin" /> Searching...
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Tap to Enter number or name"
+                      value={customerPhone}
+                      autoFocus
+                      autoComplete="off"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCustomerPhone(val);
+                        setSelectedParty(null);
+                        searchModalCustomers(val);
+                      }}
+                      onFocus={() => {
+                        if (customerPhone.trim()) {
+                          searchModalCustomers(customerPhone);
+                        }
+                      }}
+                      className="w-full px-3.5 py-3 rounded-xl border border-slate-200 dark:border-white/15 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 font-medium transition-all placeholder:text-slate-400 pr-8"
+                    />
+                    {customerPhone && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomerPhone("");
+                          setSelectedParty(null);
+                          setShowSuggestionsDropdown(false);
+                          setModalCustomerSuggestions([]);
+                        }}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                        title="Clear field"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Smart Suggestions Dropdown: Positioned directly below input, never covering it */}
+                  {showSuggestionsDropdown && customerPhone.trim().length > 0 && (
+                    <div className="mt-1.5 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/15 rounded-2xl shadow-xl overflow-hidden z-30 transition-all animate-in fade-in duration-150">
+                      <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-100 dark:border-white/10 flex items-center justify-between text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                        <span>Matching Customers ({modalCustomerSuggestions.length})</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowSuggestionsDropdown(false)}
+                          className="hover:text-slate-700 dark:hover:text-white p-0.5 rounded text-xs"
+                          title="Close suggestions"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <div className="max-h-44 sm:max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-white/5">
+                        {modalCustomerSuggestions.length > 0 ? (
+                          modalCustomerSuggestions.map((p, idx) => (
+                            <div
+                              key={p.id || idx}
+                              onClick={() => {
+                                selectCustomer(p);
+                                setShowSuggestionsDropdown(false);
+                              }}
+                              className="w-full text-left px-3.5 py-2.5 hover:bg-blue-50/70 dark:hover:bg-slate-700/60 cursor-pointer flex items-center justify-between transition-colors group"
+                            >
+                              <div className="min-w-0 pr-2">
+                                <p className="text-xs font-bold text-slate-900 dark:text-white truncate group-hover:text-blue-600 transition-colors">
+                                  {p.name}
+                                </p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                                  {p.phone || "No phone"}
+                                </p>
+                              </div>
+                              <span className="text-[11px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wide px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 group-hover:bg-blue-600 group-hover:text-white transition-all shrink-0">
+                                Select
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="px-4 py-3 text-center text-xs text-slate-400 font-medium">
+                            No matching customers found
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Customer Name Input */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    Customer Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Enter customer name"
+                    value={customerName}
+                    autoComplete="off"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      handleCustomerNameChange(val);
+                    }}
+                    className="w-full px-3.5 py-3 rounded-xl border border-slate-200 dark:border-white/15 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 font-medium transition-all placeholder:text-slate-400"
+                  />
+                </div>
+
+                {/* 3. Active Wallet & Loyalty Rewards (If Selected / Existing Customer) */}
+                {selectedParty && (
+                  <div className="space-y-2 pt-1 animate-in fade-in duration-200">
+                    {/* Wallet Card */}
+                    <div className="bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-900/50 p-3 rounded-2xl flex items-center justify-between shadow-2xs">
+                      <div>
+                        <p className="text-[9px] font-black text-indigo-500 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-1.5">
+                          <span>💳</span> Active Wallet Balance
+                        </p>
+                        <p className="text-base font-black text-indigo-700 dark:text-indigo-300 mt-0.5">
+                          {formatCurrency(selectedParty.walletBalance?.toFixed(2) || "0.00", sym)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const amt = prompt(`Enter amount to deposit (${sym}):`);
+                          if (amt && !isNaN(Number(amt)) && Number(amt) > 0) {
+                            await handleDeposit(Number(amt));
+                          }
+                        }}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md shadow-indigo-600/20 active:scale-95 transition-all"
+                      >
+                        + Add
+                      </button>
+                    </div>
+
+                    {/* Loyalty Points Card */}
+                    <div className="bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/50 p-3 rounded-2xl flex items-center justify-between shadow-2xs">
+                      <div>
+                        <p className="text-[9px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest flex items-center gap-1.5">
+                          <span>👑</span> Loyalty Rewards
+                        </p>
+                        <p className="text-sm font-black text-amber-700 dark:text-amber-300 mt-0.5">
+                          {selectedParty.loyaltyPoints || 0} Pts
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-black text-amber-800 dark:text-amber-200 bg-amber-100 dark:bg-amber-900/60 px-2.5 py-1 rounded-xl">
+                        {formatCurrency((selectedParty.loyaltyPoints || 0) * (business?.loyaltyValueInRupees || 1), sym)} Value
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Save as regular customer checkbox */}
+                <div className="flex items-center gap-2.5 pt-0.5">
+                  <input
+                    type="checkbox"
+                    id="save-regular-customer"
+                    checked={saveAsRegularCustomer}
+                    onChange={(e) => setSaveAsRegularCustomer(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                  />
+                  <label
+                    htmlFor="save-regular-customer"
+                    className="text-xs font-normal text-slate-500 dark:text-slate-400 cursor-pointer select-none"
+                  >
+                    Save as regular customer
+                  </label>
+                </div>
+
+                {/* 4. Action Buttons */}
+                <div className="pt-2 flex gap-2">
+                  {(customerName || customerPhone) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        kravy.click();
+                        setCustomerName("");
+                        setCustomerPhone("");
+                        setCustomerAddress("");
+                        setSelectedParty(null);
+                        setModalCustomerSuggestions([]);
+                        setShowSuggestionsDropdown(false);
+                        toast.success("Customer cleared");
+                      }}
+                      className="py-3 px-3.5 rounded-xl border border-rose-200 dark:border-rose-900/40 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 text-xs font-bold transition-all"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      kravy.click();
+                      if (saveAsRegularCustomer && (customerName || customerPhone)) {
+                        try {
+                          await fetch("/api/parties", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              name: customerName || "Customer",
+                              phone: customerPhone,
+                              type: "CUSTOMER",
+                            }),
+                          });
+                        } catch (e) {}
+                      }
+                      setShowSuggestionsDropdown(false);
+                      setShowMobileCustomerModal(false);
+                      toast.success(
+                        customerName || customerPhone
+                          ? `Customer details saved! (${customerName || customerPhone})`
+                          : "Customer details saved!"
+                      );
+                    }}
+                    className={`flex-1 py-3 px-4 rounded-xl text-center font-bold text-sm transition-all shadow-sm ${
+                      customerPhone || customerName
+                        ? "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/25 active:scale-95"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-slate-200"
+                    }`}
+                  >
+                    Save Details
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
