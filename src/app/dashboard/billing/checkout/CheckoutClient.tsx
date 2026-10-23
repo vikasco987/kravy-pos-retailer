@@ -795,7 +795,7 @@ export default function CheckoutClient() {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryLayout, setCategoryLayout] = useState<'horizontal' | 'vertical' | 'full'>('vertical');
   const [rawLayout, setRawLayout] = useState<string>('image-grid-side');
-  const [kotMode, setKotMode] = useState<boolean>(true);
+  const [kotMode, setKotMode] = useState<boolean>(false);
   const [billingView, setBillingView] = useState<"image" | "listing">("image");
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [showLayoutModal, setShowLayoutModal] = useState(false);
@@ -1019,7 +1019,9 @@ export default function CheckoutClient() {
       if (savedKot !== null) {
         setKotMode(savedKot === 'true');
       } else if (business?.posKotEnabled !== undefined) {
-        setKotMode(business.posKotEnabled !== false);
+        setKotMode(business.posKotEnabled === true);
+      } else {
+        setKotMode(false);
       }
 
       const savedView = localStorage.getItem('pos_billing_view');
@@ -4962,125 +4964,52 @@ export default function CheckoutClient() {
                     </div>
                   </div>
 
-                  {/* Dynamic Action Buttons Grid */}
+                  {/* Action Buttons Grid (Direct Billing for Retailer) */}
                   <div className="grid grid-cols-2 gap-2">
-                    {kotMode ? (
-                      /* KOT Mode ENABLED: KOT & Hold + KOT & Bill */
-                      <>
-                        <button
-                          type="button"
-                          disabled={items.length === 0 || isSaving}
-                          onClick={async () => {
-                            kravy.click();
-                            try {
-                              // 1. First print KOT via Bluetooth — if this fails, abort hold
-                              await handlePrintKOT(true, false);
+                    <button
+                      type="button"
+                      disabled={items.length === 0 || isSaving}
+                      onClick={async () => {
+                        kravy.click();
+                        try {
+                          const bill = await saveBill(true);
+                          if (!bill) return;
+                          kravy.success();
+                          toast.success("Order Saved & Held! ⏸️");
+                          closeMobileCart();
+                          fetchHeldBills();
+                          const returnTo = searchParams.get("returnTo");
+                          if (returnTo) {
+                            const tableId = searchParams.get("tableId");
+                            const orderId = searchParams.get("orderId") || syncedOrderId || bill.id;
+                            const query = new URLSearchParams();
+                            if (tableId) query.set("tableId", tableId);
+                            if (orderId) query.set("orderId", orderId);
+                            router.replace(`${returnTo.split('?')[0]}?${query.toString()}`);
+                            return;
+                          }
+                          resetForm();
+                          if (resumeBillId) router.replace("/dashboard/billing/checkout");
+                        } catch (e: any) {
+                          toast.error(e?.message || "Save & Hold failed");
+                        }
+                      }}
+                      className="w-full py-3 px-3 rounded-xl border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-900 dark:text-white font-black text-xs sm:text-sm tracking-wide shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    >
+                      {isSaving ? <RefreshCw size={15} className="animate-spin" /> : <span>Save & Hold</span>}
+                    </button>
 
-                              // 2. Perform hold order workflow identical to Hold [F7] button
-                              const bill = await saveBill(true);
-                              if (bill) {
-                                kravy.ping();
-                                toast.success("KOT Printed & Order Held! ⏸️");
-                                closeMobileCart();
-                                fetchHeldBills();
-
-                                const returnTo = searchParams.get("returnTo");
-                                if (returnTo) {
-                                  const tableId = searchParams.get("tableId");
-                                  const orderId = searchParams.get("orderId") || syncedOrderId || bill.id;
-                                  const query = new URLSearchParams();
-                                  if (tableId) query.set("tableId", tableId);
-                                  if (orderId) query.set("orderId", orderId);
-                                  router.replace(`${returnTo.split("?")[0]}?${query.toString()}`);
-                                  return;
-                                }
-
-                                resetForm();
-                                if (resumeBillId) router.replace("/dashboard/billing/checkout");
-                              }
-                            } catch (e: any) {
-                              toast.error(e?.message || "KOT & Hold failed");
-                            }
-                          }}
-                          className="w-full py-3 px-3 rounded-xl border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-900 dark:text-white font-black text-xs sm:text-sm tracking-wide shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                        >
-                          {isSaving ? <RefreshCw size={15} className="animate-spin" /> : <span>KOT & Hold</span>}
-                        </button>
-
-                        <button
-                          type="button"
-                          disabled={items.length === 0 || isSaving}
-                          onClick={async () => {
-                            kravy.click();
-                            try {
-                              // Print KOT via Bluetooth first, then open cart/billing to complete & bill
-                              await handlePrintKOT(true, false);
-                              toast.success("KOT Printed! Proceeding to bill...");
-                              openMobileCart();
-                            } catch (e: any) {
-                              toast.error(e?.message || "KOT & Bill failed");
-                              openMobileCart();
-                            }
-                          }}
-                          className="w-full py-3 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs sm:text-sm tracking-wide shadow-md shadow-blue-500/25 active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                        >
-                          {isSaving ? <RefreshCw size={15} className="animate-spin" /> : <span>KOT & Bill</span>}
-                        </button>
-                      </>
-                    ) : (
-                      /* KOT Mode DISABLED: Save & Hold + Save & Bill */
-                      <>
-                        <button
-                          type="button"
-                          disabled={items.length === 0 || isSaving}
-                          onClick={async () => {
-                            kravy.click();
-                            try {
-                              // Save & Hold without KOT
-                              const bill = await saveBill(true);
-                              if (!bill) return;
-                              kravy.success();
-                              toast.success("Order Saved & Held! ⏸️");
-                              closeMobileCart();
-                              const returnTo = searchParams.get("returnTo");
-                              if (returnTo) {
-                                const tableId = searchParams.get("tableId");
-                                const orderId = searchParams.get("orderId") || syncedOrderId || bill.id;
-                                const query = new URLSearchParams();
-                                if (tableId) query.set("tableId", tableId);
-                                if (orderId) query.set("orderId", orderId);
-                                router.replace(`${returnTo.split('?')[0]}?${query.toString()}`);
-                                return;
-                              }
-                              resetForm();
-                              if (resumeBillId) router.replace("/dashboard/billing/checkout");
-                            } catch (e: any) {
-                              toast.error(e?.message || "Save & Hold failed");
-                            }
-                          }}
-                          className="w-full py-3 px-3 rounded-xl border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-900 dark:text-white font-black text-xs sm:text-sm tracking-wide shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                        >
-                          {isSaving ? <RefreshCw size={15} className="animate-spin" /> : <span>Save & Hold</span>}
-                        </button>
-
-                        <button
-                          type="button"
-                          disabled={items.length === 0 || isSaving}
-                          onClick={async () => {
-                            kravy.click();
-                            try {
-                              // Directly open mobile cart to review and finalize Bluetooth Bill print, or direct BT print if ready
-                              openMobileCart();
-                            } catch (e: any) {
-                              toast.error(e?.message || "Save & Bill failed");
-                            }
-                          }}
-                          className="w-full py-3 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs sm:text-sm tracking-wide shadow-md shadow-blue-500/25 active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                        >
-                          {isSaving ? <RefreshCw size={15} className="animate-spin" /> : <span>Save & Bill</span>}
-                        </button>
-                      </>
-                    )}
+                    <button
+                      type="button"
+                      disabled={items.length === 0 || isSaving}
+                      onClick={async () => {
+                        kravy.click();
+                        openMobileCart();
+                      }}
+                      className="w-full py-3 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs sm:text-sm tracking-wide shadow-md shadow-blue-500/25 active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    >
+                      <span>Proceed to Bill</span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -6082,47 +6011,13 @@ export default function CheckoutClient() {
                       const enabledActions = [
                         { id: 'hold', enabled: business.posHoldEnabled !== false },
                         { id: 'save', enabled: business.posSaveEnabled !== false },
-                        { id: 'preview', enabled: business.posPreviewEnabled !== false },
-                        { id: 'kot', enabled: business.posKotEnabled !== false }
+                        { id: 'preview', enabled: business.posPreviewEnabled !== false }
                       ].filter(a => a.enabled);
 
                       const isCompact = enabledActions.length > 2;
 
                       return (
                         <div className="flex items-center gap-1 w-full pt-0.5 overflow-x-auto pb-1 scroll-smooth [scrollbar-width:thin] font-sans">
-                          {/* 🧾 KOT Buttons - Placed at the very start as requested */}
-                          {(business.posKotEnabled !== false) && (
-                            <>
-                              <button
-                                onClick={() => handlePrintKOT(false, false)}
-                                disabled={items.length === 0 || isSaving}
-                                className="hidden lg:flex shrink-0 h-7.5 lg:h-7.5 px-2 flex-row items-center justify-center gap-1 rounded-lg border border-orange-300 text-orange-800 bg-orange-50 hover:bg-orange-100 transition-all font-bold active:scale-95 whitespace-nowrap"
-                              >
-                                <span className="text-[11.5px] leading-none">🧾</span>
-                                <span className="text-[13px] lg:text-[12.5px] font-bold">USB KOT</span>
-                              </button>
-                              <button
-                                onClick={() => handlePrintKOT(true, false)}
-                                disabled={items.length === 0 || isSaving}
-                                className="flex shrink-0 h-7.5 lg:h-7.5 px-2 flex-row items-center justify-center gap-1 rounded-lg border border-orange-500 text-orange-600 bg-orange-50 hover:bg-orange-100 transition-all font-bold active:scale-95 shadow-2xs whitespace-nowrap"
-                              >
-                                <span className="text-[11.5px] leading-none">🖨️</span>
-                                <span className="text-[13px] lg:text-[12.5px] font-bold">BT KOT</span>
-                              </button>
-                              {searchParams.get("returnTo") && (
-                                <button
-                                  onClick={() => handlePrintKOT(false, true)}
-                                  disabled={items.length === 0 || isSaving}
-                                  className="flex shrink-0 h-7.5 lg:h-7.5 px-2 flex-row items-center justify-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-all font-bold active:scale-95 whitespace-nowrap"
-                                  title="Only Save KOT without printing"
-                                >
-                                  <span className="text-[11.5px] leading-none">💾</span>
-                                  <span className="text-[13px] lg:text-[12.5px] font-bold">Save KOT</span>
-                                </button>
-                              )}
-                            </>
-                          )}
-
                           {(business.posHoldEnabled !== false) && (
                             <button
                               onClick={async () => {
