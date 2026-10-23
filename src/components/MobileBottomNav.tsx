@@ -62,7 +62,6 @@ export default function MobileBottomNav({ profile }: any) {
     const rawNavItems = [
         { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard size={24} /> },
         { label: "POS", href: "/dashboard/billing/checkout", icon: <ShoppingCart size={24} /> },
-        { label: "Floor", href: "/dashboard/terminal", icon: <Utensils size={24} /> },
         { label: "History", href: "/dashboard/billing", icon: <Receipt size={24} /> },
         ...(activeProfile?.enableFuelBilling ? [{ label: "Fuel", href: "/dashboard/fuel", icon: <Fuel size={24} /> }] : [])
     ];
@@ -79,7 +78,6 @@ export default function MobileBottomNav({ profile }: any) {
             const baseHref = item.href.split("?")[0];
             const isAllowed = allowedPaths.includes(item.href) || 
                               allowedPaths.includes(baseHref) ||
-                              (allowedPaths.includes("/dashboard/workflow") && (baseHref === "/dashboard/terminal" || baseHref === "/dashboard/kitchen")) ||
                               (item.href === "/dashboard/fuel" && activeProfile?.enableFuelBilling);
             if (!isAllowed) return false;
         }
@@ -154,20 +152,20 @@ export default function MobileBottomNav({ profile }: any) {
                             </span>
                         </button>
 
-                        {/* 3. Table Status (Soft Sky Blue) */}
+                        {/* 3. Inventory Stock (Soft Amber) */}
                         <button
                             onClick={() => {
                                 kravy.click();
                                 setIsMoreOpen(false);
-                                router.push("/dashboard/tables");
+                                router.push("/dashboard/inventory");
                             }}
-                            className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-[#DDF4FF] dark:bg-sky-950/40 text-[#0284C7] dark:text-sky-300 shadow-2xs active:scale-95 transition-all text-center min-h-[76px] sm:min-h-[88px]"
+                            className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-[#FEF3C7] dark:bg-amber-950/40 text-[#D97706] dark:text-amber-300 shadow-2xs active:scale-95 transition-all text-center min-h-[76px] sm:min-h-[88px]"
                         >
-                            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center mb-0.5 text-[#0284C7] dark:text-sky-400">
-                                <LayoutGrid size={18} className="sm:w-[22px] sm:h-[22px]" strokeWidth={2.2} />
+                            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center mb-0.5 text-[#D97706] dark:text-amber-400">
+                                <Package size={18} className="sm:w-[22px] sm:h-[22px]" strokeWidth={2.2} />
                             </div>
                             <span className="text-[10px] sm:text-xs font-bold leading-tight mt-0.5">
-                                Table Status
+                                Inventory
                             </span>
                         </button>
                     </div>
@@ -175,20 +173,6 @@ export default function MobileBottomNav({ profile }: any) {
                     {/* 2-Column Rounded Action Pills Grid */}
                     <div className="grid grid-cols-2 gap-2.5 pt-1">
                         {[
-                            {
-                                label: "Floor\nManagement",
-                                href: "/dashboard/terminal",
-                                icon: <LayoutDashboard size={18} className="text-[#0D9488]" />,
-                                iconBg: "bg-[#CCFBF1] dark:bg-teal-950/50",
-                                border: "border-teal-200 dark:border-teal-900/50"
-                            },
-                            {
-                                label: "Kitchen\nWorkflow",
-                                href: "/dashboard/kitchen",
-                                icon: <Activity size={18} className="text-[#E11D48]" />,
-                                iconBg: "bg-[#FFE4E6] dark:bg-rose-950/50",
-                                border: "border-rose-200 dark:border-rose-900/50"
-                            },
                             {
                                 label: "Past Bills /\nHistory",
                                 href: "/dashboard/billing",
@@ -225,7 +209,7 @@ export default function MobileBottomNav({ profile }: any) {
                                 border: "border-amber-200 dark:border-amber-900/50"
                             },
                             {
-                                label: "Restaurant\nExpenses",
+                                label: "Business\nExpenses",
                                 href: "/dashboard/expenses",
                                 icon: <IndianRupee size={18} className="text-[#9333EA]" />,
                                 iconBg: "bg-[#F3E8FF] dark:bg-purple-950/50",
