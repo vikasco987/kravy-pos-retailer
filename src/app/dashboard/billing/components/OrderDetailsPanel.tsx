@@ -711,7 +711,7 @@ export const OrderDetailsPanel = ({ bill: initialBill, business, onClose, onUpda
                   )}
                   {bill.serviceCharge > 0 && (
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", fontWeight: 700, color: "#475569" }}>
-                      <span>Service Charge</span>
+                      <span>{bill.serviceChargeName || "Service Charge"}</span>
                       <span style={{ color: "#0F172A", fontWeight: 800 }}>+{sym}{new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2 }).format(bill.serviceCharge)}</span>
                     </div>
                   )}

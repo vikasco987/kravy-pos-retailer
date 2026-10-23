@@ -47,6 +47,30 @@ async function ensureValidDates() {
         }
       ]
     });
+
+    // 🧹 Delete unnecessary tax fields physically from DB
+    await prisma.$runCommandRaw({
+      update: "BusinessProfile",
+      updates: [
+        {
+          q: {},
+          u: {
+            $unset: {
+              taxRate: "",
+              gstType: "",
+              perProductTaxEnabled: "",
+              taxInclusive: "",
+              floorTaxEnabled: "",
+              floorTaxRate: "",
+              floorPerProductTaxEnabled: "",
+              floorTaxInclusive: ""
+            }
+          },
+          multi: true
+        }
+      ]
+    });
+
     console.log("✨ Self-healed BusinessProfile dates.");
   } catch (err) {
     console.error("⚠️ Self-healing BusinessProfile dates failed:", err);
@@ -56,6 +80,7 @@ async function ensureValidDates() {
 export async function GET(request: Request) {
   try {
     const effectiveId = await getEffectiveClerkId();
+    await ensureValidDates();
 
     if (!effectiveId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -65,7 +90,9 @@ export async function GET(request: Request) {
     try {
       profile = await prisma.businessProfile.findFirst({
         where: { userId: effectiveId },
+        orderBy: { createdAt: 'desc' }
       });
+      // console.log removed to prevent JSON stringify blocking loop
 
       const user = await prisma.user.findUnique({
         where: { clerkId: effectiveId }
@@ -86,6 +113,7 @@ export async function GET(request: Request) {
         });
         profile = await prisma.businessProfile.findFirst({
           where: { userId: effectiveId },
+          orderBy: { createdAt: 'desc' }
         });
         const user = await prisma.user.findUnique({
           where: { clerkId: effectiveId }
@@ -135,9 +163,29 @@ export async function GET(request: Request) {
       if (profile.maxRedeemPointsPerBill === undefined || profile.maxRedeemPointsPerBill === null) {
         (profile as any).maxRedeemPointsPerBill = ps.maxRedeemPointsPerBill ?? 500;
       }
+      if (profile.maxEarnPointsPerBill === undefined) {
+        (profile as any).maxEarnPointsPerBill = ps.maxEarnPointsPerBill ?? null;
+      }
+      if ((profile as any).posHtmlPrintEnabled === undefined) {
+        (profile as any).posHtmlPrintEnabled = ps.posHtmlPrintEnabled ?? true;
+      }
+      if ((profile as any).posWebBtPrintEnabled === undefined) {
+        (profile as any).posWebBtPrintEnabled = ps.posWebBtPrintEnabled ?? true;
+      }
+      (profile as any).inventorySettings = ps.inventorySettings || null;
     }
 
-    return NextResponse.json(profile, { status: 200 });
+    const cleanProfile = { ...profile };
+    delete (cleanProfile as any).taxRate;
+    delete (cleanProfile as any).gstType;
+    delete (cleanProfile as any).perProductTaxEnabled;
+    delete (cleanProfile as any).taxInclusive;
+    delete (cleanProfile as any).floorTaxEnabled;
+    delete (cleanProfile as any).floorTaxRate;
+    delete (cleanProfile as any).floorPerProductTaxEnabled;
+    delete (cleanProfile as any).floorTaxInclusive;
+
+    return NextResponse.json(cleanProfile, { status: 200 });
   } catch (error) {
     console.error("GET /api/profile error:", error);
     return NextResponse.json({ error: "Failed to fetch profile" }, { status: 500 });
@@ -219,14 +267,17 @@ export async function POST(request: Request) {
     if (body.upi !== undefined) updateData.upi = s(body.upi);
 
     // Images
-    if (body.profileImage !== undefined || body.profileImageUrl !== undefined) {
-      updateData.profileImageUrl = s(body.profileImage ?? body.profileImageUrl);
+    const rawProfileImage = body.profileImage !== undefined ? body.profileImage : body.profileImageUrl;
+    if (rawProfileImage !== undefined) {
+      updateData.profileImageUrl = s(rawProfileImage);
     }
-    if (body.logo !== undefined || body.logoUrl !== undefined) {
-      updateData.logoUrl = s(body.logo ?? body.logoUrl);
+    const rawLogo = body.logo !== undefined ? body.logo : body.logoUrl;
+    if (rawLogo !== undefined) {
+      updateData.logoUrl = s(rawLogo);
     }
-    if (body.signature !== undefined || body.signatureUrl !== undefined) {
-      updateData.signatureUrl = s(body.signature ?? body.signatureUrl);
+    const rawSignature = body.signature !== undefined ? body.signature : body.signatureUrl;
+    if (rawSignature !== undefined) {
+      updateData.signatureUrl = s(rawSignature);
     }
 
     // Address & Tax
@@ -237,8 +288,6 @@ export async function POST(request: Request) {
     if (body.pinCode !== undefined) updateData.pinCode = s(body.pinCode);
     
     if (body.taxEnabled !== undefined) updateData.taxEnabled = b(body.taxEnabled);
-    if (body.taxInclusive !== undefined) updateData.taxInclusive = b(body.taxInclusive);
-    if (body.taxRate !== undefined) updateData.taxRate = n(body.taxRate);
     if (body.upiQrEnabled !== undefined) updateData.upiQrEnabled = b(body.upiQrEnabled);
     if (body.menuLinkEnabled !== undefined) updateData.menuLinkEnabled = b(body.menuLinkEnabled);
     if (body.greetingMessage !== undefined) updateData.greetingMessage = s(body.greetingMessage);
@@ -249,6 +298,8 @@ export async function POST(request: Request) {
     if (body.enableMenuQRInBill !== undefined) updateData.enableMenuQRInBill = b(body.enableMenuQRInBill);
 
     // ✅ QR Menu Checkout Payment Visibility Settings
+    if (body.currencyCode !== undefined) updateData.currencyCode = s(body.currencyCode);
+    if (body.currencySymbol !== undefined) updateData.currencySymbol = s(body.currencySymbol);
     if (body.qrPayCashEnabled !== undefined) updateData.qrPayCashEnabled = b(body.qrPayCashEnabled);
     if (body.qrPayUpiEnabled !== undefined) updateData.qrPayUpiEnabled = b(body.qrPayUpiEnabled);
     if (body.qrPayCardEnabled !== undefined) updateData.qrPayCardEnabled = b(body.qrPayCardEnabled);
@@ -262,7 +313,6 @@ export async function POST(request: Request) {
     if (body.businessAddressSize !== undefined) updateData.businessAddressSize = n(body.businessAddressSize);
 
     // ✅ TAX & PRICING (MISSING FIELDS FIX)
-    if (body.perProductTaxEnabled !== undefined) updateData.perProductTaxEnabled = b(body.perProductTaxEnabled);
     if (body.qrMenuPriceInclusive !== undefined) updateData.qrMenuPriceInclusive = b(body.qrMenuPriceInclusive);
     if (body.enableKOTWithBill !== undefined) updateData.enableKOTWithBill = b(body.enableKOTWithBill);
     if (body.syncQuickPosWithKitchen !== undefined) updateData.syncQuickPosWithKitchen = b(body.syncQuickPosWithKitchen);
@@ -277,6 +327,7 @@ export async function POST(request: Request) {
     if (body.packagingChargeAmount !== undefined) updateData.packagingChargeAmount = n(body.packagingChargeAmount);
     if (body.packagingGstEnabled !== undefined) updateData.packagingGstEnabled = b(body.packagingGstEnabled);
     if (body.packagingGstRate !== undefined) updateData.packagingGstRate = n(body.packagingGstRate);
+    if (body.serviceChargeName !== undefined) updateData.serviceChargeName = s(body.serviceChargeName);
 
     // ✅ QR SPECIFIC CHARGES
     if (body.qrDeliveryChargeEnabled !== undefined) updateData.qrDeliveryChargeEnabled = b(body.qrDeliveryChargeEnabled);
@@ -284,12 +335,14 @@ export async function POST(request: Request) {
     if (body.qrPackagingChargeEnabled !== undefined) updateData.qrPackagingChargeEnabled = b(body.qrPackagingChargeEnabled);
     if (body.qrPackagingChargeAmount !== undefined) updateData.qrPackagingChargeAmount = n(body.qrPackagingChargeAmount);
 
-    // POS Checkout Visibility
+    // POS Checkout Visibility & Layout
     if (body.posCashEnabled !== undefined) updateData.posCashEnabled = b(body.posCashEnabled);
     if (body.posUpiEnabled !== undefined) updateData.posUpiEnabled = b(body.posUpiEnabled);
     if (body.posCardEnabled !== undefined) updateData.posCardEnabled = b(body.posCardEnabled);
-    if (body.posCounterEnabled !== undefined) updateData.posCounterEnabled = b(body.posCounterEnabled);
-    if (body.posWalletEnabled !== undefined) updateData.posWalletEnabled = b(body.posWalletEnabled);
+    if (body.posDiningEnabled !== undefined) updateData.posDiningEnabled = b(body.posDiningEnabled);
+    if (body.posTakeawayEnabled !== undefined) updateData.posTakeawayEnabled = b(body.posTakeawayEnabled);
+    if (body.posDeliveryEnabled !== undefined) updateData.posDeliveryEnabled = b(body.posDeliveryEnabled);
+    if (body.posCheckoutLayout !== undefined) updateData.posCheckoutLayout = s(body.posCheckoutLayout);
 
     // ✅ SaaS Subscription & Premium Popups
     if (body.isPremium !== undefined) updateData.isPremium = b(body.isPremium);
@@ -313,17 +366,17 @@ export async function POST(request: Request) {
     if (body.loyaltyPointRatio !== undefined) updateData.loyaltyPointRatio = n(body.loyaltyPointRatio);
     if (body.loyaltyMinRedeem !== undefined) updateData.loyaltyMinRedeem = n(body.loyaltyMinRedeem);
     if (body.enableFuelBilling !== undefined) updateData.enableFuelBilling = b(body.enableFuelBilling);
-
+    if (body.enableHotelManagement !== undefined) updateData.enableHotelManagement = b(body.enableHotelManagement);
     if (body.enableLoyaltyProgram !== undefined) updateData.enableLoyaltyProgram = b(body.enableLoyaltyProgram);
     if (body.loyaltyMinOrderAmount !== undefined) updateData.loyaltyMinOrderAmount = n(body.loyaltyMinOrderAmount);
     if (body.loyaltyValueInRupees !== undefined) updateData.loyaltyValueInRupees = n(body.loyaltyValueInRupees);
     if (body.maxRedeemPointsPerBill !== undefined) updateData.maxRedeemPointsPerBill = n(body.maxRedeemPointsPerBill);
+    if (body.maxEarnPointsPerBill !== undefined) updateData.maxEarnPointsPerBill = body.maxEarnPointsPerBill !== null ? n(body.maxEarnPointsPerBill) : null;
     if (body.aiScraperEnabled !== undefined) updateData.aiScraperEnabled = b(body.aiScraperEnabled);
     if (body.excelImportEnabled !== undefined) updateData.excelImportEnabled = b(body.excelImportEnabled);
     if (body.multiZoneMenuEnabled !== undefined) updateData.multiZoneMenuEnabled = b(body.multiZoneMenuEnabled);
     if (body.expiryTrackingEnabled !== undefined) updateData.expiryTrackingEnabled = b(body.expiryTrackingEnabled);
     if (body.phonePrefixType !== undefined) updateData.phonePrefixType = s(body.phonePrefixType);
-    if (body.customUnits !== undefined) updateData.customUnits = body.customUnits;
     
     // ✅ QR Menu Settings
     if (body.qrMenuShowDetails !== undefined) updateData.qrMenuShowDetails = b(body.qrMenuShowDetails);
@@ -333,7 +386,7 @@ export async function POST(request: Request) {
     if (body.qrMenuCostForTwo !== undefined) updateData.qrMenuCostForTwo = s(body.qrMenuCostForTwo);
 
     if (body.printSettings !== undefined) updateData.printSettings = body.printSettings;
-    if (body.allowWalletEditDelete !== undefined || body.enableVirtualGroupVariants !== undefined || body.enableLoyaltyProgram !== undefined || body.loyaltyMinOrderAmount !== undefined || body.loyaltyValueInRupees !== undefined || body.maxRedeemPointsPerBill !== undefined) {
+    if (body.allowWalletEditDelete !== undefined || body.enableVirtualGroupVariants !== undefined || body.enableLoyaltyProgram !== undefined || body.loyaltyMinOrderAmount !== undefined || body.loyaltyValueInRupees !== undefined || body.maxRedeemPointsPerBill !== undefined || body.maxEarnPointsPerBill !== undefined || body.posHtmlPrintEnabled !== undefined || body.posWebBtPrintEnabled !== undefined) {
       updateData.printSettings = {
         ...((updateData.printSettings as any) || {}),
         ...(body.allowWalletEditDelete !== undefined ? { allowWalletEditDelete: b(body.allowWalletEditDelete) } : {}),
@@ -341,7 +394,16 @@ export async function POST(request: Request) {
         ...(body.enableLoyaltyProgram !== undefined ? { enableLoyaltyProgram: b(body.enableLoyaltyProgram) } : {}),
         ...(body.loyaltyMinOrderAmount !== undefined ? { loyaltyMinOrderAmount: n(body.loyaltyMinOrderAmount) } : {}),
         ...(body.loyaltyValueInRupees !== undefined ? { loyaltyValueInRupees: n(body.loyaltyValueInRupees) } : {}),
-        ...(body.maxRedeemPointsPerBill !== undefined ? { maxRedeemPointsPerBill: n(body.maxRedeemPointsPerBill) } : {})
+        ...(body.maxRedeemPointsPerBill !== undefined ? { maxRedeemPointsPerBill: n(body.maxRedeemPointsPerBill) } : {}),
+        ...(body.maxEarnPointsPerBill !== undefined ? { maxEarnPointsPerBill: body.maxEarnPointsPerBill !== null ? n(body.maxEarnPointsPerBill) : null } : {}),
+        ...(body.posHtmlPrintEnabled !== undefined ? { posHtmlPrintEnabled: b(body.posHtmlPrintEnabled) } : {}),
+        ...(body.posWebBtPrintEnabled !== undefined ? { posWebBtPrintEnabled: b(body.posWebBtPrintEnabled) } : {})
+      };
+    }
+    if (body.inventorySettings !== undefined) {
+      updateData.printSettings = {
+        ...((updateData.printSettings as any) || {}),
+        inventorySettings: body.inventorySettings
       };
     }
     if (body.reviewUrl !== undefined) updateData.reviewUrl = s(body.reviewUrl);
@@ -351,7 +413,29 @@ export async function POST(request: Request) {
     // ✅ FIX: Find specific profile if body.id is provided, otherwise find the first one unless it's a new profile
     const existingProfile = body.id 
       ? await prisma.businessProfile.findFirst({ where: { id: body.id, userId: effectiveId } })
-      : (body.isNewProfile ? null : await prisma.businessProfile.findFirst({ where: { userId: effectiveId } }));
+      : (body.isNewProfile ? null : await prisma.businessProfile.findFirst({ where: { userId: effectiveId }, orderBy: { createdAt: 'desc' } }));
+
+    if (existingProfile && updateData.printSettings) {
+      let existingPrint: Record<string, any> = {};
+      const raw = existingProfile.printSettings;
+      if (typeof raw === 'string') {
+        try { existingPrint = JSON.parse(raw) || {}; } catch { existingPrint = {}; }
+      } else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        existingPrint = raw as Record<string, any>;
+      }
+      updateData.printSettings = {
+        ...existingPrint,
+        ...updateData.printSettings,
+        ...(updateData.printSettings.inventorySettings
+          ? {
+              inventorySettings: {
+                ...(existingPrint.inventorySettings || {}),
+                ...updateData.printSettings.inventorySettings
+              }
+            }
+          : {})
+      };
+    }
 
     let profile;
     if (existingProfile) {
@@ -384,6 +468,27 @@ export async function POST(request: Request) {
           data: updateData
         });
       }
+
+      // ✅ FIX: Apply taxEnabled setting to ALL profiles for this user
+      if (updateData.taxEnabled !== undefined) {
+        await prisma.businessProfile.updateMany({
+          where: { userId: effectiveId },
+          data: { taxEnabled: updateData.taxEnabled }
+        });
+      }
+
+      // ✅ Sync POS Order Modes (Dining, Takeaway, Delivery) to ALL profiles for this user
+      if (updateData.posDiningEnabled !== undefined || updateData.posTakeawayEnabled !== undefined || updateData.posDeliveryEnabled !== undefined) {
+        const orderModeUpdates: any = {};
+        if (updateData.posDiningEnabled !== undefined) orderModeUpdates.posDiningEnabled = updateData.posDiningEnabled;
+        if (updateData.posTakeawayEnabled !== undefined) orderModeUpdates.posTakeawayEnabled = updateData.posTakeawayEnabled;
+        if (updateData.posDeliveryEnabled !== undefined) orderModeUpdates.posDeliveryEnabled = updateData.posDeliveryEnabled;
+
+        await prisma.businessProfile.updateMany({
+          where: { userId: effectiveId },
+          data: orderModeUpdates
+        });
+      }
     } else {
       profile = await prisma.businessProfile.create({
         data: {
@@ -392,19 +497,26 @@ export async function POST(request: Request) {
           // Ensure mandatory fields have defaults if missing in updateData
           businessName: updateData.businessName ?? s(body.businessName) ?? "My Business",
           taxEnabled: updateData.taxEnabled ?? b(body.taxEnabled) ?? false,
-          taxInclusive: updateData.taxInclusive ?? b(body.taxInclusive) ?? false,
-          taxRate: updateData.taxRate ?? n(body.taxRate) ?? 5.0,
           upiQrEnabled: updateData.upiQrEnabled ?? b(body.upiQrEnabled) ?? true,
           menuLinkEnabled: updateData.menuLinkEnabled ?? b(body.menuLinkEnabled) ?? true,
           greetingMessage: updateData.greetingMessage ?? s(body.greetingMessage) ?? "Thank You 🙏 Visit Again!",
           businessNameSize: updateData.businessNameSize ?? s(body.businessNameSize) ?? "large",
           tokenNumberSize: updateData.tokenNumberSize ?? n(body.tokenNumberSize) ?? 22,
-          gstType: updateData.gstType ?? s(body.gstType) ?? "PRODUCT",
         }
       });
     }
 
-    return NextResponse.json(profile, { status: 200 });
+    const cleanProfile = { ...profile };
+    delete (cleanProfile as any).taxRate;
+    delete (cleanProfile as any).gstType;
+    delete (cleanProfile as any).perProductTaxEnabled;
+    delete (cleanProfile as any).taxInclusive;
+    delete (cleanProfile as any).floorTaxEnabled;
+    delete (cleanProfile as any).floorTaxRate;
+    delete (cleanProfile as any).floorPerProductTaxEnabled;
+    delete (cleanProfile as any).floorTaxInclusive;
+
+    return NextResponse.json(cleanProfile, { status: 200 });
   } catch (error: any) {
     console.error("POST /api/profile error DETAILS:", error);
     return NextResponse.json(
@@ -416,4 +528,8 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+}
+
+export async function PUT(request: Request) {
+  return POST(request);
 }

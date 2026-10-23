@@ -9,13 +9,17 @@ export async function POST(req: Request) {
 
     const body = await req.json();
 
+    const updateData: any = {};
+    if (body.hiddenSidebarItems !== undefined) updateData.hiddenSidebarItems = body.hiddenSidebarItems;
+    if (body.sidebarOrder !== undefined) updateData.sidebarOrder = body.sidebarOrder;
+
     if (authUser.type === 'STAFF') {
       const staff = await prisma.staff.findUnique({ where: { id: authUser.id } });
       if (staff) {
         const currentMeta: any = staff.privateMetadata || {};
         await prisma.staff.update({
           where: { id: authUser.id },
-          data: { privateMetadata: { ...currentMeta, hiddenSidebarItems: body.hiddenSidebarItems } }
+          data: { privateMetadata: { ...currentMeta, ...updateData } }
         });
       }
     } else {
@@ -24,7 +28,7 @@ export async function POST(req: Request) {
         const currentMeta: any = user.privateMetadata || {};
         await prisma.user.update({
           where: { id: authUser.id },
-          data: { privateMetadata: { ...currentMeta, hiddenSidebarItems: body.hiddenSidebarItems } }
+          data: { privateMetadata: { ...currentMeta, ...updateData } }
         });
       }
     }

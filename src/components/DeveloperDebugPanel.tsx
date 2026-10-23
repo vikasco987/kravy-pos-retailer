@@ -79,15 +79,17 @@ ${log.parseError ? `ERROR: ${log.parseError}` : "SUCCESS"}
       <button
         onClick={() => setIsOpen(true)}
         data-floating-ui="true"
-        className="fixed z-[9999] flex items-center gap-2 right-[76px] bottom-[calc(20px+max(80px,env(safe-area-inset-bottom)))] lg:bottom-5 px-4 h-11 rounded-2xl cursor-pointer font-extrabold transition-all duration-200 print:hidden"
+        className="fixed z-[9999] flex items-center gap-1.5 left-3 sm:left-4 bottom-20 lg:bottom-4 px-2.5 h-7 rounded-lg cursor-pointer font-extrabold text-[11px] transition-all duration-200 print:hidden opacity-75 hover:opacity-100 shadow-md active:scale-95"
         style={{
           background: "linear-gradient(135deg,#1e1b4b,#312e81)",
           color: "#a5b4fc",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-          border: "1.5px solid rgba(99,102,241,0.4)",
+          boxShadow: "0 2px 10px rgba(0,0,0,0.3)",
+          border: "1px solid rgba(99,102,241,0.4)",
         }}
+        title="Developer Debug Panel (Admin Only)"
       >
-        <Bug size={18} color="#a5b4fc" /> Debug
+        <Bug size={13} color="#a5b4fc" />
+        <span className="hidden sm:inline">Debug</span>
       </button>
 
       {isOpen &&

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getEffectiveClerkId } from "@/lib/auth-utils";
+import { getEffectiveClerkId, getAuthUser } from "@/lib/auth-utils";
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
@@ -22,36 +22,58 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
 
     const dueAmount = bill.balanceDue || (bill.total - (bill.amountPaid || 0));
+    const targetMode = bill.paymentMode.includes("Wallet") ? "Wallet (Auto) + Cash" : bill.paymentMode;
 
-    // Update the bill
-    await prisma.billManager.update({
-      where: { id },
-      data: {
-        paymentStatus: "PAID",
-        amountPaid: bill.total,
-        balanceDue: 0,
-        paymentMode: bill.paymentMode.includes("Wallet") ? "Wallet (Auto) + Cash" : bill.paymentMode,
+    await prisma.$transaction(async (tx) => {
+      // 1. Update the bill
+      const updatedBill = await tx.billManager.update({
+        where: { id },
+        data: {
+          paymentStatus: "PAID",
+          amountPaid: bill.total,
+          balanceDue: 0,
+          paymentMode: targetMode,
+        }
+      });
+
+      // 2. If tied to a party, credit the wallet back the due amount
+      if (bill.partyId && dueAmount > 0) {
+        await tx.party.update({
+          where: { id: bill.partyId },
+          data: { walletBalance: { increment: dueAmount } }
+        });
+
+        await tx.walletTransaction.create({
+          data: {
+            partyId: bill.partyId,
+            clerkId: effectiveId,
+            type: "CREDIT",
+            amount: dueAmount,
+            description: `Cleared Udhar for Bill ${bill.billNumber} (Paid via History)`
+          }
+        });
       }
-    });
 
-    // If it was tied to a party, credit the wallet back the due amount
-    // because previously it was debited from the wallet as "Udhar" (Unpaid balance)
-    if (bill.partyId && dueAmount > 0) {
-      await prisma.party.update({
-        where: { id: bill.partyId },
-        data: { walletBalance: { increment: dueAmount } }
+      // 3. Record Audit History for Payment Event
+      const authUser = await getAuthUser();
+      await tx.billEditLog.create({
+        data: {
+          clerkUserId: effectiveId,
+          billId: updatedBill.id,
+          invoiceNo: updatedBill.billNumber,
+          actorId: authUser?.id || effectiveId,
+          actorName: authUser?.name || "Staff / Cashier",
+          actorRole: authUser?.role || authUser?.type || "STAFF",
+          eventType: "PAYMENT_UPDATE",
+          reason: "Marked full payment received",
+          changes: [
+            { field: "paymentStatus", label: "Payment Status", before: bill.paymentStatus, after: "PAID" },
+            { field: "amountPaid", label: "Amount Paid", before: bill.amountPaid || 0, after: bill.total },
+            { field: "balanceDue", label: "Balance Due", before: dueAmount, after: 0 }
+          ] as any,
+        }
       });
-      
-      await prisma.walletTransaction.create({
-         data: {
-             partyId: bill.partyId,
-             clerkId: effectiveId,
-             type: "CREDIT",
-             amount: dueAmount,
-             description: `Cleared Udhar for Bill ${bill.billNumber} (Paid via History)`
-         }
-      });
-    }
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getEffectiveClerkId, getAuthUser } from "@/lib/auth-utils";
+import { computeBillDiff } from "@/lib/audit-diff";
 
 /* ======================================================
    GET → View / Resume bill OR order
@@ -17,58 +18,63 @@ export async function GET(
 
     const { id } = await context.params;
 
-    // 1. Try finding in BillManager
-    let bill = await prisma.billManager.findFirst({
-      where: {
-        id,
-        clerkUserId: effectiveId,
-        isDeleted: false,
-      },
-      include: {
-        party: true
-      }
-    });
+    // Fetch from both tables concurrently since it's a primary key lookup. 
+    // ID will only exist in one of the tables.
+    const [billManagerRes, orderRes] = await Promise.all([
+      prisma.billManager.findUnique({
+        where: { id },
+        include: { party: true }
+      }),
+      prisma.order.findUnique({
+        where: { id },
+        include: { table: true }
+      })
+    ]);
 
-    // 2. Try finding in Order if not found in BillManager
-    if (!bill) {
-      const order = await prisma.order.findFirst({
-        where: {
-          id,
-          clerkUserId: effectiveId,
-          isDeleted: false,
-        },
-        include: {
-          table: true
-        }
-      });
+    let bill: any = null;
 
-      if (order) {
-        // Map Order to Bill-like structure
-        bill = {
-          ...order,
-          billNumber: `ORD-${order.id.slice(-4).toUpperCase()}`,
-          tableName: order.table?.name || "Counter",
-          items: (order.items as any[]).map(it => ({
-            ...it,
-            id: it.itemId || it.id,
-            rate: it.rate ?? it.price ?? 0,
-          })),
-          auditNote: order.notes || "",
-          paymentMode: order.paymentMode || "Cash",
-          paymentStatus: order.status === "COMPLETED" ? "Paid" : "Pending",
-          // ✅ Preserve tokens
-          kotNumbers: order.kotNumbers || [],
-          tokenNumber: order.tokenNumber || null,
-        } as any;
-      }
+    if (billManagerRes && billManagerRes.clerkUserId === effectiveId && !billManagerRes.isDeleted) {
+      bill = {
+        ...billManagerRes,
+        recordType: "BILL"
+      };
+    } else if (orderRes && orderRes.clerkUserId === effectiveId && !orderRes.isDeleted) {
+      // Map Order to Bill-like structure
+      bill = {
+        ...orderRes,
+        recordType: "ORDER",
+        billNumber: `ORD-${orderRes.id.slice(-4).toUpperCase()}`,
+        tableName: orderRes.table?.name || "Counter",
+        items: (orderRes.items as any[]).map((it: any) => ({
+          ...it,
+          id: it.itemId || it.id,
+          rate: it.rate ?? it.price ?? 0,
+        })),
+        auditNote: orderRes.notes || "",
+        paymentMode: orderRes.paymentMode || "Cash",
+        paymentStatus: orderRes.status === "COMPLETED" ? "Paid" : "Pending",
+        // ✅ Preserve tokens
+        kotNumbers: orderRes.kotNumbers || [],
+        tokenNumber: orderRes.tokenNumber || null,
+      };
     }
 
     if (!bill) {
       return NextResponse.json({ error: "Bill not found" }, { status: 404 });
     }
 
+    const authUser = await getAuthUser();
+    let canViewPhone = true;
+    if (authUser && authUser.role !== 'ADMIN' && authUser.role !== 'SELLER' && authUser.role !== 'OWNER' && authUser.role !== 'USER') {
+      canViewPhone = authUser.permissions?.includes("view-customer-phone") || false;
+    }
+
+    if (!canViewPhone && bill.customerPhone) {
+      bill.customerPhone = "";
+    }
+
     const business = await prisma.businessProfile.findFirst({
-      where: { userId: effectiveId },
+      where: { userId: effectiveId }
     });
 
     return NextResponse.json({ bill, business });
@@ -116,6 +122,7 @@ export async function PUT(
       serviceCharge,
       kotNumbers,
       tokenNumber,
+      isTaxInclusive,
     } = body;
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -137,8 +144,8 @@ export async function PUT(
     });
     
     const isTaxEnabled = profile?.taxEnabled ?? true;
-    const globalGstRate = isTaxEnabled ? (profile?.taxRate ?? 0) : 0;
-    const perProductEnabled = profile?.perProductTaxEnabled ?? false;
+    const globalGstRate = 0;
+    const perProductEnabled = true;
 
     // ✅ FETCH DB ITEMS
     const itemIds = items
@@ -160,11 +167,11 @@ export async function PUT(
       const rate = item.isCustomRate 
         ? Number(item.rate) 
         : (dbItem ? Number(dbItem.sellingPrice ?? dbItem.price) : Number(item.rate || item.price || 0));
-      const itemGstRate = (perProductEnabled && item.gst !== undefined && item.gst !== null) ? Number(item.gst) : globalGstRate;
-      const globalTaxInclusive = profile?.taxInclusive ?? false;
+      const itemGstRate = (isTaxEnabled && perProductEnabled && item.gst !== undefined && item.gst !== null) ? Number(item.gst) : (isTaxEnabled ? globalGstRate : 0);
+      const globalTaxInclusive = false;
       
       let isInclusive = false;
-      if (perProductEnabled && item.gst !== undefined && item.gst !== null) {
+      if (isTaxEnabled && perProductEnabled && item.gst !== undefined && item.gst !== null) {
         isInclusive = (item.taxStatus || "Without Tax") === "With Tax";
       } else if (isTaxEnabled) {
         isInclusive = globalTaxInclusive;
@@ -221,7 +228,7 @@ export async function PUT(
     let partyId = null;
     if (customerPhone && customerName && customerName !== "Walk-in Customer") {
       try {
-        const cleanPhone = customerPhone.replace(/[\s\-\(\)\+]/g, "").slice(-10);
+        const cleanPhone = customerPhone.replace(/[^\d+]/g, "").replace(/(?!^)\+/g, "");
         const party = await prisma.party.upsert({
           where: { phone_createdBy: { phone: cleanPhone, createdBy: effectiveId } },
           update: { name: customerName, address: customerAddress || null },
@@ -260,23 +267,107 @@ export async function PUT(
         console.log(`[IDEMPOTENCY] Returning existing converted bill for order ${id} without mutation.`);
         return NextResponse.json({ bill: existingBill });
       }
-      // ✅ UPDATE BILL
-      bill = await prisma.billManager.update({
-        where: { id },
-        data: {
-          items: processedItems, subtotal: finalSubtotal, tax, total: finalTotal,
-          paymentMode: finalPaymentMode, paymentStatus: finalPaymentStatus,
-          isHeld: body.isHeld === true, upiTxnRef: upiTxnRef || null,
-          customerName, customerPhone, customerAddress, partyId,
-          tableName, discountAmount: serverDiscountAmt, discountCode: validatedDiscountCode,
-          deliveryCharges: finalDeliveryCharge, deliveryGst: serverDeliveryGst,
-          packagingCharges: finalPackagingCharge, packagingGst: serverPackagingGst,
-          serviceCharge: finalServiceCharge, isKotPrinted: isKotPrinted === true,
-          auditNote: body.auditNote || null,
-          kotNumbers: kotNumbers || existingBill.kotNumbers,
-          tokenNumber: tokenNumber || existingBill.tokenNumber,
-        },
-      });
+      // ✅ UPDATE BILL (OCC Transaction for Loyalty)
+      const wasPaid = existingBill.paymentStatus === "Paid" || existingBill.paymentStatus === "PAID";
+      const isNowPaid = finalPaymentStatus === "Paid" || finalPaymentStatus === "PAID";
+      const isNotHeld = body.isHeld !== true;
+      
+      try {
+          bill = await prisma.$transaction(async (tx) => {
+              const whereCondition: any = { id: existingBill.id };
+              if (!existingBill.isHeld) {
+                  whereCondition.paymentStatus = existingBill.paymentStatus;
+              }
+              const finalAmountPaid = body.amountPaid !== undefined ? Number(body.amountPaid) : (finalPaymentStatus === "Paid" ? finalTotal : 0);
+              const finalBalanceDue = Math.max(0, finalTotal - finalAmountPaid);
+              const claim = await tx.billManager.updateMany({
+                  where: whereCondition,
+                  data: {
+                      currencySymbol: profile?.currencySymbol || body.currencySymbol || "₹",
+                      items: processedItems, subtotal: finalSubtotal, tax, total: finalTotal,
+                      paymentMode: finalPaymentMode, paymentStatus: finalPaymentStatus,
+                      amountPaid: finalAmountPaid, balanceDue: finalBalanceDue,
+                      buyerGSTIN: body.buyerGSTIN || null,
+                      placeOfSupply: body.placeOfSupply || null,
+                      isHeld: body.isHeld === true, upiTxnRef: upiTxnRef || null,
+                      customerName, customerPhone, customerAddress, partyId,
+                      tableName, discountAmount: serverDiscountAmt, discountCode: validatedDiscountCode,
+                      deliveryCharges: finalDeliveryCharge, deliveryGst: serverDeliveryGst,
+                      packagingCharges: finalPackagingCharge, packagingGst: serverPackagingGst,
+                      serviceCharge: finalServiceCharge,
+                      isKotPrinted: isKotPrinted === true,
+                      auditNote: body.auditNote || null,
+                      kotNumbers: kotNumbers || existingBill.kotNumbers,
+                      tokenNumber: tokenNumber || existingBill.tokenNumber,
+                      isTaxInclusive: typeof isTaxInclusive === 'boolean' ? isTaxInclusive : null,
+                  }
+              });
+              
+              if (claim.count === 0) {
+                  throw new Error("P2034");
+              }
+              
+              const updatedBill = await tx.billManager.findUnique({ where: { id: existingBill.id } });
+              
+              if (!wasPaid && isNowPaid && isNotHeld && updatedBill?.partyId) {
+                  const pointRatio = profile?.loyaltyPointRatio && profile.loyaltyPointRatio > 0 ? profile.loyaltyPointRatio : 0;
+                  const minOrder = profile?.loyaltyMinOrderAmount || 0;
+                  if (updatedBill.subtotal >= minOrder) {
+                      const calculatedPoints = pointRatio > 0 ? Math.floor(updatedBill.subtotal / pointRatio) : 0;
+                      const earnedPoints = (profile?.maxEarnPointsPerBill && profile.maxEarnPointsPerBill > 0) ? Math.min(calculatedPoints, profile.maxEarnPointsPerBill) : calculatedPoints;
+                      if (earnedPoints > 0) {
+                          await tx.party.update({
+                              where: { id: updatedBill.partyId },
+                              data: { loyaltyPoints: { increment: earnedPoints } }
+                          });
+                      }
+                  }
+              }
+
+              // ✅ AUDIT TRAIL: Record BillEditLog for actual changes
+              if (updatedBill) {
+                  const changes = computeBillDiff(existingBill, {
+                      items: processedItems, subtotal: finalSubtotal, tax, total: finalTotal,
+                      paymentMode: finalPaymentMode, paymentStatus: finalPaymentStatus,
+                      amountPaid: finalAmountPaid, balanceDue: finalBalanceDue,
+                      customerName, customerPhone, customerAddress,
+                      discountAmount: serverDiscountAmt, discountCode: validatedDiscountCode,
+                      deliveryCharges: finalDeliveryCharge, packagingCharges: finalPackagingCharge,
+                      serviceCharge: finalServiceCharge, isHeld: body.isHeld === true
+                  });
+
+                  if (changes.length > 0) {
+                      const authUser = await getAuthUser();
+                      const eventType = (wasPaid !== isNowPaid || existingBill.amountPaid !== finalAmountPaid)
+                          ? "PAYMENT_UPDATE"
+                          : (body.isHeld !== undefined && body.isHeld !== existingBill.isHeld)
+                          ? "HOLD_STATUS"
+                          : "BILL_EDIT";
+
+                      await tx.billEditLog.create({
+                          data: {
+                              clerkUserId: effectiveId,
+                              billId: updatedBill.id,
+                              invoiceNo: updatedBill.billNumber,
+                              actorId: authUser?.id || effectiveId,
+                              actorName: authUser?.name || "Staff / Cashier",
+                              actorRole: authUser?.role || authUser?.type || "STAFF",
+                              eventType,
+                              reason: body.auditNote || null,
+                              changes: changes as any,
+                          }
+                      });
+                  }
+              }
+              
+              return updatedBill!;
+          });
+      } catch (err: any) {
+          if (err.message?.includes("P2034")) {
+              return NextResponse.json({ error: "Concurrent update detected. Please try again." }, { status: 409 });
+          }
+          throw err;
+      }
     } else {
       // ✅ CONVERT ORDER TO BILL
       if (!existingOrder) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -292,7 +383,7 @@ export async function PUT(
         try {
           const profile = body.profileId
             ? await prisma.businessProfile.findUnique({ where: { id: body.profileId } })
-            : await prisma.businessProfile.findFirst({ where: { userId: effectiveId }, orderBy: { createdAt: 'asc' } });
+            : await prisma.businessProfile.findFirst({ where: { userId: effectiveId }, orderBy: { createdAt: 'desc' } });
 
           bill = await prisma.$transaction(async (tx) => {
             let nextSerial = 1;
@@ -309,10 +400,29 @@ export async function PUT(
 
             const billNumber = `INV/${yy}${mm}/${String(nextSerial).padStart(4, '0')}`;
 
+            // ✅ EXACTLY-ONCE EARNING ON CONVERSION
+            const isNowPaid = finalPaymentStatus === "Paid" || finalPaymentStatus === "PAID";
+            let earnedPoints = 0;
+            if (isNowPaid && body.isHeld !== true && partyId) {
+                const pointRatio = profile?.loyaltyPointRatio && profile.loyaltyPointRatio > 0 ? profile.loyaltyPointRatio : 0;
+                const minOrder = profile?.loyaltyMinOrderAmount || 0;
+                if (finalSubtotal >= minOrder) {
+                    const calculatedPoints = pointRatio > 0 ? Math.floor(finalSubtotal / pointRatio) : 0;
+                    earnedPoints = (profile?.maxEarnPointsPerBill && profile.maxEarnPointsPerBill > 0) ? Math.min(calculatedPoints, profile.maxEarnPointsPerBill) : calculatedPoints;
+                    if (earnedPoints > 0) {
+                        await tx.party.update({
+                            where: { id: partyId },
+                            data: { loyaltyPoints: { increment: earnedPoints } }
+                        });
+                    }
+                }
+            }
+
             const createdBill = await tx.billManager.create({
               data: {
                 idempotencyKey,
                 orderId: id,
+                currencySymbol: profile?.currencySymbol || body.currencySymbol || "₹",
                 clerkUserId: effectiveId, billNumber, items: processedItems, subtotal: finalSubtotal, tax, total: finalTotal,
                 paymentMode: finalPaymentMode, paymentStatus: finalPaymentStatus,
                 isHeld: body.isHeld === true, upiTxnRef: upiTxnRef || null,
@@ -323,10 +433,14 @@ export async function PUT(
                 discountAmount: serverDiscountAmt, discountCode: validatedDiscountCode,
                 deliveryCharges: finalDeliveryCharge, deliveryGst: serverDeliveryGst,
                 packagingCharges: finalPackagingCharge, packagingGst: serverPackagingGst,
-                serviceCharge: finalServiceCharge, isKotPrinted: isKotPrinted === true,
+                serviceCharge: finalServiceCharge,
+                isKotPrinted: isKotPrinted === true,
                 auditNote: body.auditNote || "Finalized from Online Order",
                 kotNumbers: kotNumbers || existingOrder.kotNumbers,
                 tokenNumber: tokenNumber || existingOrder.tokenNumber,
+                isTaxInclusive: typeof isTaxInclusive === 'boolean' ? isTaxInclusive : null,
+                isTaxEnabled: profile?.taxEnabled ?? false,
+                loyaltyEarned: earnedPoints,
               },
             });
 
@@ -334,6 +448,7 @@ export async function PUT(
               where: { id },
               data: { status: "COMPLETED", isBillPrinted: true }
             });
+            
 
             return createdBill;
           });
@@ -362,6 +477,77 @@ export async function PUT(
       }
     }
 
+    const { getInventorySettings } = await import("@/lib/inventory-utils");
+    const invSettings = getInventorySettings(profile);
+
+    let didDeductPutInventory = false;
+    if (bill && !bill.isHeld && body.skipInventoryDeduction !== true && invSettings.enabled !== false) {
+      try {
+        const { withTransactionRetry, executeInventoryDeduction, calculateIncrementalItems } = await import("@/lib/inventory-utils");
+        await withTransactionRetry(async (tx) => {
+          let itemsToDeduct = (bill.items as any[]) || [];
+          if (isOrderConversion && existingOrder) {
+            const claim = await tx.billManager.updateMany({
+              where: { id: bill.id, inventoryDeducted: false },
+              data: { inventoryDeducted: true }
+            });
+            if (claim.count > 0) {
+              if (existingOrder.inventoryDeducted) {
+                itemsToDeduct = calculateIncrementalItems(itemsToDeduct, existingOrder.items as any[]);
+              }
+              if (itemsToDeduct.length > 0) {
+                await executeInventoryDeduction(tx, itemsToDeduct, invSettings);
+                didDeductPutInventory = true;
+              }
+            }
+          } else if (existingBill) {
+            if (!existingBill.inventoryDeducted) {
+              const claim = await tx.billManager.updateMany({
+                where: { id: bill.id, inventoryDeducted: false },
+                data: { inventoryDeducted: true }
+              });
+              if (claim.count > 0) {
+                if (bill.orderId) {
+                  const linkedOrder = await tx.order.findUnique({ where: { id: bill.orderId } });
+                  if (linkedOrder?.inventoryDeducted) {
+                    itemsToDeduct = calculateIncrementalItems(itemsToDeduct, linkedOrder.items as any[]);
+                  }
+                }
+                if (itemsToDeduct.length > 0) {
+                  await executeInventoryDeduction(tx, itemsToDeduct, invSettings);
+                  didDeductPutInventory = true;
+                }
+              }
+            } else {
+              // Existing bill was already deducted, but items might have been modified/added during PUT
+              const incrementalItems = calculateIncrementalItems(itemsToDeduct, existingBill.items as any[]);
+              if (incrementalItems.length > 0) {
+                await executeInventoryDeduction(tx, incrementalItems, invSettings);
+                didDeductPutInventory = true;
+              }
+            }
+          }
+        });
+      } catch (invErr) {
+        console.error(`[INVENTORY_PUT_DEDUCTION_ERROR] billId=${bill?.id}:`, invErr);
+      }
+
+      // Post-commit authoritative realtime broadcast for Inventory & connected screens
+      if (didDeductPutInventory && (global as any).io) {
+        try {
+          (global as any).io.to(`business_${effectiveId}`).emit("dashboard_update", {
+            businessId: effectiveId,
+            type: "INVENTORY_UPDATE",
+            action: isOrderConversion ? "ORDER_CONVERTED_TO_BILL" : "BILL_UPDATED",
+            billId: bill?.id,
+            timestamp: Date.now()
+          });
+        } catch (ioErr) {
+          console.error("[BILL_PUT_SOCKET_ERROR]:", ioErr);
+        }
+      }
+    }
+
     return NextResponse.json({ bill });
   } catch (err) {
     console.error("BILL MANAGER UPDATE ERROR:", err);
@@ -382,16 +568,88 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
     const deleteReason = req.headers.get("x-delete-reason") || "Deleted manually";
     const bill = await prisma.billManager.findFirst({ where: { id, clerkUserId: effectiveId } });
     if (bill) {
-      await prisma.billManager.update({ 
-        where: { id }, 
-        data: { 
-          isDeleted: true,
-          isHeld: false,
-          paymentStatus: "DELETED",
-          auditNote: `Reason: ${deleteReason}`,
-          deletedSnapshot: bill as any 
-        } 
+      if (bill.isDeleted) {
+        return NextResponse.json({ success: true, type: "bill", alreadyDeleted: true });
+      }
+      let didRestoreInventory = false;
+      await prisma.$transaction(async (tx) => {
+        // Atomic claim: only one concurrent/repeated call can transition isDeleted from false to true
+        const claim = await tx.billManager.updateMany({
+          where: { id, clerkUserId: effectiveId, isDeleted: false },
+          data: {
+            isDeleted: true,
+            isHeld: false,
+            paymentStatus: "DELETED",
+            inventoryDeducted: false,
+            auditNote: `Reason: ${deleteReason}`,
+            deletedSnapshot: bill as any,
+            loyaltyEarned: 0,
+            loyaltyRedeemed: 0,
+          }
+        });
+
+        if (claim.count === 0) {
+          // Lost race to another concurrent delete
+          return;
+        }
+
+        // Loyalty Reversal if the bill is deleted
+        if (bill.partyId) {
+          const earnedToReverse = bill.loyaltyEarned || 0;
+          const redeemedToReverse = bill.loyaltyRedeemed || 0;
+          const netReversal = redeemedToReverse - earnedToReverse;
+          if (netReversal !== 0) {
+            await tx.party.update({
+              where: { id: bill.partyId },
+              data: { loyaltyPoints: { increment: netReversal } }
+            });
+          }
+        }
+
+        // Inventory Restoration on Bill deletion (only if inventory was actually deducted)
+        let shouldRestoreBillStock = bill.inventoryDeducted && Array.isArray(bill.items) && bill.items.length > 0;
+
+        // Cross-entity protection: If linked to an order, verify order didn't already restore stock
+        if (bill.orderId) {
+          const linkedOrder = await tx.order.findUnique({ where: { id: bill.orderId } });
+          if (linkedOrder && linkedOrder.isDeleted && !linkedOrder.inventoryDeducted) {
+            // Linked order was already deleted and previously restored stock; skip duplicate restoration
+            shouldRestoreBillStock = false;
+          }
+
+          // Neutralize linked order so it cannot be restored subsequently
+          await tx.order.updateMany({
+            where: { id: bill.orderId },
+            data: {
+              isDeleted: true,
+              status: "DELETED",
+              inventoryDeducted: false,
+            }
+          });
+        }
+
+        if (shouldRestoreBillStock) {
+          const { executeInventoryRestoration } = await import("@/lib/inventory-utils");
+          await executeInventoryRestoration(tx, bill.items as any[]);
+          didRestoreInventory = true;
+        }
       });
+
+      // Post-commit authoritative realtime broadcast for Inventory Hub & connected clients
+      if (didRestoreInventory && (global as any).io) {
+        try {
+          (global as any).io.to(`business_${effectiveId}`).emit("dashboard_update", {
+            businessId: effectiveId,
+            type: "INVENTORY_UPDATE",
+            action: "BILL_DELETED",
+            billId: id,
+            timestamp: Date.now()
+          });
+        } catch (ioErr) {
+          console.error("[BILL_DELETE_SOCKET_ERROR]:", ioErr);
+        }
+      }
+
       return NextResponse.json({ success: true, type: "bill" });
     }
 
@@ -400,25 +658,86 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
       include: { table: true }
     });
     if (order) {
-      await prisma.order.update({ 
-        where: { id }, 
-        data: { 
-          isDeleted: true,
-          status: "DELETED",
-          notes: `Reason: ${deleteReason}`,
-          deletedSnapshot: order as any
-        } 
-      });
-      if (order.tableId) {
-        try {
-          await prisma.table.update({
-            where: { id: order.tableId },
-            data: { isOccupied: false, currentOrderId: null } as any
+      if (order.isDeleted) {
+        return NextResponse.json({ success: true, type: "order", alreadyDeleted: true });
+      }
+      let didRestoreOrderInventory = false;
+      await prisma.$transaction(async (tx) => {
+        const claim = await tx.order.updateMany({
+          where: { id, clerkUserId: effectiveId, isDeleted: false },
+          data: {
+            isDeleted: true,
+            status: "DELETED",
+            inventoryDeducted: false,
+            notes: `Reason: ${deleteReason}`,
+            deletedSnapshot: order as any
+          }
+        });
+
+        if (claim.count === 0) {
+          return;
+        }
+
+        // Cross-entity protection: check if any linked BillManager exists
+        const linkedBills = await tx.billManager.findMany({
+          where: { orderId: order.id, clerkUserId: effectiveId }
+        });
+
+        const anyLinkedBillAlreadyRestored = linkedBills.some(b => b.isDeleted && !b.inventoryDeducted);
+
+        // Inventory Restoration on Order deletion (only if inventory was actually deducted and not already restored by bill)
+        let shouldRestoreOrderStock = order.inventoryDeducted && Array.isArray(order.items) && order.items.length > 0;
+        if (anyLinkedBillAlreadyRestored) {
+          // A linked bill was already deleted and handled restoration; skip duplicate restoration
+          shouldRestoreOrderStock = false;
+        }
+
+        if (shouldRestoreOrderStock) {
+          const { executeInventoryRestoration } = await import("@/lib/inventory-utils");
+          await executeInventoryRestoration(tx, order.items as any[]);
+          didRestoreOrderInventory = true;
+        }
+
+        // Neutralize all linked bills so they cannot restore the same stock in the future
+        if (linkedBills.length > 0) {
+          await tx.billManager.updateMany({
+            where: { orderId: order.id, clerkUserId: effectiveId },
+            data: {
+              isDeleted: true,
+              paymentStatus: "DELETED",
+              inventoryDeducted: false,
+              auditNote: `Neutralized via Order deletion: ${deleteReason}`
+            }
           });
-        } catch (tErr) {
-          console.error("Failed to free table on order delete:", tErr);
+        }
+
+        if (order.tableId) {
+          try {
+            await tx.table.update({
+              where: { id: order.tableId },
+              data: { isOccupied: false, currentOrderId: null } as any
+            });
+          } catch (tErr) {
+            console.error("Failed to free table on order delete:", tErr);
+          }
+        }
+      });
+
+      // Post-commit authoritative realtime broadcast for Inventory Hub & connected clients
+      if (didRestoreOrderInventory && (global as any).io) {
+        try {
+          (global as any).io.to(`business_${effectiveId}`).emit("dashboard_update", {
+            businessId: effectiveId,
+            type: "INVENTORY_UPDATE",
+            action: "ORDER_DELETED",
+            orderId: id,
+            timestamp: Date.now()
+          });
+        } catch (ioErr) {
+          console.error("[ORDER_DELETE_SOCKET_ERROR]:", ioErr);
         }
       }
+
       return NextResponse.json({ success: true, type: "order" });
     }
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -473,7 +792,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
       if (existingPhone && existingName && existingName !== "Walk-in Customer") {
         try {
-          const cleanPhone = existingPhone.replace(/[\s\-\(\)\+]/g, "").slice(-10);
+          const cleanPhone = existingPhone.replace(/[^\d+]/g, "").replace(/(?!^)\+/g, "");
           const party = await prisma.party.upsert({
             where: { phone_createdBy: { phone: cleanPhone, createdBy: effectiveId } },
             update: { name: existingName, address: existingAddress || null },
@@ -489,13 +808,144 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     // 1. Try finding and updating in BillManager
     const existingBill = await prisma.billManager.findUnique({ where: { id } });
     if (existingBill) {
-      const bill = await prisma.billManager.update({
-        where: { id },
-        data,
-      });
+      const isNowPaid = data.paymentStatus === "Paid" || data.paymentStatus === "PAID";
+      const isNotHeld = data.isHeld === false || (!("isHeld" in data) && !existingBill.isHeld);
+      const wasPaid = existingBill.paymentStatus === "Paid" || existingBill.paymentStatus === "PAID";
+
+      let bill;
+      let didRestoreInventory = false;
+      try {
+          bill = await prisma.$transaction(async (tx) => {
+              // 1. ATOMIC OCC (Optimistic Concurrency Control) UPDATE
+              // We only update if the paymentStatus hasn't changed since we read it.
+              const claim = await tx.billManager.updateMany({
+                  where: { id, paymentStatus: existingBill.paymentStatus },
+                  data
+              });
+              
+              if (claim.count === 0) {
+                  throw new Error("P2034: Concurrency collision during bill update.");
+              }
+              
+              const updatedBill = await tx.billManager.findUnique({ where: { id } });
+              
+              // 2. EXACTLY-ONCE LOYALTY EARNING OR REVERSAL
+              if (!wasPaid && isNowPaid && isNotHeld && updatedBill?.partyId) {
+                  // EARNING: The bill just became PAID
+                  const profile = await tx.businessProfile.findFirst({ where: { userId: effectiveId } });
+                  const pointRatio = profile?.loyaltyPointRatio && profile.loyaltyPointRatio > 0 ? profile.loyaltyPointRatio : 0;
+                  const minOrder = profile?.loyaltyMinOrderAmount || 0;
+                  if (updatedBill.subtotal >= minOrder) {
+                      const calculatedPoints = pointRatio > 0 ? Math.floor(updatedBill.subtotal / pointRatio) : 0;
+                      const earnedPoints = (profile?.maxEarnPointsPerBill && profile.maxEarnPointsPerBill > 0) ? Math.min(calculatedPoints, profile.maxEarnPointsPerBill) : calculatedPoints;
+                      
+                      if (earnedPoints > 0) {
+                          await tx.party.update({
+                              where: { id: updatedBill.partyId },
+                              data: { loyaltyPoints: { increment: earnedPoints } }
+                          });
+                          // Record that this bill earned points!
+                          await tx.billManager.update({
+                              where: { id },
+                              data: { loyaltyEarned: earnedPoints }
+                          });
+                      }
+                  }
+              } else if (wasPaid && !isNowPaid && updatedBill?.partyId) {
+                  // REVERSAL: The bill was Paid, but now it is Pending, Refunded, etc.
+                  const earnedToReverse = existingBill.loyaltyEarned || 0;
+                  const redeemedToReverse = existingBill.loyaltyRedeemed || 0;
+                  const netReversal = redeemedToReverse - earnedToReverse; // Add back redeemed, subtract earned
+                  if (netReversal !== 0) {
+                      await tx.party.update({
+                          where: { id: updatedBill.partyId },
+                          data: { loyaltyPoints: { increment: netReversal } }
+                      });
+                      // Reset the points on the bill so they don't get reversed twice
+                      await tx.billManager.update({
+                          where: { id },
+                          data: { loyaltyEarned: 0, loyaltyRedeemed: 0 }
+                      });
+                  }
+              }
+
+              // 2b. EXACTLY-ONCE INVENTORY RESTORATION ON CANCELLATION / REFUND
+              if ((data.paymentStatus === "CANCELLED" || data.paymentStatus === "REFUNDED" || data.paymentStatus === "DELETED") && existingBill.inventoryDeducted) {
+                  const invClaim = await tx.billManager.updateMany({
+                      where: { id, inventoryDeducted: true },
+                      data: { inventoryDeducted: false }
+                  });
+                  if (invClaim.count > 0 && Array.isArray(existingBill.items) && existingBill.items.length > 0) {
+                      const { executeInventoryRestoration } = await import("@/lib/inventory-utils");
+                      await executeInventoryRestoration(tx, existingBill.items);
+                      didRestoreInventory = true;
+                  }
+              }
+
+              // ✅ AUDIT TRAIL: Record BillEditLog for PATCH changes
+              if (updatedBill) {
+                  const changes = computeBillDiff(existingBill, data);
+                  if (changes.length > 0) {
+                      const authUser = await getAuthUser();
+                      let eventType = "BILL_EDIT";
+                      if (data.paymentStatus !== undefined || data.paymentMode !== undefined) {
+                          eventType = "STATUS_CHANGE";
+                      } else if (data.customerName !== undefined || data.customerPhone !== undefined || data.customerAddress !== undefined) {
+                          eventType = "CUSTOMER_UPDATE";
+                      } else if (data.isHeld !== undefined) {
+                          eventType = "HOLD_STATUS";
+                      }
+
+                      await tx.billEditLog.create({
+                          data: {
+                              clerkUserId: effectiveId,
+                              billId: updatedBill.id,
+                              invoiceNo: updatedBill.billNumber,
+                              actorId: authUser?.id || effectiveId,
+                              actorName: authUser?.name || "Staff / Cashier",
+                              actorRole: authUser?.role || authUser?.type || "STAFF",
+                              eventType,
+                              reason: data.auditNote || null,
+                              changes: changes as any,
+                          }
+                      });
+                  }
+              }
+              
+              return updatedBill!;
+          });
+      } catch (err: any) {
+          if (err.message?.includes("P2034")) {
+              return NextResponse.json({ error: "Concurrent update detected. Please try again." }, { status: 409 });
+          }
+          throw err;
+      }
+
+      // Post-commit authoritative realtime broadcast on successful cancellation/refund
+      if (didRestoreInventory && (global as any).io) {
+        try {
+          (global as any).io.to(`business_${effectiveId}`).emit("dashboard_update", {
+            businessId: effectiveId,
+            type: "INVENTORY_UPDATE",
+            action: data.paymentStatus === "CANCELLED" ? "BILL_CANCELLED" : "BILL_REFUNDED",
+            billId: id,
+            timestamp: Date.now()
+          });
+        } catch (ioErr) {
+          console.error("[BILL_PATCH_SOCKET_ERROR]:", ioErr);
+        }
+      }
 
       // ✅ AUTO-DEDUCT INVENTORY WHEN SETTLING A HELD BILL (ATOMIC)
-      if (existingBill.isHeld && data.isHeld === false && !existingBill.inventoryDeducted) {
+      const currentProfile = await prisma.businessProfile.findFirst({
+        where: { userId: effectiveId },
+        orderBy: { createdAt: 'desc' }
+      });
+      const { getInventorySettings } = await import("@/lib/inventory-utils");
+      const invSettings = getInventorySettings(currentProfile);
+
+      let didDeductHeldInventory = false;
+      if (existingBill.isHeld && data.isHeld === false && !existingBill.inventoryDeducted && invSettings.enabled !== false) {
         console.log(`[BILL_MANAGER_DEBUG] Bill ${bill.billNumber} settled from HELD state. Awaiting background inventory deduction.`);
         
         const { withTransactionRetry, executeInventoryDeduction } = await import("@/lib/inventory-utils");
@@ -539,7 +989,8 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
                     }
                     
                     if (itemsToDeduct.length > 0) {
-                        await executeInventoryDeduction(tx, itemsToDeduct);
+                        await executeInventoryDeduction(tx, itemsToDeduct, invSettings);
+                        didDeductHeldInventory = true;
                         console.log(`[INVENTORY_PERF] source=bill_manager_put billId=${bill.id} durationMs=${Date.now() - tInvStart} status=success`);
                     }
                 }
@@ -551,40 +1002,130 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         }
       }
 
+      // Post-commit authoritative realtime broadcast if held bill settlement deducted inventory
+      if (didDeductHeldInventory && (global as any).io) {
+        try {
+          (global as any).io.to(`business_${effectiveId}`).emit("dashboard_update", {
+            businessId: effectiveId,
+            type: "INVENTORY_UPDATE",
+            action: "HELD_BILL_SETTLED",
+            billId: bill.id,
+            timestamp: Date.now()
+          });
+        } catch (ioErr) {
+          console.error("[HELD_BILL_SETTLE_SOCKET_ERROR]:", ioErr);
+        }
+      }
+
       return NextResponse.json({ bill });
     }
 
     // 2. Try finding and updating in Order
     const existingOrder = await prisma.order.findUnique({ where: { id }, include: { table: true } });
     if (existingOrder) {
+      if (existingOrder.clerkUserId !== effectiveId) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      let didRestoreOrderInventory = false;
       const orderData: any = {};
       if (data.customerName !== undefined) orderData.customerName = data.customerName;
       if (data.customerPhone !== undefined) orderData.customerPhone = data.customerPhone;
       if (data.paymentMode !== undefined) orderData.paymentMode = data.paymentMode;
+      if (data.auditNote !== undefined) orderData.notes = data.auditNote;
+
+      const isCancelOrRefund = data.paymentStatus === "CANCELLED" || data.paymentStatus === "REFUNDED" || data.paymentStatus === "DELETED";
       if (data.paymentStatus === "Paid") {
         orderData.status = "COMPLETED";
+      } else if (isCancelOrRefund) {
+        orderData.status = "CANCELLED";
       }
 
-      const order = await prisma.order.update({
-        where: { id },
-        data: orderData,
-      });
+      let updatedOrder: any = null;
+
+      try {
+        await prisma.$transaction(async (tx) => {
+          if (isCancelOrRefund && existingOrder.inventoryDeducted) {
+            // ATOMIC CLAIM: Only one concurrent or repeated call can claim inventory restoration
+            const claim = await tx.order.updateMany({
+              where: {
+                id,
+                clerkUserId: effectiveId,
+                inventoryDeducted: true,
+              },
+              data: {
+                ...orderData,
+                inventoryDeducted: false,
+              }
+            });
+
+            if (claim.count > 0) {
+              // Successfully claimed inventory restoration responsibility
+              if (Array.isArray(existingOrder.items) && existingOrder.items.length > 0) {
+                const { executeInventoryRestoration } = await import("@/lib/inventory-utils");
+                await executeInventoryRestoration(tx, existingOrder.items as any[]);
+              }
+              didRestoreOrderInventory = true;
+            } else {
+              // Lost claim (already claimed concurrently or already cancelled/restored)
+              // Update remaining fields if needed without double restoration
+              await tx.order.updateMany({
+                where: { id, clerkUserId: effectiveId },
+                data: orderData
+              });
+            }
+          } else {
+            // Standard update (payment status change, customer details, or order with inventoryDeducted: false)
+            await tx.order.updateMany({
+              where: { id, clerkUserId: effectiveId },
+              data: orderData
+            });
+          }
+
+          updatedOrder = await tx.order.findUnique({
+            where: { id },
+            include: { table: true }
+          });
+        });
+      } catch (err: any) {
+        console.error("[ORDER_PATCH_TX_ERROR]:", err);
+        return NextResponse.json({ error: "Failed to update order" }, { status: 500 });
+      }
+
+      if (!updatedOrder) {
+        return NextResponse.json({ error: "Record not found" }, { status: 404 });
+      }
+
+      // Post-commit authoritative realtime broadcast on successful order cancellation/refund
+      if (didRestoreOrderInventory && (global as any).io) {
+        try {
+          (global as any).io.to(`business_${effectiveId}`).emit("dashboard_update", {
+            businessId: effectiveId,
+            type: "INVENTORY_UPDATE",
+            action: data.paymentStatus === "CANCELLED" ? "ORDER_CANCELLED" : (data.paymentStatus === "REFUNDED" ? "ORDER_REFUNDED" : "ORDER_DELETED"),
+            orderId: updatedOrder.id,
+            timestamp: Date.now()
+          });
+        } catch (ioErr) {
+          console.error("[ORDER_PATCH_SOCKET_ERROR]:", ioErr);
+        }
+      }
 
       // Map Order back to Bill-like structure
       const mappedOrder = {
-        ...order,
-        billNumber: `ORD-${order.id.slice(-4).toUpperCase()}`,
-        tableName: existingOrder.table?.name || "Counter",
-        items: (order.items as any[]).map(it => ({
+        ...updatedOrder,
+        billNumber: `ORD-${updatedOrder.id.slice(-4).toUpperCase()}`,
+        tableName: updatedOrder.table?.name || existingOrder.table?.name || "Counter",
+        items: (updatedOrder.items as any[]).map(it => ({
           ...it,
           id: it.itemId || it.id,
           rate: it.rate ?? it.price ?? 0,
         })),
-        auditNote: order.notes || "",
-        paymentMode: order.paymentMode || "Cash",
-        paymentStatus: order.status === "COMPLETED" ? "Paid" : "Pending",
-        kotNumbers: order.kotNumbers || [],
-        tokenNumber: order.tokenNumber || null,
+        auditNote: updatedOrder.notes || "",
+        paymentMode: updatedOrder.paymentMode || "Cash",
+        paymentStatus: updatedOrder.status === "COMPLETED" ? "Paid" : "Pending",
+        kotNumbers: updatedOrder.kotNumbers || [],
+        tokenNumber: updatedOrder.tokenNumber || null,
       };
 
       return NextResponse.json({ bill: mappedOrder });

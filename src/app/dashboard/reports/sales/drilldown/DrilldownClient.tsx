@@ -13,6 +13,18 @@ import {
 import { kravy } from "@/lib/sounds";
 import { BillActionsReport } from "@/app/dashboard/reports/sales/daily/BillActionsReport";
 import ReportExportDropdown from "@/components/ReportExportDropdown";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface DrilldownClientProps {
   businessName: string;
@@ -250,49 +262,41 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
   }, [startDate, endDate, drilldownStack, activeTab]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "28px", padding: "20px", background: "var(--kravy-bg)", minHeight: "100vh" }}>
+    <div className="flex flex-col gap-5 sm:gap-6 w-full pb-12">
       
       {/* ── Header Row ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "20px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-          <Link href="/dashboard" style={{
-            width: "48px", height: "48px", borderRadius: "16px", background: "var(--kravy-surface)",
-            border: "1px solid var(--kravy-border)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--kravy-text-primary)",
-            boxShadow: "var(--kravy-shadow-sm)"
-          }}>
-            <ChevronLeft size={24} style={{ marginTop: "11px" }} />
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+          <Link 
+            href="/dashboard" 
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[var(--kravy-surface)] border border-[var(--kravy-border)] flex items-center justify-center text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-bg-2)] transition shrink-0"
+          >
+            <ChevronLeft size={22} />
           </Link>
           <div>
-            <h1 style={{ fontSize: "2.2rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1.8px", lineHeight: 1, marginBottom: "6px" }}>
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-[var(--kravy-text-primary)] tracking-tight whitespace-nowrap">
               Sales Analytics
             </h1>
-            <p style={{ fontSize: "0.85rem", color: "var(--kravy-text-muted)", display: "flex", alignItems: "center", gap: "6px" }}>
-              <Sparkles size={14} style={{ color: "var(--kravy-brand)" }} /> Premium business drilldown dashboard
+            <p className="text-xs sm:text-sm text-[var(--kravy-text-muted)] flex items-center gap-1.5 mt-0.5 whitespace-nowrap">
+              <Sparkles size={14} className="text-[var(--kravy-brand)] shrink-0" />
+              <span>Premium business drilldown dashboard</span>
             </p>
           </div>
         </div>
 
         {/* Tab Selector & Reset */}
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <div className="flex items-center gap-2 flex-wrap justify-start lg:justify-end">
           {drilldownStack.length === 0 && (
-            <div style={{ display: "flex", background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "14px", padding: "4px" }}>
+            <div className="flex items-center bg-[var(--kravy-bg-2)] border border-[var(--kravy-border)] rounded-2xl p-1 shrink-0">
               {(["year", "month", "week", "day"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => { kravy.click(); setActiveTab(tab); }}
-                  style={{
-                    padding: "8px 16px",
-                    borderRadius: "10px",
-                    fontSize: "0.75rem",
-                    fontWeight: 850,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
-                    border: "none",
-                    cursor: "pointer",
-                    background: activeTab === tab ? "var(--kravy-brand)" : "transparent",
-                    color: activeTab === tab ? "white" : "var(--kravy-text-muted)",
-                    transition: "all 0.2s"
-                  }}
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                    activeTab === tab
+                      ? "bg-[var(--kravy-brand)] text-white shadow-sm"
+                      : "text-[var(--kravy-text-muted)] hover:text-[var(--kravy-text-primary)]"
+                  }`}
                 >
                   {tab}
                 </button>
@@ -302,93 +306,61 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
           
           <button
             onClick={() => { kravy.click(); setShowBalances(s => !s); }}
-            style={{
-              padding: "10px 18px",
-              background: "var(--kravy-surface)",
-              border: "1px solid var(--kravy-border)",
-              borderRadius: "14px",
-              color: "var(--kravy-text-primary)",
-              fontWeight: 850,
-              fontSize: "0.75rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              cursor: "pointer"
-            }}
+            className="px-3.5 py-2 sm:px-4 sm:py-2.5 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-xl sm:rounded-2xl text-[var(--kravy-text-primary)] font-black text-xs flex items-center gap-2 hover:bg-[var(--kravy-bg-2)] transition shadow-xs whitespace-nowrap shrink-0"
           >
             {showBalances ? <EyeOff size={14} /> : <Eye size={14} />} {showBalances ? "Hide" : "Reveal"}
           </button>
 
           <button
             onClick={resetFilters}
-            style={{
-              padding: "10px 18px",
-              background: "var(--kravy-surface)",
-              border: "1px solid var(--kravy-border)",
-              borderRadius: "14px",
-              color: "var(--kravy-text-muted)",
-              fontWeight: 800,
-              fontSize: "0.75rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              cursor: "pointer"
-            }}
+            className="px-3.5 py-2 sm:px-4 sm:py-2.5 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-xl sm:rounded-2xl text-[var(--kravy-text-muted)] hover:text-[var(--kravy-text-primary)] font-bold text-xs flex items-center gap-1.5 hover:bg-[var(--kravy-bg-2)] transition shadow-xs whitespace-nowrap shrink-0"
           >
             <RefreshCw size={12} /> Reset
           </button>
           
           {items && items.length > 0 && (
-            <ReportExportDropdown
-              data={items}
-              columns={isBillsView 
-                ? [
-                    { key: "billNumber", label: "Invoice ID" },
-                    { key: "createdAt", label: "Date & Time", format: (v: any) => new Date(v).toLocaleString() },
-                    { key: "customerName", label: "Customer Name" },
-                    { key: "customerPhone", label: "Phone" },
-                    { key: "paymentStatus", label: "Status" },
-                    { key: "paymentMode", label: "Mode" },
-                    { key: "tableName", label: "Source" },
-                    { key: "total", label: "Value ({sym})", format: (v: any) => v.toString() }
-                  ]
-                : [
-                    { key: "label", label: "Period / Entity" },
-                    { key: "sales", label: "Sales Volume ({sym})", format: (v: any) => v.toString() },
-                    { key: "count", label: "Bill Count", format: (v: any) => v.toString() }
-                  ]}
-              filename={`Sales_Drilldown_${periodStr.replace(/[^a-zA-Z0-9]/g, "_")}`}
-              title={`Sales Drilldown - ${periodStr}`}
-            />
+            <div className="shrink-0">
+              <ReportExportDropdown
+                data={items}
+                columns={isBillsView 
+                  ? [
+                      { key: "billNumber", label: "Invoice ID" },
+                      { key: "createdAt", label: "Date & Time", format: (v: any) => new Date(v).toLocaleString() },
+                      { key: "customerName", label: "Customer Name" },
+                      { key: "customerPhone", label: "Phone" },
+                      { key: "paymentStatus", label: "Status" },
+                      { key: "paymentMode", label: "Mode" },
+                      { key: "tableName", label: "Source" },
+                      { key: "total", label: "Value ({sym})", format: (v: any) => v.toString() }
+                    ]
+                  : [
+                      { key: "label", label: "Period / Entity" },
+                      { key: "sales", label: "Sales Volume ({sym})", format: (v: any) => v.toString() },
+                      { key: "count", label: "Bill Count", format: (v: any) => v.toString() }
+                    ]}
+                filename={`Sales_Drilldown_${periodStr.replace(/[^a-zA-Z0-9]/g, "_")}`}
+                title={`Sales Drilldown - ${periodStr}`}
+              />
+            </div>
           )}
         </div>
       </div>
 
       {/* ── Breadcrumbs ── */}
-      <div style={{ 
-        display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", 
-        background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", 
-        borderRadius: "14px", padding: "12px 20px", fontSize: "0.8rem", fontWeight: 800 
-      }}>
+      <div className="flex items-center gap-2 flex-wrap bg-[var(--kravy-bg-2)] border border-[var(--kravy-border)] rounded-xl sm:rounded-2xl px-4 py-2.5 sm:px-5 sm:py-3 text-xs sm:text-sm font-extrabold">
         <button 
           onClick={() => handleBreadcrumbClick(-1)}
-          style={{ border: "none", background: "none", cursor: "pointer", color: drilldownStack.length === 0 ? "var(--kravy-brand)" : "var(--kravy-text-muted)" }}
+          className={`border-none bg-transparent cursor-pointer transition ${drilldownStack.length === 0 ? "text-[var(--kravy-brand)]" : "text-[var(--kravy-text-muted)] hover:text-[var(--kravy-text-primary)]"}`}
         >
           {activeTab.toUpperCase()}S
         </button>
         
         {drilldownStack.map((step, idx) => (
           <React.Fragment key={idx}>
-            <ChevronRight size={14} className="text-slate-400" />
+            <ChevronRight size={14} className="text-slate-400 shrink-0" />
             <button
               onClick={() => handleBreadcrumbClick(idx)}
-              style={{
-                border: "none",
-                background: "none",
-                cursor: "pointer",
-                color: idx === drilldownStack.length - 1 ? "var(--kravy-brand)" : "var(--kravy-text-muted)",
-                fontWeight: 900
-              }}
+              className={`border-none bg-transparent cursor-pointer font-black transition ${idx === drilldownStack.length - 1 ? "text-[var(--kravy-brand)]" : "text-[var(--kravy-text-muted)] hover:text-[var(--kravy-text-primary)]"}`}
             >
               {step.label}
             </button>
@@ -397,110 +369,113 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
       </div>
 
       {/* ── Filter Bar ── */}
-      <div style={{ 
-        background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", 
-        borderRadius: "24px", padding: "20px", display: "flex", flexDirection: "column", gap: "16px",
-        boxShadow: "var(--kravy-shadow-sm)"
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid var(--kravy-border)", paddingBottom: "12px" }}>
+      <div className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl sm:rounded-3xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm">
+        <div className="flex items-center gap-2 border-b border-[var(--kravy-border)] pb-3">
           <Filter size={16} className="text-indigo-500" />
-          <span style={{ fontSize: "0.85rem", fontWeight: 850, textTransform: "uppercase", letterSpacing: "1px", color: "var(--kravy-text-primary)" }}>Refinement Filters</span>
+          <span className="text-xs font-black uppercase tracking-wider text-[var(--kravy-text-primary)]">Refinement Filters</span>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "14px" }}>
-          {/* Custom Date Picker */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <span style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--kravy-text-muted)" }}>DATE RANGE</span>
-            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+        <div className="flex flex-col xl:flex-row gap-4 items-stretch xl:items-end">
+          {/* Custom Date Picker (From and To) */}
+          <div className="flex flex-col gap-1.5 shrink-0">
+            <span className="text-[10px] font-black uppercase text-[var(--kravy-text-muted)] tracking-wider">DATE RANGE</span>
+            <div className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
               <input 
                 type="date" 
                 value={startDate} 
                 onChange={(e) => setStartDate(e.target.value)} 
-                style={{ flex: 1, padding: "8px 12px", border: "1px solid var(--kravy-border)", borderRadius: "10px", fontSize: "0.75rem", background: "var(--kravy-bg-2)", color: "var(--kravy-text-primary)" }}
+                onClick={(e) => (e.target as any).showPicker?.()}
+                className="w-full sm:w-[145px] px-2.5 py-2 border border-[var(--kravy-border)] rounded-xl text-xs font-bold bg-[var(--kravy-bg-2)] text-[var(--kravy-text-primary)] focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
               />
-              <span style={{ fontSize: "0.7rem", color: "var(--kravy-text-muted)" }}>to</span>
+              <span className="text-xs text-[var(--kravy-text-muted)] font-bold text-center shrink-0 px-0.5">to</span>
               <input 
                 type="date" 
                 value={endDate} 
                 onChange={(e) => setEndDate(e.target.value)} 
-                style={{ flex: 1, padding: "8px 12px", border: "1px solid var(--kravy-border)", borderRadius: "10px", fontSize: "0.75rem", background: "var(--kravy-bg-2)", color: "var(--kravy-text-primary)" }}
+                onClick={(e) => (e.target as any).showPicker?.()}
+                className="w-full sm:w-[145px] px-2.5 py-2 border border-[var(--kravy-border)] rounded-xl text-xs font-bold bg-[var(--kravy-bg-2)] text-[var(--kravy-text-primary)] focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
               />
             </div>
           </div>
 
-          {/* Payment Method */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <span style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--kravy-text-muted)" }}>PAYMENT MODE</span>
-            <select
-              value={paymentMode}
-              onChange={(e) => setPaymentMode(e.target.value)}
-              style={{ padding: "9px 12px", border: "1px solid var(--kravy-border)", borderRadius: "10px", fontSize: "0.75rem", background: "var(--kravy-bg-2)", color: "var(--kravy-text-primary)" }}
-            >
-              <option value="ALL">All Payments</option>
-              <option value="CASH">Cash</option>
-              <option value="UPI">UPI</option>
-              <option value="CARD">Card</option>
-              <option value="WALLET">Wallet</option>
-            </select>
-          </div>
+          {/* Filter Dropdowns Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 flex-1 min-w-0">
+            {/* Payment Method */}
+            <div className="flex flex-col gap-1.5 min-w-0">
+              <span className="text-[10px] font-black uppercase text-[var(--kravy-text-muted)] tracking-wider truncate">PAYMENT MODE</span>
+              <Select value={paymentMode} onValueChange={(val) => setPaymentMode(val)}>
+                <SelectTrigger className="w-full h-auto px-3 py-2 border border-[var(--kravy-border)] rounded-xl text-xs font-bold bg-[var(--kravy-bg-2)] text-[var(--kravy-text-primary)] focus:ring-1 focus:ring-indigo-500 shadow-none">
+                  <SelectValue placeholder="All Payments" />
+                </SelectTrigger>
+                <SelectContent position="popper" align="start" collisionPadding={12} className="w-[var(--radix-select-trigger-width)] bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-xl shadow-xl z-[9999]">
+                  <SelectItem value="ALL" className="text-xs font-bold py-2 cursor-pointer">All Payments</SelectItem>
+                  <SelectItem value="CASH" className="text-xs font-bold py-2 cursor-pointer">Cash</SelectItem>
+                  <SelectItem value="UPI" className="text-xs font-bold py-2 cursor-pointer">UPI</SelectItem>
+                  <SelectItem value="CARD" className="text-xs font-bold py-2 cursor-pointer">Card</SelectItem>
+                  <SelectItem value="WALLET" className="text-xs font-bold py-2 cursor-pointer">Wallet</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* Order Type */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <span style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--kravy-text-muted)" }}>ORDER TYPE</span>
-            <select
-              value={orderType}
-              onChange={(e) => setOrderType(e.target.value)}
-              style={{ padding: "9px 12px", border: "1px solid var(--kravy-border)", borderRadius: "10px", fontSize: "0.75rem", background: "var(--kravy-bg-2)", color: "var(--kravy-text-primary)" }}
-            >
-              <option value="ALL">All Orders</option>
-              <option value="Dine In">Dine In / POS</option>
-              <option value="Takeaway">Takeaway</option>
-              <option value="Delivery">Delivery</option>
-            </select>
-          </div>
+            {/* Order Type */}
+            <div className="flex flex-col gap-1.5 min-w-0">
+              <span className="text-[10px] font-black uppercase text-[var(--kravy-text-muted)] tracking-wider truncate">ORDER TYPE</span>
+              <Select value={orderType} onValueChange={(val) => setOrderType(val)}>
+                <SelectTrigger className="w-full h-auto px-3 py-2 border border-[var(--kravy-border)] rounded-xl text-xs font-bold bg-[var(--kravy-bg-2)] text-[var(--kravy-text-primary)] focus:ring-1 focus:ring-indigo-500 shadow-none">
+                  <SelectValue placeholder="All Orders" />
+                </SelectTrigger>
+                <SelectContent position="popper" align="start" collisionPadding={12} className="w-[var(--radix-select-trigger-width)] bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-xl shadow-xl z-[9999]">
+                  <SelectItem value="ALL" className="text-xs font-bold py-2 cursor-pointer">All Orders</SelectItem>
+                  <SelectItem value="Dine In" className="text-xs font-bold py-2 cursor-pointer">Dine In / POS</SelectItem>
+                  <SelectItem value="Takeaway" className="text-xs font-bold py-2 cursor-pointer">Takeaway</SelectItem>
+                  <SelectItem value="Delivery" className="text-xs font-bold py-2 cursor-pointer">Delivery</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* Bill Status */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <span style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--kravy-text-muted)" }}>BILL STATUS</span>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              style={{ padding: "9px 12px", border: "1px solid var(--kravy-border)", borderRadius: "10px", fontSize: "0.75rem", background: "var(--kravy-bg-2)", color: "var(--kravy-text-primary)" }}
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="Paid">Settle/Paid</option>
-              <option value="Pending">Pending/Partial</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-          </div>
+            {/* Bill Status */}
+            <div className="flex flex-col gap-1.5 min-w-0">
+              <span className="text-[10px] font-black uppercase text-[var(--kravy-text-muted)] tracking-wider truncate">BILL STATUS</span>
+              <Select value={status} onValueChange={(val) => setStatus(val)}>
+                <SelectTrigger className="w-full h-auto px-3 py-2 border border-[var(--kravy-border)] rounded-xl text-xs font-bold bg-[var(--kravy-bg-2)] text-[var(--kravy-text-primary)] focus:ring-1 focus:ring-indigo-500 shadow-none">
+                  <SelectValue placeholder="All Statuses" />
+                </SelectTrigger>
+                <SelectContent position="popper" align="start" collisionPadding={12} className="w-[var(--radix-select-trigger-width)] bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-xl shadow-xl z-[9999]">
+                  <SelectItem value="ALL" className="text-xs font-bold py-2 cursor-pointer">All Statuses</SelectItem>
+                  <SelectItem value="Paid" className="text-xs font-bold py-2 cursor-pointer">Settle/Paid</SelectItem>
+                  <SelectItem value="Pending" className="text-xs font-bold py-2 cursor-pointer">Pending/Partial</SelectItem>
+                  <SelectItem value="Cancelled" className="text-xs font-bold py-2 cursor-pointer">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* GST vs Non-GST */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <span style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--kravy-text-muted)" }}>TAX CLASS</span>
-            <select
-              value={gstType}
-              onChange={(e) => setGstType(e.target.value)}
-              style={{ padding: "9px 12px", border: "1px solid var(--kravy-border)", borderRadius: "10px", fontSize: "0.75rem", background: "var(--kravy-bg-2)", color: "var(--kravy-text-primary)" }}
-            >
-              <option value="ALL">All Bills</option>
-              <option value="GST">GST Only</option>
-              <option value="NON-GST">Non-GST Only</option>
-            </select>
+            {/* GST vs Non-GST */}
+            <div className="flex flex-col gap-1.5 min-w-0">
+              <span className="text-[10px] font-black uppercase text-[var(--kravy-text-muted)] tracking-wider truncate">TAX CLASS</span>
+              <Select value={gstType} onValueChange={(val) => setGstType(val)}>
+                <SelectTrigger className="w-full h-auto px-3 py-2 border border-[var(--kravy-border)] rounded-xl text-xs font-bold bg-[var(--kravy-bg-2)] text-[var(--kravy-text-primary)] focus:ring-1 focus:ring-indigo-500 shadow-none">
+                  <SelectValue placeholder="All Bills" />
+                </SelectTrigger>
+                <SelectContent position="popper" align="start" collisionPadding={12} className="w-[var(--radix-select-trigger-width)] bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-xl shadow-xl z-[9999]">
+                  <SelectItem value="ALL" className="text-xs font-bold py-2 cursor-pointer">All Bills</SelectItem>
+                  <SelectItem value="GST" className="text-xs font-bold py-2 cursor-pointer">GST Only</SelectItem>
+                  <SelectItem value="NON-GST" className="text-xs font-bold py-2 cursor-pointer">Non-GST Only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 
         {/* Global Search */}
-        <div style={{ display: "flex", gap: "10px" }}>
-          <div style={{ flex: 1, position: "relative" }}>
-            <Search size={14} style={{ position: "absolute", left: "14px", top: "13px", color: "var(--kravy-text-muted)" }} />
-            <input
-              type="text"
-              placeholder="Search customer name, contact phone, or invoice identification..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ width: "100%", padding: "10px 14px 10px 40px", border: "1px solid var(--kravy-border)", borderRadius: "12px", fontSize: "0.8rem", background: "var(--kravy-bg-2)", color: "var(--kravy-text-primary)" }}
-            />
-          </div>
+        <div className="relative w-full">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--kravy-text-muted)]" />
+          <input
+            type="text"
+            placeholder="Search customer name, contact phone, or invoice identification..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 border border-[var(--kravy-border)] rounded-xl text-xs font-bold bg-[var(--kravy-bg-2)] text-[var(--kravy-text-primary)] focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-[var(--kravy-text-muted)]"
+          />
         </div>
       </div>
 
@@ -541,106 +516,109 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
 
           {showBalances && (
             <>
-              {/* ── KPI Matrix ── */}
+              {/* ── KPI Matrix (Scrollable <= 1024px) ── */}
               {summary && (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "20px" }}>
-                  <div style={{ background: "linear-gradient(135deg, #065F46 0%, #064E3B 100%)", borderRadius: "24px", padding: "24px", color: "white", boxShadow: "var(--kravy-shadow-md)", position: "relative" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <span style={{ fontSize: "0.68rem", fontWeight: 900, opacity: 0.7, textTransform: "uppercase", letterSpacing: "1.5px" }}>Total Volume (Sales)</span>
-                      <span style={{ fontSize: "0.6rem", fontWeight: 800, background: "rgba(255,255,255,0.15)", padding: "2px 8px", borderRadius: "8px" }}>{periodStr}</span>
+                <div className="flex flex-col gap-3 sm:gap-4">
+                  {/* Top 4 KPI Cards */}
+                  <div className="flex lg:grid lg:grid-cols-4 gap-2.5 sm:gap-3.5 lg:gap-4 overflow-x-auto pb-2 lg:pb-0 scrollbar-thin">
+                    <div className="min-w-[210px] sm:min-w-[240px] lg:min-w-0 flex-1 bg-gradient-to-br from-emerald-800 to-emerald-950 rounded-2xl sm:rounded-3xl p-3 sm:p-4 lg:p-5 xl:p-6 text-white shadow-md relative shrink-0 lg:shrink">
+                      <div className="flex justify-between items-start gap-1.5">
+                        <span className="text-[9.5px] sm:text-[10px] lg:text-[11px] font-black opacity-80 uppercase tracking-wider sm:tracking-widest leading-tight">Total Volume (Sales)</span>
+                        <span className="text-[8.5px] sm:text-[9px] font-bold bg-white/15 px-1.5 sm:px-2 py-0.5 rounded shrink-0">{periodStr}</span>
+                      </div>
+                      <div className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-black tracking-tight mt-1.5 sm:mt-2">
+                        {showBalances ? sym : ""}{mask(format(summary.totalSales))}
+                      </div>
+                      <div className="text-[9.5px] sm:text-[10px] lg:text-[11px] opacity-80 mt-1">
+                        Gross: {showBalances ? sym : ""}{mask(format(summary.grossSales))}
+                      </div>
                     </div>
-                    <div style={{ fontSize: "2rem", fontWeight: 950, letterSpacing: "-1.5px", marginTop: "8px" }}>
-                      {showBalances ? sym : ""}{mask(format(summary.totalSales))}
+                    
+                    <div className="min-w-[210px] sm:min-w-[240px] lg:min-w-0 flex-1 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl sm:rounded-3xl p-3 sm:p-4 lg:p-5 xl:p-6 shadow-sm shrink-0 lg:shrink">
+                      <div className="flex justify-between items-start gap-1.5">
+                        <span className="text-[9.5px] sm:text-[10px] lg:text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider sm:tracking-widest leading-tight">Net Assets (Excl. Tax)</span>
+                        <span className="text-[8.5px] sm:text-[9px] font-bold text-[var(--kravy-text-muted)] bg-[var(--kravy-bg-2)] px-1.5 sm:px-2 py-0.5 rounded shrink-0">{periodStr}</span>
+                      </div>
+                      <div className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-black text-[var(--kravy-text-primary)] tracking-tight mt-1.5 sm:mt-2">
+                        {showBalances ? sym : ""}{mask(format(summary.netSales))}
+                      </div>
+                      <div className="text-[9.5px] sm:text-[10px] lg:text-[11px] text-[var(--kravy-text-muted)] mt-1">
+                        GST Value: {showBalances ? sym : ""}{mask(format(summary.grossSales - summary.netSales))}
+                      </div>
                     </div>
-                    <div style={{ fontSize: "0.7rem", opacity: 0.8, marginTop: "6px" }}>
-                      Gross: {showBalances ? sym : ""}{mask(format(summary.grossSales))}
+
+                    <div className="min-w-[210px] sm:min-w-[240px] lg:min-w-0 flex-1 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl sm:rounded-3xl p-3 sm:p-4 lg:p-5 xl:p-6 shadow-sm shrink-0 lg:shrink">
+                      <div className="flex justify-between items-start gap-1.5">
+                        <span className="text-[9.5px] sm:text-[10px] lg:text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider sm:tracking-widest leading-tight">Invoice Clearing Count</span>
+                        <span className="text-[8.5px] sm:text-[9px] font-bold text-[var(--kravy-text-muted)] bg-[var(--kravy-bg-2)] px-1.5 sm:px-2 py-0.5 rounded shrink-0">{periodStr}</span>
+                      </div>
+                      <div className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-black text-[var(--kravy-text-primary)] tracking-tight mt-1.5 sm:mt-2">
+                        {mask(summary.totalBills)}
+                      </div>
+                      <div className="text-[9.5px] sm:text-[10px] lg:text-[11px] text-[var(--kravy-text-muted)] mt-1">
+                        Cancelled: {mask(summary.cancelledBills)} ({showBalances ? sym : ""}{mask(format(summary.cancelledValue))})
+                      </div>
                     </div>
-                  </div>
-                  
-                  <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "24px", padding: "24px", boxShadow: "var(--kravy-shadow-sm)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <span style={{ fontSize: "0.68rem", fontWeight: 900, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "1.5px" }}>Net Assets (Excl. Tax)</span>
-                      <span style={{ fontSize: "0.6rem", fontWeight: 800, color: "var(--kravy-text-muted)", background: "var(--kravy-bg-2)", padding: "2px 8px", borderRadius: "8px" }}>{periodStr}</span>
-                    </div>
-                    <div style={{ fontSize: "2rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1.5px", marginTop: "8px" }}>
-                      {showBalances ? sym : ""}{mask(format(summary.netSales))}
-                    </div>
-                    <div style={{ fontSize: "0.7rem", color: "var(--kravy-text-muted)", marginTop: "6px" }}>
-                      GST Value: {showBalances ? sym : ""}{mask(format(summary.grossSales - summary.netSales))}
+
+                    <div className="min-w-[210px] sm:min-w-[240px] lg:min-w-0 flex-1 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl sm:rounded-3xl p-3 sm:p-4 lg:p-5 xl:p-6 shadow-sm shrink-0 lg:shrink">
+                      <div className="flex justify-between items-start gap-1.5">
+                        <span className="text-[9.5px] sm:text-[10px] lg:text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider sm:tracking-widest leading-tight">Average Ticket Value</span>
+                        <span className="text-[8.5px] sm:text-[9px] font-bold text-[var(--kravy-text-muted)] bg-[var(--kravy-bg-2)] px-1.5 sm:px-2 py-0.5 rounded shrink-0">{periodStr}</span>
+                      </div>
+                      <div className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-black text-[var(--kravy-text-primary)] tracking-tight mt-1.5 sm:mt-2">
+                        {showBalances ? sym : ""}{mask(format(summary.avgBill))}
+                      </div>
+                      <div className="text-[9.5px] sm:text-[10px] lg:text-[11px] text-[var(--kravy-text-muted)] mt-1">
+                        Max Ticket: {showBalances ? sym : ""}{mask(format(summary.highestBill))}
+                      </div>
                     </div>
                   </div>
 
-                  <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "24px", padding: "24px", boxShadow: "var(--kravy-shadow-sm)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <span style={{ fontSize: "0.68rem", fontWeight: 900, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "1.5px" }}>Invoice Clearing Count</span>
-                      <span style={{ fontSize: "0.6rem", fontWeight: 800, color: "var(--kravy-text-muted)", background: "var(--kravy-bg-2)", padding: "2px 8px", borderRadius: "8px" }}>{periodStr}</span>
+                  {/* Sub-matrix KPI details (Scrollable <= 1024px) */}
+                  <div className="flex lg:grid lg:grid-cols-3 gap-2.5 sm:gap-3.5 lg:gap-4 overflow-x-auto pb-2 lg:pb-0 scrollbar-thin">
+                    <div className="min-w-[230px] sm:min-w-[250px] lg:min-w-0 flex-1 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl sm:rounded-3xl p-3 sm:p-3.5 lg:p-4 xl:p-5 flex justify-between items-center shadow-sm shrink-0 lg:shrink">
+                      <div className="min-w-0 flex-1 pr-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[9px] sm:text-[10px] font-black text-[var(--kravy-text-muted)] uppercase">Unique Customers</span>
+                          <span className="text-[8px] sm:text-[9px] font-bold text-[var(--kravy-text-muted)] bg-[var(--kravy-bg-2)] px-1.5 py-0.5 rounded">{periodStr}</span>
+                        </div>
+                        <div className="text-base sm:text-lg md:text-xl lg:text-2xl font-black text-[var(--kravy-text-primary)] mt-1">
+                          {mask(summary.uniqueCustomers)}
+                        </div>
+                      </div>
+                      <div className="text-[9px] sm:text-[10px] font-black text-[var(--kravy-brand)] bg-indigo-50 dark:bg-indigo-950/40 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-xl shrink-0">
+                        {mask(summary.returningCustomers)} RETURNING ({summary.uniqueCustomers > 0 ? ((summary.returningCustomers / summary.uniqueCustomers) * 100).toFixed(0) : 0}%)
+                      </div>
                     </div>
-                    <div style={{ fontSize: "2rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1.5px", marginTop: "8px" }}>
-                      {mask(summary.totalBills)}
-                    </div>
-                    <div style={{ fontSize: "0.7rem", color: "var(--kravy-text-muted)", marginTop: "6px" }}>
-                      Cancelled: {mask(summary.cancelledBills)} ({showBalances ? sym : ""}{mask(format(summary.cancelledValue))})
-                    </div>
-                  </div>
 
-                  <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "24px", padding: "24px", boxShadow: "var(--kravy-shadow-sm)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <span style={{ fontSize: "0.68rem", fontWeight: 900, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "1.5px" }}>Average Ticket Value</span>
-                      <span style={{ fontSize: "0.6rem", fontWeight: 800, color: "var(--kravy-text-muted)", background: "var(--kravy-bg-2)", padding: "2px 8px", borderRadius: "8px" }}>{periodStr}</span>
+                    <div className="min-w-[230px] sm:min-w-[250px] lg:min-w-0 flex-1 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl sm:rounded-3xl p-3 sm:p-3.5 lg:p-4 xl:p-5 flex justify-between items-center shadow-sm shrink-0 lg:shrink">
+                      <div className="min-w-0 flex-1 pr-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[9px] sm:text-[10px] font-black text-[var(--kravy-text-muted)] uppercase">Peak Hour Activity</span>
+                          <span className="text-[8px] sm:text-[9px] font-bold text-[var(--kravy-text-muted)] bg-[var(--kravy-bg-2)] px-1.5 py-0.5 rounded">{periodStr}</span>
+                        </div>
+                        <div className="text-base sm:text-lg md:text-xl lg:text-2xl font-black text-[var(--kravy-text-primary)] mt-1">
+                          {getHourString(summary.peakSalesHour)}
+                        </div>
+                      </div>
+                      <div className="text-[9px] sm:text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-xl shrink-0">
+                        MAX VOLUME HOUR
+                      </div>
                     </div>
-                    <div style={{ fontSize: "2rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1.5px", marginTop: "8px" }}>
-                      {showBalances ? sym : ""}{mask(format(summary.avgBill))}
-                    </div>
-                    <div style={{ fontSize: "0.7rem", color: "var(--kravy-text-muted)", marginTop: "6px" }}>
-                      Max Ticket: {showBalances ? sym : ""}{mask(format(summary.highestBill))}
-                    </div>
-                  </div>
-                </div>
-              )}
 
-              {/* ── Sub-matrix KPI details ── */}
-              {summary && (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px" }}>
-                  <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "20px", padding: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <div style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--kravy-text-muted)", textTransform: "uppercase" }}>Unique Customers</div>
-                        <span style={{ fontSize: "0.55rem", fontWeight: 800, color: "var(--kravy-text-muted)", background: "var(--kravy-bg-2)", padding: "2px 6px", borderRadius: "6px" }}>{periodStr}</span>
+                    <div className="min-w-[230px] sm:min-w-[250px] lg:min-w-0 flex-1 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl sm:rounded-3xl p-3 sm:p-3.5 lg:p-4 xl:p-5 flex justify-between items-center shadow-sm shrink-0 lg:shrink">
+                      <div className="min-w-0 flex-1 pr-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[9px] sm:text-[10px] font-black text-[var(--kravy-text-muted)] uppercase">Lowest Ticket</span>
+                          <span className="text-[8px] sm:text-[9px] font-bold text-[var(--kravy-text-muted)] bg-[var(--kravy-bg-2)] px-1.5 py-0.5 rounded">{periodStr}</span>
+                        </div>
+                        <div className="text-base sm:text-lg md:text-xl lg:text-2xl font-black text-[var(--kravy-text-primary)] mt-1">
+                          {showBalances ? sym : ""}{mask(format(summary.lowestBill))}
+                        </div>
                       </div>
-                      <div style={{ fontSize: "1.5rem", fontWeight: 950, color: "var(--kravy-text-primary)", marginTop: "4px" }}>
-                        {mask(summary.uniqueCustomers)}
+                      <div className="text-[9px] sm:text-[10px] font-black text-purple-600 bg-purple-50 dark:bg-purple-950/40 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-xl shrink-0">
+                        MIN VALUE
                       </div>
-                    </div>
-                    <div style={{ fontSize: "0.7rem", fontWeight: 850, color: "var(--kravy-brand)", background: "rgba(99,102,241,0.1)", padding: "6px 12px", borderRadius: "8px" }}>
-                      {mask(summary.returningCustomers)} RETURNING ({summary.uniqueCustomers > 0 ? ((summary.returningCustomers / summary.uniqueCustomers) * 100).toFixed(0) : 0}%)
-                    </div>
-                  </div>
-
-                  <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "20px", padding: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <div style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--kravy-text-muted)", textTransform: "uppercase" }}>Peak Hour Activity</div>
-                        <span style={{ fontSize: "0.55rem", fontWeight: 800, color: "var(--kravy-text-muted)", background: "var(--kravy-bg-2)", padding: "2px 6px", borderRadius: "6px" }}>{periodStr}</span>
-                      </div>
-                      <div style={{ fontSize: "1.5rem", fontWeight: 950, color: "var(--kravy-text-primary)", marginTop: "4px" }}>{getHourString(summary.peakSalesHour)}</div>
-                    </div>
-                    <div style={{ fontSize: "0.7rem", fontWeight: 850, color: "var(--kravy-green)", background: "rgba(16,185,129,0.1)", padding: "6px 12px", borderRadius: "8px" }}>
-                      MAX VOLUME HOUR
-                    </div>
-                  </div>
-
-                  <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "20px", padding: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <div style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--kravy-text-muted)", textTransform: "uppercase" }}>Lowest clearing bill</div>
-                        <span style={{ fontSize: "0.55rem", fontWeight: 800, color: "var(--kravy-text-muted)", background: "var(--kravy-bg-2)", padding: "2px 6px", borderRadius: "6px" }}>{periodStr}</span>
-                      </div>
-                      <div style={{ fontSize: "1.5rem", fontWeight: 950, color: "var(--kravy-text-primary)", marginTop: "4px" }}>
-                        {showBalances ? sym : ""}{mask(format(summary.lowestBill))}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: "0.7rem", fontWeight: 850, color: "var(--kravy-purple)", background: "rgba(139,92,246,0.1)", padding: "6px 12px", borderRadius: "8px" }}>
-                      MIN VALUE
                     </div>
                   </div>
                 </div>
@@ -648,25 +626,27 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
 
               {/* ── Graphical Insights & Breakdown ── */}
               {summary && (
-                <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "28px" }} className="grid-cols-1 lg:grid-cols-2">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
                   {/* Payment & Order Type Distribution */}
-                  <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "28px", padding: "28px", display: "flex", flexDirection: "column", gap: "24px" }}>
-                    <h3 style={{ fontSize: "0.95rem", fontWeight: 900, textTransform: "uppercase", letterSpacing: "1px", color: "var(--kravy-text-primary)" }}>Payment Mode & Order Source Breakdown</h3>
+                  <div className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-7 flex flex-col gap-5 sm:gap-6 shadow-sm">
+                    <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-[var(--kravy-text-primary)]">
+                      Payment Mode & Order Source Breakdown
+                    </h3>
                     
                     {/* Payments */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                      <span style={{ fontSize: "0.7rem", fontWeight: 800, color: "var(--kravy-text-muted)" }}>PAYMENT MODES VOLUME</span>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+                    <div className="flex flex-col gap-2.5">
+                      <span className="text-[10px] font-black uppercase text-[var(--kravy-text-muted)] tracking-wider">PAYMENT MODES VOLUME</span>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5">
                         {Object.entries(summary.paymentBreakdown).map(([mode, sales]) => {
                           const pct = summary.totalSales > 0 ? (sales / summary.totalSales) * 100 : 0;
                           if (sales === 0) return null;
                           return (
-                            <div key={mode} style={{ flex: 1, minWidth: "100px", background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", padding: "12px", borderRadius: "14px", display: "flex", flexDirection: "column", gap: "4px" }}>
-                              <span style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--kravy-text-muted)" }}>{mode}</span>
-                              <span style={{ fontSize: "1rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>
+                            <div key={mode} className="bg-[var(--kravy-bg-2)] border border-[var(--kravy-border)] p-2.5 sm:p-3 rounded-xl sm:rounded-2xl flex flex-col gap-1 min-w-0">
+                              <span className="text-[10px] font-bold text-[var(--kravy-text-muted)] truncate">{mode}</span>
+                              <span className="text-sm sm:text-base font-black text-[var(--kravy-text-primary)] truncate">
                                 {showBalances ? sym : ""}{mask(format(sales))}
                               </span>
-                              <span style={{ fontSize: "0.65rem", fontWeight: 850, color: "var(--kravy-brand)" }}>{pct.toFixed(0)}% share</span>
+                              <span className="text-[10px] font-black text-[var(--kravy-brand)]">{pct.toFixed(0)}% share</span>
                             </div>
                           );
                         })}
@@ -674,19 +654,19 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                     </div>
 
                     {/* Order Types */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                      <span style={{ fontSize: "0.7rem", fontWeight: 800, color: "var(--kravy-text-muted)" }}>ORDER SOURCES VOLUME</span>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+                    <div className="flex flex-col gap-2.5">
+                      <span className="text-[10px] font-black uppercase text-[var(--kravy-text-muted)] tracking-wider">ORDER SOURCES VOLUME</span>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5">
                         {Object.entries(summary.orderTypeBreakdown).map(([type, sales]) => {
                           const pct = summary.totalSales > 0 ? (sales / summary.totalSales) * 100 : 0;
                           if (sales === 0) return null;
                           return (
-                            <div key={type} style={{ flex: 1, minWidth: "100px", background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", padding: "12px", borderRadius: "14px", display: "flex", flexDirection: "column", gap: "4px" }}>
-                              <span style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--kravy-text-muted)" }}>{type}</span>
-                              <span style={{ fontSize: "1rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>
+                            <div key={type} className="bg-[var(--kravy-bg-2)] border border-[var(--kravy-border)] p-2.5 sm:p-3 rounded-xl sm:rounded-2xl flex flex-col gap-1 min-w-0">
+                              <span className="text-[10px] font-bold text-[var(--kravy-text-muted)] truncate">{type}</span>
+                              <span className="text-sm sm:text-base font-black text-[var(--kravy-text-primary)] truncate">
                                 {showBalances ? sym : ""}{mask(format(sales))}
                               </span>
-                              <span style={{ fontSize: "0.65rem", fontWeight: 850, color: "var(--kravy-purple)" }}>{pct.toFixed(0)}% share</span>
+                              <span className="text-[10px] font-black text-purple-600 dark:text-purple-400">{pct.toFixed(0)}% share</span>
                             </div>
                           );
                         })}
@@ -695,20 +675,22 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                   </div>
 
                   {/* BI Operational Insights */}
-                  <div style={{ background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "28px", padding: "28px", display: "flex", flexDirection: "column", gap: "20px" }}>
-                    <h3 style={{ fontSize: "0.95rem", fontWeight: 900, textTransform: "uppercase", letterSpacing: "1px", color: "var(--kravy-text-primary)" }}>Smart Business Intelligence Insights</h3>
+                  <div className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-7 flex flex-col gap-4 sm:gap-5 shadow-sm">
+                    <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-[var(--kravy-text-primary)]">
+                      Smart Business Intelligence Insights
+                    </h3>
                     
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                      <div style={{ padding: "16px", background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "16px" }}>
-                        <span style={{ fontSize: "0.65rem", fontWeight: 950, color: "var(--kravy-brand)", textTransform: "uppercase" }}>Volume Yield Recommendation</span>
-                        <p style={{ fontSize: "0.85rem", color: "var(--kravy-text-primary)", fontWeight: 700, marginTop: "6px" }}>
+                    <div className="flex flex-col gap-3">
+                      <div className="p-3.5 sm:p-4 bg-[var(--kravy-bg-2)] border border-[var(--kravy-border)] rounded-xl sm:rounded-2xl">
+                        <span className="text-[10px] font-black text-[var(--kravy-brand)] uppercase tracking-wider">Volume Yield Recommendation</span>
+                        <p className="text-xs sm:text-sm text-[var(--kravy-text-primary)] font-bold mt-1.5 leading-relaxed">
                           Your average ticket is {sym}{format(summary.avgBill)}. Consider creating high-yield combo items valued around {sym}{format(summary.avgBill * 1.4)} to maximize order metrics.
                         </p>
                       </div>
 
-                      <div style={{ padding: "16px", background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "16px" }}>
-                        <span style={{ fontSize: "0.65rem", fontWeight: 950, color: "var(--kravy-purple)", textTransform: "uppercase" }}>Peak Staffing Recommendation</span>
-                        <p style={{ fontSize: "0.85rem", color: "var(--kravy-text-primary)", fontWeight: 700, marginTop: "6px" }}>
+                      <div className="p-3.5 sm:p-4 bg-[var(--kravy-bg-2)] border border-[var(--kravy-border)] rounded-xl sm:rounded-2xl">
+                        <span className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-wider">Peak Staffing Recommendation</span>
+                        <p className="text-xs sm:text-sm text-[var(--kravy-text-primary)] font-bold mt-1.5 leading-relaxed">
                           Peak hour detected at {getHourString(summary.peakSalesHour)}. Ensure high staffing presence during this window to reduce ticket turn-around times.
                         </p>
                       </div>
@@ -720,182 +702,172 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
           )}
 
           {/* ── Main Data View (Drilldown List or Bills Table) ── */}
-          <div style={{ 
-            background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", 
-            borderRadius: "32px", overflow: "hidden", boxShadow: "var(--kravy-shadow-md)" 
-          }}>
-            <div style={{ padding: "24px 32px", borderBottom: "1px solid var(--kravy-border)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--kravy-bg-2)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                <h3 style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>
+          <div className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl sm:rounded-3xl overflow-hidden shadow-[var(--kravy-shadow-md)]">
+            <div className="px-4 py-3.5 sm:px-6 sm:py-4 border-b border-[var(--kravy-border)] flex flex-wrap gap-3 justify-between items-center bg-[var(--kravy-bg-2)]">
+              <div className="flex flex-wrap items-center gap-2.5 sm:gap-4">
+                <h3 className="text-sm sm:text-base md:text-lg font-black text-[var(--kravy-text-primary)]">
                   {isBillsView ? "Audited Bill Registry" : "Aggregated Sales Yield"}
                 </h3>
                 {!isBillsView && (
-                  <div style={{ display: "flex", background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", borderRadius: "10px", padding: "2px" }}>
+                  <div className="flex bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-lg p-0.5">
                     <button
                       onClick={() => setViewMode("table")}
-                      style={{ padding: "4px 10px", fontSize: "0.68rem", fontWeight: 800, border: "none", borderRadius: "8px", background: viewMode === "table" ? "var(--kravy-brand)" : "transparent", color: viewMode === "table" ? "white" : "var(--kravy-text-muted)", cursor: "pointer" }}
+                      className={`px-2.5 py-1 text-[11px] font-extrabold rounded-md transition ${viewMode === "table" ? "bg-[var(--kravy-brand)] text-white shadow-sm" : "text-[var(--kravy-text-muted)] hover:text-[var(--kravy-text-primary)]"}`}
                     >
                       Table View
                     </button>
                     <button
                       onClick={() => setViewMode("visual")}
-                      style={{ padding: "4px 10px", fontSize: "0.68rem", fontWeight: 800, border: "none", borderRadius: "8px", background: viewMode === "visual" ? "var(--kravy-brand)" : "transparent", color: viewMode === "visual" ? "white" : "var(--kravy-text-muted)", cursor: "pointer" }}
+                      className={`px-2.5 py-1 text-[11px] font-extrabold rounded-md transition ${viewMode === "visual" ? "bg-[var(--kravy-brand)] text-white shadow-sm" : "text-[var(--kravy-text-muted)] hover:text-[var(--kravy-text-primary)]"}`}
                     >
                       Bar View
                     </button>
                   </div>
                 )}
               </div>
-              <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--kravy-text-muted)", background: "var(--kravy-surface)", padding: "6px 14px", borderRadius: "10px", border: "1px solid var(--kravy-border)" }}>
+              <span className="text-[11px] font-extrabold text-[var(--kravy-text-muted)] bg-[var(--kravy-surface)] px-2.5 sm:px-3 py-1 rounded-lg border border-[var(--kravy-border)] shrink-0">
                 {items.length} records in view
               </span>
             </div>
 
             {items.length === 0 ? (
-              <div style={{ padding: "60px", textAlign: "center", color: "var(--kravy-text-muted)", fontSize: "0.85rem", fontWeight: 800 }}>
+              <div className="p-8 sm:p-14 text-center text-[var(--kravy-text-muted)] text-xs sm:text-sm font-bold">
                 No sales records found matching filter criteria.
               </div>
             ) : isBillsView ? (
-              /* ── Bills Grid Table ── */
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderSpacing: 0, textAlign: "left" }}>
-                  <thead>
-                    <tr style={{ background: "var(--kravy-bg-2)" }}>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>S.No</th>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>Invoice ID</th>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>Customer Name</th>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>Payment</th>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>Mode</th>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>Source</th>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)", textAlign: "right" }}>Value</th>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)", textAlign: "right" }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((b: BillItemDetail, idx) => {
-                      const actualIdx = (pagination.page - 1) * pagination.pageSize + idx + 1;
-                      const isCancelled = (b.paymentStatus || "").toUpperCase() === "CANCELLED";
-                      const isPending = (b.paymentStatus || "").toUpperCase() === "PENDING" || (b.paymentStatus || "").toUpperCase() === "HELD";
-                      
-                      return (
-                        <tr key={b.id} style={{ borderTop: "1px solid var(--kravy-border)", transition: "background 0.2s" }} className="hover:bg-[var(--kravy-bg-2)]/30">
-                          <td style={{ padding: "20px 24px", fontSize: "0.8rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>{String(actualIdx).padStart(2, "0")}</td>
-                          <td style={{ padding: "20px 24px" }}>
-                            <div style={{ fontWeight: 950, color: "var(--kravy-brand)", fontFamily: "monospace", fontSize: "0.95rem" }}>#{b.billNumber}</div>
-                            <div style={{ fontSize: "0.68rem", color: "var(--kravy-text-muted)", marginTop: "2px" }}>
-                              {new Date(b.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                            </div>
-                          </td>
-                          <td style={{ padding: "20px 24px" }}>
-                            <div style={{ fontWeight: 800, color: "var(--kravy-text-primary)", fontSize: "0.85rem" }}>{b.customerName || "Walk-in Guest"}</div>
-                            <div style={{ fontSize: "0.7rem", fontFamily: "monospace", color: "var(--kravy-text-muted)", marginTop: "2px" }}>{b.customerPhone || "NO CONTACT"}</div>
-                          </td>
-                          <td style={{ padding: "20px 24px" }}>
-                            <div style={{ 
-                              display: "inline-flex", alignItems: "center", gap: "4px", 
-                              color: isCancelled ? "#EF4444" : isPending ? "#F59E0B" : "#10B981", 
-                              fontSize: "0.68rem", fontWeight: 900 
-                            }}>
-                              {isCancelled ? <X size={12} /> : isPending ? <Clock size={12} /> : <CheckCircle size={12} />}
-                              {(b.paymentStatus || "").toUpperCase()}
-                            </div>
-                          </td>
-                          <td style={{ padding: "20px 24px" }}>
-                            <span style={{ fontSize: "0.75rem", fontWeight: 850, color: "var(--kravy-text-primary)" }}>{(b.paymentMode || "").toUpperCase()}</span>
-                          </td>
-                          <td style={{ padding: "20px 24px" }}>
-                            <span style={{ fontSize: "0.75rem", fontWeight: 850, color: "var(--kravy-text-muted)" }}>{b.tableName}</span>
-                          </td>
-                          <td style={{ padding: "20px 24px", textAlign: "right" }}>
-                            <div style={{ fontSize: "1.1rem", fontWeight: 950, color: "var(--kravy-text-primary)" }}>
-                              {sym}{format(b.total)}
-                            </div>
-                            {(b.paymentStatus || "").toUpperCase() === "PARTIAL" && (
-                              <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: "4px", fontSize: "0.65rem", fontWeight: 800 }}>
-                                <span style={{ color: "#10B981" }}>Paid: {sym}{format(b.amountPaid || 0)}</span>
-                                <span style={{ color: "#EF4444" }}>Unpaid: {sym}{format(b.balanceDue || 0)}</span>
+              <div className="w-full overflow-x-auto scrollbar-thin">
+                  <table className="w-full text-left border-collapse min-w-[760px] whitespace-nowrap">
+                    <thead>
+                      <tr className="bg-[var(--kravy-bg-2)]">
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">S.No</th>
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">Invoice ID</th>
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">Customer Name</th>
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">Payment</th>
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">Mode</th>
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">Source</th>
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider text-right">Value</th>
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--kravy-border)]">
+                      {items.map((b: BillItemDetail, idx) => {
+                        const actualIdx = (pagination.page - 1) * pagination.pageSize + idx + 1;
+                        const isCancelled = (b.paymentStatus || "").toUpperCase() === "CANCELLED";
+                        const isPending = (b.paymentStatus || "").toUpperCase() === "PENDING" || (b.paymentStatus || "").toUpperCase() === "HELD";
+                        
+                        return (
+                          <tr key={b.id} className="hover:bg-[var(--kravy-bg-2)]/30 transition">
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-xs font-black text-[var(--kravy-text-muted)]">{String(actualIdx).padStart(2, "0")}</td>
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5">
+                              <div className="font-black text-[var(--kravy-brand)] font-mono text-sm">#{b.billNumber}</div>
+                              <div className="text-[10px] text-[var(--kravy-text-muted)] mt-0.5">
+                                {new Date(b.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                               </div>
-                            )}
-                          </td>
-                          <td style={{ padding: "20px 24px", textAlign: "right" }}>
-                            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                              <BillActionsReport 
-                                billId={b.id} 
-                                bill={b} 
-                                business={{ businessName }} 
-                                onPreview={() => { kravy.click(); setSelectedBill(b); }}
-                              />
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                            </td>
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5">
+                              <div className="font-extrabold text-[var(--kravy-text-primary)] text-xs sm:text-sm">{b.customerName || "Walk-in Guest"}</div>
+                              <div className="text-[10px] font-mono text-[var(--kravy-text-muted)] mt-0.5">{b.customerPhone || "NO CONTACT"}</div>
+                            </td>
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5">
+                              <div className={`inline-flex items-center gap-1 text-[11px] font-black ${isCancelled ? "text-rose-500" : isPending ? "text-amber-500" : "text-emerald-500"}`}>
+                                {isCancelled ? <X size={12} /> : isPending ? <Clock size={12} /> : <CheckCircle size={12} />}
+                                {(b.paymentStatus || "").toUpperCase()}
+                              </div>
+                            </td>
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5">
+                              <span className="text-xs font-black text-[var(--kravy-text-primary)]">{(b.paymentMode || "").toUpperCase()}</span>
+                            </td>
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5">
+                              <span className="text-xs font-bold text-[var(--kravy-text-muted)]">{b.tableName}</span>
+                            </td>
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-right">
+                              <div className="text-sm sm:text-base font-black text-[var(--kravy-text-primary)]">
+                                {sym}{format(b.total)}
+                              </div>
+                              {(b.paymentStatus || "").toUpperCase() === "PARTIAL" && (
+                                <div className="flex flex-col gap-0.5 mt-1 text-[10px] font-extrabold">
+                                  <span className="text-emerald-500">Paid: {sym}{format(b.amountPaid || 0)}</span>
+                                  <span className="text-rose-500">Unpaid: {sym}{format(b.balanceDue || 0)}</span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-right">
+                              <div className="flex justify-end">
+                                <BillActionsReport 
+                                  billId={b.id} 
+                                  bill={b} 
+                                  business={{ businessName }} 
+                                  onPreview={() => { kravy.click(); setSelectedBill(b); }}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
             ) : viewMode === "table" ? (
-              /* ── Comparison Table View ── */
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderSpacing: 0, textAlign: "left" }}>
-                  <thead>
-                    <tr style={{ background: "var(--kravy-bg-2)" }}>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>Period</th>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>Bills</th>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>Total Sales</th>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>MoM Growth</th>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>Avg Bill</th>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>Collected</th>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>Outstanding</th>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>UPI %</th>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>Cash %</th>
-                      <th style={{ padding: "16px 24px", fontSize: "0.72rem", fontWeight: 900, color: "var(--kravy-text-muted)" }}>Card %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item: any) => {
-                      const momGrowth = item.growth;
-                      const upiPct = item.sales > 0 ? Math.round((item.upiSales / item.sales) * 100) : 0;
-                      const cashPct = item.sales > 0 ? Math.round((item.cashSales / item.sales) * 100) : 0;
-                      const cardPct = item.sales > 0 ? Math.round((item.cardSales / item.sales) * 100) : 0;
-                      
-                      return (
-                        <tr 
-                          key={item.rawKey} 
-                          onClick={() => handleItemClick(item)}
-                          style={{ borderTop: "1px solid var(--kravy-border)", transition: "background 0.2s", cursor: "pointer" }} 
-                          className="hover:bg-[var(--kravy-bg-2)]/30"
-                        >
-                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>{item.label}</td>
-                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>{item.count}</td>
-                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>{sym}{format(item.sales)}</td>
-                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 850 }}>
-                            {momGrowth !== null ? (
-                              momGrowth > 0 ? (
-                                <span style={{ color: "#10B981" }}>▲ {Math.round(momGrowth)}%</span>
-                              ) : momGrowth < 0 ? (
-                                <span style={{ color: "#EF4444" }}>▼ {Math.round(Math.abs(momGrowth))}%</span>
+                <div className="w-full overflow-x-auto scrollbar-thin">
+                  <table className="w-full text-left border-collapse min-w-[760px] whitespace-nowrap">
+                    <thead>
+                      <tr className="bg-[var(--kravy-bg-2)]">
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">Period</th>
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">Bills</th>
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">Total Sales</th>
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">MoM Growth</th>
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">Avg Bill</th>
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">Collected</th>
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">Outstanding</th>
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">UPI %</th>
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">Cash %</th>
+                        <th className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-[11px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">Card %</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--kravy-border)]">
+                      {items.map((item: any) => {
+                        const momGrowth = item.growth;
+                        const upiPct = item.sales > 0 ? Math.round((item.upiSales / item.sales) * 100) : 0;
+                        const cashPct = item.sales > 0 ? Math.round((item.cashSales / item.sales) * 100) : 0;
+                        const cardPct = item.sales > 0 ? Math.round((item.cardSales / item.sales) * 100) : 0;
+                        
+                        return (
+                          <tr 
+                            key={item.rawKey} 
+                            onClick={() => handleItemClick(item)}
+                            className="hover:bg-[var(--kravy-bg-2)]/30 transition cursor-pointer"
+                          >
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-xs sm:text-sm font-black text-[var(--kravy-text-primary)]">{item.label}</td>
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-xs sm:text-sm font-extrabold text-[var(--kravy-text-primary)]">{item.count}</td>
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-xs sm:text-sm font-black text-[var(--kravy-text-primary)]">{sym}{format(item.sales)}</td>
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-xs sm:text-sm font-extrabold">
+                              {momGrowth !== null ? (
+                                momGrowth > 0 ? (
+                                  <span className="text-emerald-500">▲ {Math.round(momGrowth)}%</span>
+                                ) : momGrowth < 0 ? (
+                                  <span className="text-rose-500">▼ {Math.round(Math.abs(momGrowth))}%</span>
+                                ) : (
+                                  <span className="text-[var(--kravy-text-muted)]">0%</span>
+                                )
                               ) : (
-                                <span style={{ color: "var(--kravy-text-muted)" }}>0%</span>
-                              )
-                            ) : (
-                              <span style={{ color: "var(--kravy-text-muted)" }}>▲ n/a</span>
-                            )}
-                          </td>
-                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-text-secondary)" }}>{sym}{format(item.sales / item.count)}</td>
-                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-green)" }}>{sym}{format(item.collected)}</td>
-                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: item.outstanding > 0 ? "#EF4444" : "var(--kravy-text-muted)" }}>{sym}{format(item.outstanding)}</td>
-                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-text-secondary)" }}>{upiPct > 0 ? `${upiPct}%` : "—"}</td>
-                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-text-secondary)" }}>{cashPct > 0 ? `${cashPct}%` : "—"}</td>
-                          <td style={{ padding: "20px 24px", fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-text-secondary)" }}>{cardPct > 0 ? `${cardPct}%` : "—"}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                                <span className="text-[var(--kravy-text-muted)]">▲ n/a</span>
+                              )}
+                            </td>
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-xs sm:text-sm font-bold text-[var(--kravy-text-secondary)]">{sym}{format(item.sales / item.count)}</td>
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-xs sm:text-sm font-bold text-[var(--kravy-green)]">{sym}{format(item.collected)}</td>
+                            <td className={`px-3.5 py-3 sm:px-4 sm:py-3.5 text-xs sm:text-sm font-bold ${item.outstanding > 0 ? "text-rose-500" : "text-[var(--kravy-text-muted)]"}`}>{sym}{format(item.outstanding)}</td>
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-xs sm:text-sm font-bold text-[var(--kravy-text-secondary)]">{upiPct > 0 ? `${upiPct}%` : "—"}</td>
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-xs sm:text-sm font-bold text-[var(--kravy-text-secondary)]">{cashPct > 0 ? `${cashPct}%` : "—"}</td>
+                            <td className="px-3.5 py-3 sm:px-4 sm:py-3.5 text-xs sm:text-sm font-bold text-[var(--kravy-text-secondary)]">{cardPct > 0 ? `${cardPct}%` : "—"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
             ) : (
               /* ── Aggregated Drilldown Rows (Bar View) ── */
-              <div style={{ display: "flex", flexDirection: "column" }}>
+              <div className="flex flex-col divide-y divide-[var(--kravy-border)]">
                 {items.map((item: AggregatedItem) => {
                   const maxVal = Math.max(...items.map((i) => i.sales), 1);
                   const barPct = (item.sales / maxVal) * 100;
@@ -904,51 +876,38 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
                     <div
                       key={item.rawKey}
                       onClick={() => handleItemClick(item)}
-                      style={{
-                        padding: "20px 32px",
-                        borderBottom: "1px solid var(--kravy-border)",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        cursor: "pointer",
-                        transition: "all 0.2s",
-                        position: "relative"
-                      }}
-                      className="hover:bg-[var(--kravy-bg-2)]/30 group"
+                      className="px-4 py-3.5 sm:px-6 sm:py-4 flex justify-between items-center cursor-pointer transition hover:bg-[var(--kravy-bg-2)]/30 group"
                     >
                       {/* Left: Label & Graph bar */}
-                      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <span style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--kravy-text-primary)" }}>
+                      <div className="flex-1 min-w-0 flex flex-col gap-1.5 sm:gap-2 pr-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs sm:text-sm font-black text-[var(--kravy-text-primary)] truncate">
                             {item.label}
                           </span>
-                          <span style={{ fontSize: "0.7rem", color: "var(--kravy-text-muted)", background: "var(--kravy-bg-2)", padding: "3px 8px", borderRadius: "6px" }}>
+                          <span className="text-[10px] sm:text-xs text-[var(--kravy-text-muted)] bg-[var(--kravy-bg-2)] px-2 py-0.5 rounded-md shrink-0">
                             {item.count} bills
                           </span>
                         </div>
                         {/* HSL progress bar represent sales weight */}
-                        <div style={{ width: "80%", height: "6px", background: "var(--kravy-bg-2)", borderRadius: "4px", overflow: "hidden" }}>
-                          <div style={{ 
-                            width: `${barPct}%`, 
-                            height: "100%", 
-                            background: "var(--kravy-brand)", 
-                            borderRadius: "4px",
-                            transition: "width 0.6s cubic-bezier(0.4, 0, 0.2, 1)"
-                          }} />
+                        <div className="w-full max-w-[420px] h-1.5 bg-[var(--kravy-bg-2)] rounded-full overflow-hidden">
+                          <div 
+                            style={{ width: `${barPct}%` }}
+                            className="h-full bg-[var(--kravy-brand)] rounded-full transition-all duration-500 ease-out"
+                          />
                         </div>
                       </div>
 
                       {/* Right: Net Sales Volume */}
-                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                        <div style={{ textAlign: "right" }}>
-                          <div style={{ fontSize: "1.3rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1px" }}>
+                      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                        <div className="text-right">
+                          <div className="text-sm sm:text-lg font-black text-[var(--kravy-text-primary)] tracking-tight">
                             {sym}{format(item.sales)}
                           </div>
-                          <div style={{ fontSize: "0.68rem", color: "var(--kravy-text-muted)" }}>
+                          <div className="text-[10px] sm:text-xs text-[var(--kravy-text-muted)] font-bold">
                             avg {sym}{format(item.sales / item.count)}
                           </div>
                         </div>
-                        <ChevronRight size={16} className="text-slate-400 group-hover:translate-x-1 transition-transform" />
+                        <ChevronRight size={16} className="text-[var(--kravy-text-muted)] group-hover:translate-x-1 transition-transform" />
                       </div>
                     </div>
                   );
@@ -958,22 +917,22 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
 
             {/* Pagination for bills */}
             {isBillsView && pagination.totalPages > 1 && (
-              <div style={{ padding: "20px 32px", borderTop: "1px solid var(--kravy-border)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--kravy-bg-2)" }}>
-                <span style={{ fontSize: "0.75rem", color: "var(--kravy-text-muted)", fontWeight: 700 }}>
+              <div className="px-4 py-3 sm:px-6 sm:py-3.5 border-t border-[var(--kravy-border)] flex flex-wrap gap-2 justify-between items-center bg-[var(--kravy-bg-2)]">
+                <span className="text-xs text-[var(--kravy-text-muted)] font-bold">
                   Showing Page {pagination.page} of {pagination.totalPages}
                 </span>
-                <div style={{ display: "flex", gap: "8px" }}>
+                <div className="flex gap-2">
                   <button
                     disabled={pagination.page === 1}
                     onClick={() => { kravy.click(); setPage((p) => Math.max(1, p - 1)); }}
-                    style={{ padding: "6px 14px", border: "1px solid var(--kravy-border)", borderRadius: "8px", fontSize: "0.75rem", fontWeight: 800, background: "var(--kravy-surface)", color: "var(--kravy-text-primary)", cursor: pagination.page === 1 ? "not-allowed" : "pointer", opacity: pagination.page === 1 ? 0.5 : 1 }}
+                    className={`px-3 py-1.5 border border-[var(--kravy-border)] rounded-lg text-xs font-black bg-[var(--kravy-surface)] text-[var(--kravy-text-primary)] transition ${pagination.page === 1 ? "opacity-50 cursor-not-allowed" : "hover:bg-[var(--kravy-bg-2)]"}`}
                   >
                     Prev
                   </button>
                   <button
                     disabled={pagination.page === pagination.totalPages}
                     onClick={() => { kravy.click(); setPage((p) => Math.min(pagination.totalPages, p + 1)); }}
-                    style={{ padding: "6px 14px", border: "1px solid var(--kravy-border)", borderRadius: "8px", fontSize: "0.75rem", fontWeight: 800, background: "var(--kravy-surface)", color: "var(--kravy-text-primary)", cursor: pagination.page === pagination.totalPages ? "not-allowed" : "pointer", opacity: pagination.page === pagination.totalPages ? 0.5 : 1 }}
+                    className={`px-3 py-1.5 border border-[var(--kravy-border)] rounded-lg text-xs font-black bg-[var(--kravy-surface)] text-[var(--kravy-text-primary)] transition ${pagination.page === pagination.totalPages ? "opacity-50 cursor-not-allowed" : "hover:bg-[var(--kravy-bg-2)]"}`}
                   >
                     Next
                   </button>
@@ -986,102 +945,97 @@ export default function DrilldownClient({ businessName }: DrilldownClientProps) 
 
       {/* ── Invoice Detail Inspection Modal ── */}
       {selectedBill && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 999999, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-3 sm:p-4">
           {/* Overlay */}
           <div 
             onClick={() => setSelectedBill(null)}
-            style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} 
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
           />
           
           {/* Modal Content */}
-          <div style={{ 
-            position: "relative", zIndex: 1, width: "100%", maxWidth: "460px", 
-            background: "var(--kravy-surface)", border: "1px solid var(--kravy-border)", 
-            borderRadius: "28px", padding: "28px", maxHeight: "90vh", overflowY: "auto",
-            boxShadow: "var(--kravy-shadow-xl)", display: "flex", flexDirection: "column", gap: "20px"
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--kravy-border)", paddingBottom: "14px" }}>
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                <span style={{ fontSize: "0.68rem", fontWeight: 900, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "1px" }}>AUDITED FINANCIAL ASSET</span>
-                <span style={{ fontSize: "1.2rem", fontWeight: 950, color: "var(--kravy-brand)", fontFamily: "monospace" }}>#{selectedBill.billNumber}</span>
+          <div className="relative z-10 w-full max-w-lg bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col gap-4 sm:gap-5">
+            <div className="flex justify-between items-center border-b border-[var(--kravy-border)] pb-3">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">AUDITED FINANCIAL ASSET</span>
+                <span className="text-base sm:text-lg font-black text-[var(--kravy-brand)] font-mono">#{selectedBill.billNumber}</span>
               </div>
               <button 
                 onClick={() => setSelectedBill(null)}
-                style={{ padding: "8px", border: "1px solid var(--kravy-border)", borderRadius: "10px", background: "var(--kravy-bg-2)", cursor: "pointer", color: "var(--kravy-text-muted)" }}
+                className="p-2 border border-[var(--kravy-border)] rounded-xl bg-[var(--kravy-bg-2)] hover:bg-[var(--kravy-border)] transition text-[var(--kravy-text-muted)]"
               >
                 <X size={16} />
               </button>
             </div>
 
             {/* Customer info */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "16px", background: "var(--kravy-bg-2)", borderRadius: "16px", border: "1px solid var(--kravy-border)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>
-                <User size={14} className="text-indigo-500" />
-                <span>{selectedBill.customerName || "Walk-in Guest"}</span>
+            <div className="flex flex-col gap-2 p-3 sm:p-4 bg-[var(--kravy-bg-2)] rounded-xl border border-[var(--kravy-border)]">
+              <div className="flex items-center gap-2 text-xs sm:text-sm font-extrabold text-[var(--kravy-text-primary)]">
+                <User size={14} className="text-indigo-500 shrink-0" />
+                <span className="truncate">{selectedBill.customerName || "Walk-in Guest"}</span>
               </div>
               {selectedBill.customerPhone && (
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.8rem", color: "var(--kravy-text-muted)" }}>
-                  <Smartphone size={14} />
+                <div className="flex items-center gap-2 text-xs text-[var(--kravy-text-muted)] font-mono">
+                  <Smartphone size={14} className="shrink-0" />
                   <span>{selectedBill.customerPhone}</span>
                 </div>
               )}
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.8rem", color: "var(--kravy-text-muted)" }}>
-                <Clock size={14} />
+              <div className="flex items-center gap-2 text-xs text-[var(--kravy-text-muted)]">
+                <Clock size={14} className="shrink-0" />
                 <span>Cleared on {new Date(selectedBill.createdAt).toLocaleString("en-IN")}</span>
               </div>
             </div>
 
             {/* Line Items */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 900, color: "var(--kravy-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Item List Breakdown</span>
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "180px", overflowY: "auto", paddingRight: "6px" }}>
+            <div className="flex flex-col gap-2">
+              <span className="text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-wider">Item List Breakdown</span>
+              <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
                 {(typeof selectedBill.items === "string" ? JSON.parse(selectedBill.items) : selectedBill.items)?.map((it: any, i: number) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.85rem", padding: "4px 0" }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ fontWeight: 800, color: "var(--kravy-text-primary)" }}>{it.name}</span>
-                      <span style={{ color: "var(--kravy-brand)", fontWeight: 900, marginLeft: "8px" }}>×{it.qty || it.quantity}</span>
+                  <div key={i} className="flex justify-between items-center text-xs sm:text-sm py-1 border-b border-[var(--kravy-border)]/50 last:border-b-0">
+                    <div className="flex-1 min-w-0 pr-2">
+                      <span className="font-extrabold text-[var(--kravy-text-primary)]">{it.name}</span>
+                      <span className="text-[var(--kravy-brand)] font-black ml-1.5">×{it.qty || it.quantity}</span>
                     </div>
-                    <span style={{ fontWeight: 850, color: "var(--kravy-text-primary)", fontFamily: "monospace" }}>{sym}{format((it.qty || it.quantity) * (it.price || it.rate || 0))}</span>
+                    <span className="font-black text-[var(--kravy-text-primary)] font-mono shrink-0">{sym}{format((it.qty || it.quantity) * (it.price || it.rate || 0))}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Financial Ledger Audit */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px", borderTop: "1px solid var(--kravy-border)", paddingTop: "14px" }}>
-              <div style={{ display: "flex", fontSize: "0.8rem", color: "var(--kravy-text-muted)", justifyContent: "space-between" }}>
+            <div className="flex flex-col gap-1.5 border-t border-[var(--kravy-border)] pt-3 text-xs sm:text-sm">
+              <div className="flex text-[var(--kravy-text-muted)] justify-between">
                 <span>Subtotal (Net Assets)</span>
-                <span style={{ fontFamily: "monospace" }}>{sym}{format(selectedBill.subtotal)}</span>
+                <span className="font-mono">{sym}{format(selectedBill.subtotal)}</span>
               </div>
               {selectedBill.discountAmount > 0 && (
-                <div style={{ display: "flex", fontSize: "0.8rem", color: "#EF4444", justifyContent: "space-between" }}>
+                <div className="flex text-rose-500 justify-between font-bold">
                   <span>Discounts Applied</span>
-                  <span style={{ fontFamily: "monospace" }}>-{sym}{format(selectedBill.discountAmount)}</span>
+                  <span className="font-mono">-{sym}{format(selectedBill.discountAmount)}</span>
                 </div>
               )}
               {selectedBill.tax > 0 && (
-                <div style={{ display: "flex", fontSize: "0.8rem", color: "var(--kravy-text-muted)", justifyContent: "space-between" }}>
+                <div className="flex text-[var(--kravy-text-muted)] justify-between">
                   <span>Tax (CGST + SGST)</span>
-                  <span style={{ fontFamily: "monospace" }}>{sym}{format(selectedBill.tax)}</span>
+                  <span className="font-mono">{sym}{format(selectedBill.tax)}</span>
                 </div>
               )}
-              <div style={{ display: "flex", fontSize: "1.1rem", fontWeight: 950, color: "var(--kravy-text-primary)", borderTop: "1px dashed var(--kravy-border)", paddingTop: "8px", justifyContent: "space-between" }}>
+              <div className="flex text-sm sm:text-base font-black text-[var(--kravy-text-primary)] border-t border-dashed border-[var(--kravy-border)] pt-2 justify-between">
                 <span>Net Total Settled</span>
-                <span style={{ fontFamily: "monospace", color: "var(--kravy-brand)" }}>{sym}{format(selectedBill.total)}</span>
+                <span className="font-mono text-[var(--kravy-brand)]">{sym}{format(selectedBill.total)}</span>
               </div>
             </div>
 
             {/* Clearing info */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--kravy-border)", paddingTop: "14px" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--kravy-text-muted)" }}>Payment Method: <span style={{ color: "var(--kravy-text-primary)" }}>{(selectedBill.paymentMode || "").toUpperCase()}</span></span>
-              <span style={{ fontSize: "0.7rem", fontWeight: 950, color: "#10B981", background: "rgba(16,185,129,0.1)", padding: "4px 10px", borderRadius: "8px" }}>
+            <div className="flex flex-wrap gap-2 justify-between items-center border-t border-[var(--kravy-border)] pt-3 text-xs">
+              <span className="font-extrabold text-[var(--kravy-text-muted)]">Payment Method: <span className="text-[var(--kravy-text-primary)]">{(selectedBill.paymentMode || "").toUpperCase()}</span></span>
+              <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2.5 py-1 rounded-md">
                 ✓ {(selectedBill.paymentStatus || "").toUpperCase()}
               </span>
             </div>
             
             {/* Audit log trail */}
             {selectedBill.auditNote && (
-              <div style={{ fontSize: "0.75rem", fontStyle: "italic", color: "var(--kravy-text-muted)", borderTop: "1px solid var(--kravy-border)", paddingTop: "10px" }}>
+              <div className="text-xs italic text-[var(--kravy-text-muted)] border-t border-[var(--kravy-border)] pt-2.5">
                 <strong>Audit Trail Log:</strong> {selectedBill.auditNote}
               </div>
             )}

@@ -118,30 +118,30 @@ export default function SchemaDebugger() {
 
   return (
     <>
-      {/* Floating trigger button */}
+      {/* Floating trigger button - repositioned to bottom left developer toolbar so it never overlaps billing headers or footer */}
       <button
         onClick={() => setOpen((v) => !v)}
         title="API Schema Debugger (Admin Only)"
-        className="fixed z-[9999] w-11 h-11 rounded-2xl flex items-center justify-center shadow-xl transition-all active:scale-95 print:hidden right-5 bottom-[calc(20px+max(80px,env(safe-area-inset-bottom)))] lg:bottom-5"
+        className="fixed z-[9999] w-7 h-7 rounded-lg flex items-center justify-center shadow-md transition-all active:scale-95 print:hidden left-22 sm:left-24 bottom-20 lg:bottom-4 opacity-75 hover:opacity-100"
         style={{
           background: open
             ? "linear-gradient(135deg,#6366f1,#8b5cf6)"
             : "linear-gradient(135deg,#1e1b4b,#312e81)",
-          border: "1.5px solid rgba(99,102,241,0.4)",
+          border: "1px solid rgba(99,102,241,0.4)",
           boxShadow: open
-            ? "0 0 0 4px rgba(99,102,241,0.25), 0 8px 24px rgba(99,102,241,0.4)"
-            : "0 4px 16px rgba(0,0,0,0.4)",
+            ? "0 0 0 3px rgba(99,102,241,0.25), 0 4px 16px rgba(99,102,241,0.4)"
+            : "0 2px 10px rgba(0,0,0,0.3)",
         }}
       >
         {requests.length > 0 && !open && (
           <span
-            className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center"
+            className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full text-[8px] font-black flex items-center justify-center"
             style={{ background: "#f43f5e", color: "#fff" }}
           >
             {requests.length > 9 ? "9+" : requests.length}
           </span>
         )}
-        <Code2 size={18} color="#a5b4fc" />
+        <Code2 size={13} color="#a5b4fc" />
       </button>
 
       {/* Panel */}

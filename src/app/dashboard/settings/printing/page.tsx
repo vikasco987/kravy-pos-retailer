@@ -234,6 +234,73 @@ const fontWeights = [
     { name: "Extra Bold (900)", value: "900", desc: "Heavy block weight" }
 ];
 
+// Custom anchored dropdown component that keeps menus inside container/viewport
+function ResponsiveDropdown({
+    value,
+    onChange,
+    options,
+    placeholder = "Select..."
+}: {
+    value: any;
+    onChange: (val: any) => void;
+    options: { label: string; value: any; sublabel?: string }[];
+    placeholder?: string;
+}) {
+    const [open, setOpen] = useState(false);
+    const selected = options.find((o) => String(o.value) === String(value));
+
+    return (
+        <div className="relative w-full">
+            <button
+                type="button"
+                onClick={() => setOpen((prev) => !prev)}
+                className="w-full h-10 sm:h-11 px-2.5 sm:px-3.5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-[11px] sm:text-xs font-black flex items-center justify-between gap-1.5 sm:gap-2 text-slate-800 dark:text-white hover:border-violet-400 focus:ring-2 focus:ring-violet-500/20 outline-none transition-all cursor-pointer box-border"
+            >
+                <span className="truncate text-left leading-tight">
+                    {selected ? selected.label : placeholder}
+                </span>
+                <ChevronDown size={13} className={`shrink-0 text-slate-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+            </button>
+
+            {open && (
+                <>
+                    <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+                    <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl shadow-2xl max-h-52 sm:max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-white/5 overscroll-contain">
+                        {options.map((opt, i) => {
+                            const isSelected = String(opt.value) === String(value);
+                            return (
+                                <button
+                                    key={i}
+                                    type="button"
+                                    onClick={() => {
+                                        onChange(opt.value);
+                                        setOpen(false);
+                                    }}
+                                    className={`w-full text-left px-2.5 sm:px-3 py-2 text-[11px] sm:text-xs transition-colors flex flex-col gap-0.5 cursor-pointer ${
+                                        isSelected
+                                            ? "bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-400 font-black"
+                                            : "text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 font-bold"
+                                    }`}
+                                >
+                                    <div className="flex items-center justify-between gap-1.5">
+                                        <span className="break-words leading-tight">{opt.label}</span>
+                                        {isSelected && <Check size={12} className="shrink-0 text-violet-600" />}
+                                    </div>
+                                    {opt.sublabel && (
+                                        <span className="text-[9px] sm:text-[10px] text-slate-400 font-medium leading-tight">
+                                            {opt.sublabel}
+                                        </span>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
 export default function PrintingSettings() {
     const router = useRouter();
     const { profile: cachedProfile, loading: profileLoading, updateProfile } = useProfileCache();
@@ -362,31 +429,31 @@ export default function PrintingSettings() {
     const SettingToggle = ({ icon: Icon, label, sKey, desc, color }: any) => (
         <button 
             onClick={() => toggle(sKey)}
-            className={`flex items-center gap-4 p-4 rounded-2xl border transition-all text-left group ${
+            className={`flex items-center gap-2.5 sm:gap-4 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border transition-all text-left group cursor-pointer ${
                 printSettings[sKey] !== false 
                 ? "bg-white dark:bg-white/5 border-slate-200 dark:border-white/10" 
                 : "bg-slate-50 dark:bg-black/20 border-slate-100 dark:border-white/5 opacity-60"
             }`}
         >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+            <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shrink-0 ${
                 printSettings[sKey] !== false 
                 ? `${color} text-white shadow-lg shadow-current/20` 
                 : "bg-slate-200 dark:bg-white/5 text-slate-400"
             }`}>
-                <Icon size={18} />
+                <Icon size={16} />
             </div>
             
-            <div className="flex-1">
-                <h3 className={`text-sm font-bold transition-all ${printSettings[sKey] !== false ? "text-slate-900 dark:text-white" : "text-slate-400"}`}>{label}</h3>
-                <p className="text-[10px] text-slate-400 dark:text-white/30 font-bold uppercase tracking-widest mt-0.5 line-clamp-1">{desc}</p>
+            <div className="flex-1 min-w-0">
+                <h3 className={`text-xs sm:text-sm font-bold transition-all leading-tight ${printSettings[sKey] !== false ? "text-slate-900 dark:text-white" : "text-slate-400"}`}>{label}</h3>
+                <p className="text-[9px] sm:text-[10px] text-slate-400 dark:text-white/30 font-bold uppercase tracking-wider mt-0.5 break-words leading-tight">{desc}</p>
             </div>
 
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center border transition-all ${
+            <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg flex items-center justify-center border transition-all shrink-0 ${
                 printSettings[sKey] !== false 
                 ? "bg-emerald-50 border-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400" 
                 : "bg-white dark:bg-transparent border-slate-200 dark:border-white/10 text-slate-300"
             }`}>
-                {printSettings[sKey] !== false ? <Check size={14} strokeWidth={4} /> : null}
+                {printSettings[sKey] !== false ? <Check size={12} strokeWidth={3.5} /> : null}
             </div>
         </button>
     );
@@ -405,18 +472,18 @@ export default function PrintingSettings() {
         };
 
         return (
-            <div className="p-5 rounded-2xl bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 space-y-3">
-                <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-violet-500/10 text-violet-600 flex items-center justify-center">
+            <div className="p-3.5 sm:p-4 md:p-5 rounded-2xl bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 space-y-3">
+                <div className="flex justify-between items-center gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-violet-500/10 text-violet-600 flex items-center justify-center shrink-0">
                             <Icon size={14} />
                         </div>
-                        <div>
-                            <h4 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">{label}</h4>
+                        <div className="min-w-0">
+                            <h4 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider truncate">{label}</h4>
                             <p className="text-[10px] text-slate-400 font-medium">Range: {min}px - {max}px</p>
                         </div>
                     </div>
-                    <span className="px-2.5 py-1 rounded-lg bg-violet-500/10 text-violet-600 text-xs font-black">
+                    <span className="px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg bg-violet-500/10 text-violet-600 text-xs font-black shrink-0">
                         {getLabel(value)}
                     </span>
                 </div>
@@ -431,18 +498,23 @@ export default function PrintingSettings() {
                 />
 
                 {weightKey && (
-                    <div className="flex items-center justify-between gap-4 pt-3 border-t border-slate-100/50 dark:border-white/5">
-                        <span className="text-[9px] font-black text-slate-400 dark:text-white/30 uppercase tracking-widest">Weight Override</span>
-                        <select
-                            value={printSettings[weightKey] || ""}
-                            onChange={(e) => setPrintSettings((prev: any) => ({ ...prev, [weightKey]: e.target.value }))}
-                            className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-2 py-1 text-[10px] font-black outline-none cursor-pointer text-slate-700 dark:text-slate-300"
-                        >
-                            <option value="">Default style</option>
-                            {fontWeights.map((w, idx) => (
-                                <option key={idx} value={w.value}>{w.name.split(" (")[0]}</option>
-                            ))}
-                        </select>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-3 border-t border-slate-100/50 dark:border-white/5">
+                        <span className="text-[9px] font-black text-slate-400 dark:text-white/30 uppercase tracking-widest shrink-0">Weight Override</span>
+                        <div className="w-full sm:w-44">
+                            <ResponsiveDropdown
+                                value={printSettings[weightKey] || ""}
+                                onChange={(val) => setPrintSettings((prev: any) => ({ ...prev, [weightKey]: val }))}
+                                options={[
+                                    { label: "Default style", value: "" },
+                                    ...fontWeights.map((w) => ({
+                                        label: w.name.split(" (")[0],
+                                        value: w.value,
+                                        sublabel: w.desc
+                                    }))
+                                ]}
+                                placeholder="Default style"
+                            />
+                        </div>
                     </div>
                 )}
             </div>
@@ -450,89 +522,95 @@ export default function PrintingSettings() {
     };
 
     return (
-        <div className="max-w-7xl mx-auto space-y-8 pb-20 kravy-page-fade">
+        <div className="w-full space-y-6 sm:space-y-8 pb-20 kravy-page-fade">
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-4">
-                <div className="flex items-center gap-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-6 px-1 sm:px-2">
+                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                     <button 
                         onClick={() => router.back()}
-                        className="w-12 h-12 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center hover:scale-110 transition-all shadow-sm cursor-pointer"
+                        className="w-9 h-9 sm:w-10 sm:h-10 md:w-11 md:h-11 rounded-xl sm:rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-sm cursor-pointer shrink-0"
                         title="Back"
                     >
-                        <ArrowLeft size={20} className="text-slate-600 dark:text-white" />
+                        <ArrowLeft size={18} className="text-slate-600 dark:text-white" />
                     </button>
-                    <div>
-                        <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter">Print Customizer</h1>
-                        <p className="text-xs text-slate-400 dark:text-white/40 font-bold uppercase tracking-[0.2em] mt-1">Design your Bill & KOT layout</p>
+                    <div className="min-w-0">
+                        <h1 className="text-lg sm:text-xl md:text-2xl lg:text-[26px] xl:text-3xl font-black text-slate-900 dark:text-white tracking-tight leading-tight">
+                            Print Customizer
+                        </h1>
+                        <p className="text-[10px] sm:text-xs text-slate-400 dark:text-white/40 font-bold uppercase tracking-wider sm:tracking-[0.15em] mt-0.5 leading-normal">
+                            Design your Bill & KOT layout
+                        </p>
                     </div>
                 </div>
 
                 <button 
                     onClick={handleSave}
                     disabled={saving}
-                    className="h-14 px-10 rounded-2xl bg-violet-600 hover:bg-violet-500 text-white font-black uppercase tracking-widest text-xs flex items-center gap-3 shadow-2xl shadow-violet-600/20 disabled:opacity-50 transition-all active:scale-95"
+                    className="h-9 sm:h-10 md:h-11 px-4 sm:px-6 md:px-8 rounded-xl sm:rounded-2xl bg-violet-600 hover:bg-violet-500 text-white font-black uppercase tracking-wider text-[10px] sm:text-xs flex items-center gap-2 shadow-xl shadow-violet-600/20 disabled:opacity-50 transition-all active:scale-95 shrink-0 self-start sm:self-auto whitespace-nowrap"
                 >
-                    <Save size={18} />
-                    {saving ? "Saving..." : "Save Preferences"}
+                    <Save size={15} />
+                    <span>{saving ? "Saving..." : "Save Preferences"}</span>
                 </button>
             </div>
 
             {/* Mobile / Tablet Tab Switcher (hidden on desktop) */}
-            <div className="xl:hidden flex bg-slate-100 dark:bg-white/5 p-1 rounded-2xl gap-1 mx-4 shadow-sm border border-slate-200/50 dark:border-white/5">
+            <div className="xl:hidden flex bg-slate-100 dark:bg-white/5 p-1 rounded-xl sm:rounded-2xl gap-1 mx-1 sm:mx-2 shadow-sm border border-slate-200/50 dark:border-white/5">
                 <button
                     onClick={() => setActiveTab("configure")}
-                    className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                    className={`flex-1 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 sm:gap-2 ${
                         activeTab === "configure" 
                         ? 'bg-white dark:bg-white/10 shadow-sm text-violet-600 dark:text-violet-400' 
                         : 'text-slate-400 hover:text-slate-600 dark:hover:text-white'
                     }`}
                 >
-                    <Settings size={14} /> Configure Details
+                    <Settings size={12} className="shrink-0" /> 
+                    <span className="truncate">Configure</span>
                 </button>
                 <button
                     onClick={() => setActiveTab("preview")}
-                    className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                    className={`flex-1 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 sm:gap-2 ${
                         activeTab === "preview" 
                         ? 'bg-white dark:bg-white/10 shadow-sm text-violet-600 dark:text-violet-400' 
                         : 'text-slate-400 hover:text-slate-600 dark:hover:text-white'
                     }`}
                 >
-                    <Eye size={14} /> Realtime Preview
+                    <Eye size={12} className="shrink-0" /> 
+                    <span className="truncate">Live Preview</span>
                 </button>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start px-4">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 sm:gap-8 items-start px-1 sm:px-2">
                 {/* Left: Controls */}
                 <div className={`xl:col-span-8 space-y-10 ${activeTab === 'configure' ? 'block' : 'hidden xl:block'}`}>
                     
                     {/* Auto-Connect Web Bluetooth Guide */}
-                    <div className="space-y-6">
-                        <div className="flex items-center gap-3 px-4">
+                    <div className="space-y-4 sm:space-y-6">
+                        <div className="flex items-center gap-2.5 sm:gap-3 px-1 sm:px-2">
                             <div className="w-2 h-2 rounded-full bg-blue-500" />
-                            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">Web Bluetooth Auto-Connect Guide</h2>
+                            <h2 className="text-xs sm:text-sm font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-slate-400">Web Bluetooth Auto-Connect Guide</h2>
                         </div>
-                        <div className="mx-4 p-6 rounded-3xl bg-blue-500/5 border border-blue-500/10 space-y-4">
-                            <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
-                                <Zap size={18} className="text-blue-500" /> 
-                                Stop Bluetooth connection popups on every refresh
+                        <div className="p-3.5 sm:p-5 md:p-6 rounded-2xl sm:rounded-3xl bg-blue-500/5 border border-blue-500/10 space-y-3 sm:space-y-4">
+                            <h3 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                                <Zap size={16} className="text-blue-500 shrink-0" /> 
+                                <span>Stop Bluetooth connection popups on every refresh</span>
                             </h3>
-                            <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 leading-relaxed">
+                            <p className="text-[11px] sm:text-xs font-semibold text-slate-600 dark:text-slate-400 leading-relaxed">
                                 Google Chrome forgets Bluetooth devices on page reload for security reasons. To allow Kravy POS to automatically reconnect to your thermal printer in the background without asking you every time, please follow <b>ONE</b> of the steps below:
                             </p>
-                            <div className="space-y-3 mt-2">
-                                <div className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10">
-                                    <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest mb-2">Option 1: Enable Chrome Flag (Recommended for Desktop)</h4>
-                                    <ol className="text-xs font-semibold text-slate-500 list-decimal pl-4 space-y-1">
-                                        <li>Copy this link: <code className="bg-slate-100 dark:bg-black/20 px-1 py-0.5 rounded text-blue-500 select-all">chrome://flags/#enable-web-bluetooth-new-permissions-backend</code></li>
+                            <div className="space-y-2.5 sm:space-y-3 mt-2">
+                                <div className="p-3 sm:p-4 bg-white dark:bg-white/5 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-white/10">
+                                    <h4 className="text-[11px] sm:text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider sm:tracking-widest mb-1.5 sm:mb-2">Option 1: Enable Chrome Flag (Recommended for Desktop)</h4>
+                                    <ol className="text-[11px] sm:text-xs font-semibold text-slate-500 list-decimal pl-4 space-y-1">
+                                        <li>Copy this link: <code className="bg-slate-100 dark:bg-black/20 px-1 py-0.5 rounded text-blue-500 break-all select-all">chrome://flags/#enable-web-bluetooth-new-permissions-backend</code></li>
                                         <li>Paste it in a new Chrome tab and hit Enter.</li>
                                         <li>You will see a setting named <b className="text-slate-800 dark:text-slate-300">"Use the new permissions backend for Web Bluetooth"</b> highlighted in yellow.</li>
                                         <li>Click on the dropdown next to it and change the setting from <b>Default</b> to <b>Enabled</b>.</li>
                                         <li>Click the <b>Relaunch</b> button that appears at the bottom of the Chrome window.</li>
                                     </ol>
                                 </div>
-                                <div className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10">
-                                    <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest mb-2">Option 2: Install App (Recommended for Mobile/Tablet)</h4>
-                                    <ol className="text-xs font-semibold text-slate-500 list-decimal pl-4 space-y-1">
+                                <div className="p-3 sm:p-4 bg-white dark:bg-white/5 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-white/10">
+                                    <h4 className="text-[11px] sm:text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider sm:tracking-widest mb-1.5 sm:mb-2">Option 2: Install App (Recommended for Mobile/Tablet)</h4>
+                                    <ol className="text-[11px] sm:text-xs font-semibold text-slate-500 list-decimal pl-4 space-y-1">
                                         <li>Click the <b>3 dots (⋮)</b> in the top right corner of Chrome.</li>
                                         <li>Click on <b>Install Kravy POS</b> or <b>Add to Home Screen</b>.</li>
                                         <li>Open the installed POS app from your home screen.</li>
@@ -543,12 +621,12 @@ export default function PrintingSettings() {
                     </div>
 
                     {/* Header & Business Info */}
-                    <div className="space-y-6">
-                        <div className="flex items-center gap-3 px-4">
+                    <div className="space-y-4 sm:space-y-6">
+                        <div className="flex items-center gap-2.5 sm:gap-3 px-1 sm:px-2">
                             <div className="w-2 h-2 rounded-full bg-violet-500" />
-                            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">Header & Business Info</h2>
+                            <h2 className="text-xs sm:text-sm font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-slate-400">Header & Business Info</h2>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-4">
                             <SettingToggle icon={ImageIcon} label="Business Logo" sKey="showLogo" desc="Your restaurant logo" color="bg-blue-500" />
                             <SettingToggle icon={Type} label="Tagline" sKey="showTagline" desc="Catchy business slogan" color="bg-indigo-500" />
                             <SettingToggle icon={Phone} label="Contact Info" sKey="showContact" desc="Phone numbers & WhatsApp" color="bg-emerald-500" />
@@ -561,15 +639,15 @@ export default function PrintingSettings() {
                             <motion.div 
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="mx-4 p-6 rounded-3xl bg-emerald-500/5 border border-emerald-500/10 space-y-4 mt-4"
+                                className="p-3.5 sm:p-5 md:p-6 rounded-2xl sm:rounded-3xl bg-emerald-500/5 border border-emerald-500/10 space-y-3 mt-3 sm:mt-4"
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center">
-                                        <Phone size={18} />
+                                <div className="flex items-center gap-2.5 sm:gap-3">
+                                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                                        <Phone size={16} />
                                     </div>
-                                    <div>
-                                        <h4 className="text-sm font-black text-slate-900 dark:text-white">Secondary Phone Number</h4>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Prints below the main contact number</p>
+                                    <div className="min-w-0">
+                                        <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white leading-tight">Secondary Phone Number</h4>
+                                        <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Prints below the main contact number</p>
                                     </div>
                                 </div>
                                 <input 
@@ -577,19 +655,19 @@ export default function PrintingSettings() {
                                     placeholder="e.g. 9876543210 (Optional)"
                                     value={printSettings.secondaryPhone || ""}
                                     onChange={(e) => setPrintSettings({ ...printSettings, secondaryPhone: e.target.value })}
-                                    className="w-full h-12 px-5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                                    className="w-full h-10 sm:h-12 px-3.5 sm:px-5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs sm:text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                                 />
                             </motion.div>
                         )}
                     </div>
 
                     {/* Order & Customer Details */}
-                    <div className="space-y-6 pt-4">
-                        <div className="flex items-center gap-3 px-4">
+                    <div className="space-y-4 sm:space-y-6 pt-3 sm:pt-4">
+                        <div className="flex items-center gap-2.5 sm:gap-3 px-1 sm:px-2">
                             <div className="w-2 h-2 rounded-full bg-pink-500" />
-                            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">Order & Customer Details</h2>
+                            <h2 className="text-xs sm:text-sm font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-slate-400">Order & Customer Details</h2>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-4">
                             <SettingToggle icon={Receipt} label="Invoice Number" sKey="showInvoiceNumber" desc="Print Invoice # / Bill No on receipt" color="bg-purple-600" />
                             <SettingToggle icon={Clock} label="Token Number" sKey="showToken" desc="Order sequence token" color="bg-pink-500" />
                             <SettingToggle icon={MapPin} label="Table / Counter" sKey="showTableInfo" desc="Show table name/counter badge" color="bg-rose-400" />
@@ -598,23 +676,23 @@ export default function PrintingSettings() {
                     </div>
 
                     {/* Item List Configuration */}
-                    <div className="space-y-6 pt-4">
-                        <div className="flex items-center gap-3 px-4">
+                    <div className="space-y-4 sm:space-y-6 pt-3 sm:pt-4">
+                        <div className="flex items-center gap-2.5 sm:gap-3 px-1 sm:px-2">
                             <div className="w-2 h-2 rounded-full bg-rose-500" />
-                            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">Items List Setup</h2>
+                            <h2 className="text-xs sm:text-sm font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-slate-400">Items List Setup</h2>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-4">
                             <SettingToggle icon={Type} label="Food Type Suffix" sKey="showFoodTypeSuffix" desc="Show (V), (NV) or (R)" color="bg-rose-600" />
                         </div>
                     </div>
 
                     {/* Financial Summary & Taxes */}
-                    <div className="space-y-6 pt-4">
-                        <div className="flex items-center gap-3 px-4">
+                    <div className="space-y-4 sm:space-y-6 pt-3 sm:pt-4">
+                        <div className="flex items-center gap-2.5 sm:gap-3 px-1 sm:px-2">
                             <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">Financial Summary & Taxes</h2>
+                            <h2 className="text-xs sm:text-sm font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-slate-400">Financial Summary & Taxes</h2>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-4">
                             <SettingToggle icon={Hash} label="Subtotal" sKey="showSubtotal" desc="Sum before taxes" color="bg-emerald-500" />
                             <SettingToggle icon={Percent} label="Discount" sKey="showDiscount" desc="Offer & coupon lines" color="bg-amber-500" />
                             <SettingToggle icon={FileText} label="Taxable Amount" sKey="showTaxableAmt" desc="Amount liable for tax" color="bg-cyan-500" />
@@ -629,12 +707,12 @@ export default function PrintingSettings() {
                     </div>
 
                     {/* Payment & Footer */}
-                    <div className="space-y-6 pt-4">
-                        <div className="flex items-center gap-3 px-4">
+                    <div className="space-y-4 sm:space-y-6 pt-3 sm:pt-4">
+                        <div className="flex items-center gap-2.5 sm:gap-3 px-1 sm:px-2">
                             <div className="w-2 h-2 rounded-full bg-slate-500" />
-                            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">Payment & Footer Branding</h2>
+                            <h2 className="text-xs sm:text-sm font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-slate-400">Payment & Footer Branding</h2>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-4">
                             <SettingToggle icon={Receipt} label="Payment Info" sKey="showPaymentStatus" desc="Mode & Status" color="bg-blue-600" />
                             <SettingToggle icon={MessageSquare} label="Greetings" sKey="showGreetings" desc="Thank you message" color="bg-teal-500" />
                             <SettingToggle icon={MessageSquare} label="Visit Again" sKey="showVisitAgain" desc="Greeting footer line" color="bg-slate-600" />
@@ -643,12 +721,12 @@ export default function PrintingSettings() {
                     </div>
 
                     {/* Separator Settings */}
-                    <div className="space-y-6 pt-4">
-                        <div className="flex items-center gap-3 px-4">
+                    <div className="space-y-4 sm:space-y-6 pt-3 sm:pt-4">
+                        <div className="flex items-center gap-2.5 sm:gap-3 px-1 sm:px-2">
                             <div className="w-2 h-2 rounded-full bg-slate-500" />
-                            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">Layout Separators</h2>
+                            <h2 className="text-xs sm:text-sm font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-slate-400">Layout Separators</h2>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-4">
                             <SettingToggle icon={MoreVertical} label="Top Header Line" sKey="sepTop" desc="Divider at the very top" color="bg-slate-500" />
                             <SettingToggle icon={MoreVertical} label="Customer Divider" sKey="sepCustomer" desc="Line after customer info" color="bg-slate-400" />
                             <SettingToggle icon={MoreVertical} label="Items Header Line" sKey="sepItemsHeader" desc="Divider for item column names" color="bg-slate-500" />
@@ -662,12 +740,12 @@ export default function PrintingSettings() {
                     </div>
 
                     {/* KOT Settings */}
-                    <div className="space-y-6 pt-4">
-                        <div className="flex items-center gap-3 px-4">
+                    <div className="space-y-4 sm:space-y-6 pt-3 sm:pt-4">
+                        <div className="flex items-center gap-2.5 sm:gap-3 px-1 sm:px-2">
                             <div className="w-2 h-2 rounded-full bg-rose-500" />
-                            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">KOT (Kitchen) Layout</h2>
+                            <h2 className="text-xs sm:text-sm font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-slate-400">KOT (Kitchen) Layout</h2>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-4">
                             <SettingToggle icon={Clock} label="KOT Token" sKey="showKOTToken" desc="Token number for chefs" color="bg-rose-500" />
                             <SettingToggle icon={User} label="KOT Customer" sKey="showKOTCustomer" desc="Customer name on KOT" color="bg-orange-500" />
                             <SettingToggle icon={Receipt} label="Bill Reference" sKey="showKOTBillNo" desc="Invoice # on KOT" color="bg-indigo-500" />
@@ -677,12 +755,12 @@ export default function PrintingSettings() {
                     </div>
 
                     {/* KOT Separators */}
-                    <div className="space-y-6 pt-4">
-                        <div className="flex items-center gap-3 px-4">
+                    <div className="space-y-4 sm:space-y-6 pt-3 sm:pt-4">
+                        <div className="flex items-center gap-2.5 sm:gap-3 px-1 sm:px-2">
                             <div className="w-2 h-2 rounded-full bg-slate-500" />
-                            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">KOT Separators / Lines</h2>
+                            <h2 className="text-xs sm:text-sm font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-slate-400">KOT Separators / Lines</h2>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-4">
                             <SettingToggle icon={MoreVertical} label="KOT Top Line" sKey="sepKOTTop" desc="Line below K.O.T title" color="bg-slate-500" />
                             <SettingToggle icon={MoreVertical} label="KOT Customer Line" sKey="sepKOTCustomer" desc="Lines around Customer info" color="bg-slate-600" />
                             <SettingToggle icon={MoreVertical} label="KOT Header Line" sKey="sepKOTItemsHeader" desc="Line below Item/Qty headers" color="bg-slate-500" />
@@ -692,12 +770,12 @@ export default function PrintingSettings() {
                     </div>
 
                     {/* QR Code & Digital */}
-                    <div className="space-y-6 pt-4">
-                        <div className="flex items-center gap-3 px-4">
+                    <div className="space-y-4 sm:space-y-6 pt-3 sm:pt-4">
+                        <div className="flex items-center gap-2.5 sm:gap-3 px-1 sm:px-2">
                             <div className="w-2 h-2 rounded-full bg-orange-500" />
-                            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">QR Code & Digital</h2>
+                            <h2 className="text-xs sm:text-sm font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-slate-400">QR Code & Digital</h2>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-4">
                             <SettingToggle icon={QrCode} label="Feedback QR" sKey="showReviewQR" desc="Scan to review on Google" color="bg-orange-500" />
                         </div>
                         
@@ -705,15 +783,15 @@ export default function PrintingSettings() {
                             <motion.div 
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="mx-4 p-6 rounded-3xl bg-orange-500/5 border border-orange-500/10 space-y-4"
+                                className="p-3.5 sm:p-5 md:p-6 rounded-2xl sm:rounded-3xl bg-orange-500/5 border border-orange-500/10 space-y-3"
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center">
-                                        <QrCode size={18} />
+                                <div className="flex items-center gap-2.5 sm:gap-3">
+                                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0">
+                                        <QrCode size={16} />
                                     </div>
-                                    <div>
-                                        <h4 className="text-sm font-black text-slate-900 dark:text-white">Review/Feedback URL</h4>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Enter your Google Review or Form link</p>
+                                    <div className="min-w-0">
+                                        <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white leading-tight">Review/Feedback URL</h4>
+                                        <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Enter your Google Review or Form link</p>
                                     </div>
                                 </div>
                                 <input 
@@ -721,21 +799,21 @@ export default function PrintingSettings() {
                                     placeholder="https://g.page/r/your-id/review"
                                     value={business?.reviewUrl || ""}
                                     onChange={(e) => setBusiness({ ...business, reviewUrl: e.target.value })}
-                                    className="w-full h-12 px-5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none transition-all"
+                                    className="w-full h-10 sm:h-12 px-3.5 sm:px-5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs sm:text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none transition-all"
                                 />
                             </motion.div>
                         )}
                     </div>
 
                     {/* Typography & Styling Customization Accordion */}
-                    <div className="space-y-6 pt-4">
+                    <div className="space-y-4 sm:space-y-6 pt-3 sm:pt-4">
                         <button 
                             onClick={() => setShowStyling(!showStyling)}
-                            className="w-full flex items-center justify-between px-4 py-2 hover:opacity-80 transition-all text-left"
+                            className="w-full flex items-center justify-between px-1 sm:px-2 py-1.5 hover:opacity-80 transition-all text-left"
                         >
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2.5 sm:gap-3">
                                 <div className="w-2 h-2 rounded-full bg-violet-500" />
-                                <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">Typography & Styling</h2>
+                                <h2 className="text-xs sm:text-sm font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-slate-400">Typography & Styling</h2>
                             </div>
                             <div className="text-slate-400">
                                 {showStyling ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -746,7 +824,7 @@ export default function PrintingSettings() {
                             <motion.div 
                                 initial={{ opacity: 0, height: 0 }}
                                 animate={{ opacity: 1, height: "auto" }}
-                                className="mx-4 p-6 rounded-3xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-8"
+                                className="p-3 sm:p-5 md:p-6 rounded-2xl sm:rounded-3xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-6 sm:space-y-8"
                             >
                                 {/* Paper Settings Row */}
                                 <div className="space-y-4">
@@ -835,18 +913,19 @@ export default function PrintingSettings() {
                                                         <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Consecutive Print Spooler Delay</span>
                                                         <span className="text-xs font-black text-violet-600">{((printSettings.spoolerDelay !== undefined && printSettings.spoolerDelay !== null) ? printSettings.spoolerDelay : 1500) / 1000}s</span>
                                                     </div>
-                                                    <select 
+                                                    <ResponsiveDropdown
                                                         value={(printSettings.spoolerDelay !== undefined && printSettings.spoolerDelay !== null) ? printSettings.spoolerDelay : 1500}
-                                                        onChange={(e) => setPrintSettings((p: any) => ({ ...p, spoolerDelay: Number(e.target.value) }))}
-                                                        className="py-1.5 px-3 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-violet-500"
-                                                    >
-                                                        <option value="500">0.5s (Ultra Fast Spooler)</option>
-                                                        <option value="1000">1.0s (Fast Printer)</option>
-                                                        <option value="1500">1.5s (Balanced Standard)</option>
-                                                        <option value="2000">2.0s (Recommended for Slow Printers)</option>
-                                                        <option value="3000">3.0s (Extra Safe Queue)</option>
-                                                        <option value="4000">4.0s (Slow Spooler Cooldown)</option>
-                                                    </select>
+                                                        onChange={(val) => setPrintSettings((p: any) => ({ ...p, spoolerDelay: Number(val) }))}
+                                                        options={[
+                                                            { label: "0.5s", value: 500, sublabel: "Ultra Fast Spooler" },
+                                                            { label: "1.0s", value: 1000, sublabel: "Fast Printer" },
+                                                            { label: "1.5s", value: 1500, sublabel: "Balanced Standard" },
+                                                            { label: "2.0s", value: 2000, sublabel: "Recommended for Slow Printers" },
+                                                            { label: "3.0s", value: 3000, sublabel: "Extra Safe Queue" },
+                                                            { label: "4.0s", value: 4000, sublabel: "Slow Spooler Cooldown" }
+                                                        ]}
+                                                        placeholder="1.5s (Balanced Standard)"
+                                                    />
                                                     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">
                                                         Cooldown time between KOT and Bill prints to prevent spooler freezes.
                                                     </span>
@@ -903,65 +982,61 @@ export default function PrintingSettings() {
                                         {/* Receipt Font */}
                                         <div className="flex flex-col gap-2">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Receipt/Bill Font Family</label>
-                                            <select 
+                                            <ResponsiveDropdown
                                                 value={printSettings.fontFamily || ""}
-                                                onChange={(e) => setPrintSettings((p: any) => ({ ...p, fontFamily: e.target.value }))}
-                                                className="h-12 px-4 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs font-black focus:ring-2 focus:ring-violet-500 outline-none transition-all cursor-pointer"
-                                            >
-                                                {fonts.map((f, idx) => (
-                                                    <option key={idx} value={f.value} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold text-xs">
-                                                        {f.name} {f.safe ? " (✔ Thermal Safe)" : ""}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                onChange={(val) => setPrintSettings((p: any) => ({ ...p, fontFamily: val }))}
+                                                options={fonts.map((f) => ({
+                                                    label: `${f.name}${f.safe ? " (✔ Safe)" : ""}`,
+                                                    value: f.value,
+                                                    sublabel: f.desc
+                                                }))}
+                                                placeholder="Default (System Sans)"
+                                            />
                                         </div>
 
                                         {/* KOT Font */}
                                         <div className="flex flex-col gap-2">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">KOT (Kitchen Slip) Font Family</label>
-                                            <select 
+                                            <ResponsiveDropdown
                                                 value={printSettings.kotFontFamily || ""}
-                                                onChange={(e) => setPrintSettings((p: any) => ({ ...p, kotFontFamily: e.target.value }))}
-                                                className="h-12 px-4 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs font-black focus:ring-2 focus:ring-violet-500 outline-none transition-all cursor-pointer"
-                                            >
-                                                {fonts.map((f, idx) => (
-                                                    <option key={idx} value={f.value} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold text-xs">
-                                                        {f.name} {f.safe ? " (✔ Thermal Safe)" : ""}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                onChange={(val) => setPrintSettings((p: any) => ({ ...p, kotFontFamily: val }))}
+                                                options={fonts.map((f) => ({
+                                                    label: `${f.name}${f.safe ? " (✔ Safe)" : ""}`,
+                                                    value: f.value,
+                                                    sublabel: f.desc
+                                                }))}
+                                                placeholder="Default (System Sans)"
+                                            />
                                         </div>
 
                                         {/* Receipt Font Weight */}
                                         <div className="flex flex-col gap-2">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Receipt/Bill Font Weight</label>
-                                            <select 
+                                            <ResponsiveDropdown
                                                 value={printSettings.fontWeight || ""}
-                                                onChange={(e) => setPrintSettings((p: any) => ({ ...p, fontWeight: e.target.value }))}
-                                                className="h-12 px-4 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs font-black focus:ring-2 focus:ring-violet-500 outline-none transition-all cursor-pointer"
-                                            >
-                                                {fontWeights.map((w, idx) => (
-                                                    <option key={idx} value={w.value} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold text-xs">
-                                                        {w.name} ({w.desc})
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                onChange={(val) => setPrintSettings((p: any) => ({ ...p, fontWeight: val }))}
+                                                options={fontWeights.map((w) => ({
+                                                    label: w.name,
+                                                    value: w.value,
+                                                    sublabel: w.desc
+                                                }))}
+                                                placeholder="Default (Style Standard)"
+                                            />
                                         </div>
 
                                         {/* KOT Font Weight */}
                                         <div className="flex flex-col gap-2">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">KOT (Kitchen Slip) Font Weight</label>
-                                            <select 
+                                            <ResponsiveDropdown
                                                 value={printSettings.kotFontWeight || ""}
-                                                onChange={(e) => setPrintSettings((p: any) => ({ ...p, kotFontWeight: e.target.value }))}
-                                                className="h-12 px-4 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs font-black focus:ring-2 focus:ring-violet-500 outline-none transition-all cursor-pointer"
-                                            >
-                                                {fontWeights.map((w, idx) => (
-                                                    <option key={idx} value={w.value} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold text-xs">
-                                                        {w.name} ({w.desc})
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                onChange={(val) => setPrintSettings((p: any) => ({ ...p, kotFontWeight: val }))}
+                                                options={fontWeights.map((w) => ({
+                                                    label: w.name,
+                                                    value: w.value,
+                                                    sublabel: w.desc
+                                                }))}
+                                                placeholder="Default (Style Standard)"
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -1117,11 +1192,11 @@ export default function PrintingSettings() {
                                 </div>
 
                                 {/* Resets Row */}
-                                <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-100 dark:border-white/5">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pt-4 border-t border-slate-100 dark:border-white/5">
                                     <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                                         * Element sizing fallbacks are applied automatically when limits are set.
                                     </div>
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
                                         <button
                                             type="button"
                                             onClick={() => {
@@ -1151,9 +1226,9 @@ export default function PrintingSettings() {
                                                 kravy.success();
                                                 toast.success("Receipt typography reset to default!");
                                             }}
-                                            className="h-10 px-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-transparent text-xs font-black text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-all flex items-center gap-2"
+                                            className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-transparent text-[11px] sm:text-xs font-black text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-all flex items-center justify-center gap-2 whitespace-nowrap active:scale-95"
                                         >
-                                            <RefreshCw size={12} /> Reset Receipt Styling
+                                            <RefreshCw size={12} /> <span>Reset Receipt Styling</span>
                                         </button>
                                         <button
                                             type="button"
@@ -1172,9 +1247,9 @@ export default function PrintingSettings() {
                                                 kravy.success();
                                                 toast.success("KOT typography reset to default!");
                                             }}
-                                            className="h-10 px-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-transparent text-xs font-black text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-all flex items-center gap-2"
+                                            className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-transparent text-[11px] sm:text-xs font-black text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-all flex items-center justify-center gap-2 whitespace-nowrap active:scale-95"
                                         >
-                                            <RefreshCw size={12} /> Reset KOT Styling
+                                            <RefreshCw size={12} /> <span>Reset KOT Styling</span>
                                         </button>
                                     </div>
                                 </div>
@@ -1330,24 +1405,24 @@ export default function PrintingSettings() {
                     transition={{ type: "spring", stiffness: 300, damping: 25 }}
                     onClick={handleSave}
                     disabled={saving}
-                    className={`fixed bottom-6 right-6 md:bottom-8 md:right-8 z-50 h-14 px-8 rounded-full flex items-center gap-3 border transition-all select-none group ${
+                    className={`fixed bottom-4 right-4 sm:bottom-6 sm:right-6 md:bottom-8 md:right-8 z-50 h-11 sm:h-12 md:h-14 px-4 sm:px-6 md:px-8 rounded-full flex items-center gap-2 sm:gap-3 border transition-all select-none group ${
                         isDirty
                         ? "bg-gradient-to-r from-violet-600 via-fuchsia-600 to-indigo-600 text-white shadow-[0_10px_35px_rgba(139,92,246,0.4)] border-violet-500/30 hover:scale-105 active:scale-95 cursor-pointer"
                         : "bg-slate-900/90 dark:bg-zinc-950/90 backdrop-blur-md text-emerald-400 border-emerald-500/20 shadow-lg hover:scale-102 cursor-default"
                     } disabled:opacity-50`}
                 >
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
+                    <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all duration-300 shrink-0 ${
                         isDirty 
                         ? "bg-white/10 group-hover:rotate-12" 
                         : "bg-emerald-500/10"
                     }`}>
                         {isDirty ? (
-                            <Save size={14} className="text-white" />
+                            <Save size={13} className="text-white" />
                         ) : (
-                            <Check size={14} className="text-emerald-400" />
+                            <Check size={13} className="text-emerald-400" />
                         )}
                     </div>
-                    <span className="font-black uppercase tracking-widest text-xs">
+                    <span className="font-black uppercase tracking-wider text-[10px] sm:text-xs whitespace-nowrap">
                         {saving 
                             ? "Saving..." 
                             : isDirty 

@@ -127,13 +127,15 @@ import {
   CalendarDays,
   CheckCircle2,
   Bluetooth,
-  Sliders
+  Sliders,
+  Video
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { kravy } from "@/lib/sounds";
 import { useAuthContext } from "./AuthContext";
 import { createPortal } from "react-dom";
 import { useTerminalContext } from "@/components/TerminalContext";
+import SubscriptionIndicator from "@/components/SubscriptionIndicator";
 const navGroups = [
   {
     group: "OPERATIONS",
@@ -236,6 +238,7 @@ const navGroups = [
       { icon: <Shield size={18} />, label: "Security & Backup", href: "/dashboard/backup", roles: ["ADMIN"] },
       { icon: <Archive size={18} />, label: "Archive & Trash", href: "/dashboard/billing/deleted", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <HelpCircle size={18} />, label: "Help & Support", href: "/dashboard/help" },
+      { icon: <Video size={18} />, label: "Video Tutorials", href: "/dashboard/help/videos" },
     ]
   }
 ];
@@ -621,13 +624,35 @@ export default function Sidebar({ profile, isMobile = false }: { profile?: any; 
     if (authUser && authUser.sidebarOrder) {
       setCustomSidebarOrder(authUser.sidebarOrder);
       localStorage.setItem("kravy_sidebar_custom_order", JSON.stringify(authUser.sidebarOrder));
-    } else {
       try {
         const local = localStorage.getItem("kravy_sidebar_custom_order");
         if (local) setCustomSidebarOrder(JSON.parse(local));
       } catch (e) {}
     }
   }, [authUser, authLoading]);
+
+  const [appVersion, setAppVersion] = useState("1.0.16");
+
+  useEffect(() => {
+    let isSubscribed = true;
+    (async () => {
+      try {
+        const { App } = await import("@capacitor/app");
+        const info = await App.getInfo();
+        if (isSubscribed && info?.version) {
+          setAppVersion(info.version);
+        }
+      } catch (err) {
+        // Fallback for web browser / PWA
+        if (isSubscribed) {
+          setAppVersion(process.env.NEXT_PUBLIC_APP_VERSION || "1.0.16");
+        }
+      }
+    })();
+    return () => {
+      isSubscribed = false;
+    };
+  }, []);
 
   if (!mounted) return null;
 
@@ -775,6 +800,24 @@ export default function Sidebar({ profile, isMobile = false }: { profile?: any; 
               >
                 Billing Software
               </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25, ease: "easeOut" }}
+                style={{
+                  fontSize: "0.58rem",
+                  color: isDark ? "rgba(147, 197, 253, 0.65)" : "rgba(37, 99, 235, 0.6)",
+                  letterSpacing: "1.2px",
+                  fontWeight: 700,
+                  marginTop: "2px",
+                  textTransform: "uppercase",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px"
+                }}
+              >
+                <span>v{appVersion}</span>
+              </motion.div>
               </div>
           </motion.div>
         )}
@@ -917,6 +960,13 @@ export default function Sidebar({ profile, isMobile = false }: { profile?: any; 
             </motion.div>
           </div>
         </motion.div>
+      )}
+
+      {/* SUBSCRIPTION INDICATOR IN SIDEBAR (Visible below 1024px / lg screens) */}
+      {!collapsed && (profile || cachedProfile)?.premiumEndDate && (
+        <div className="block lg:hidden px-5 mb-3">
+          <SubscriptionIndicator profile={profile || cachedProfile} isSidebar={true} />
+        </div>
       )}
 
       {/* SEARCH INPUT */}

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getEffectiveClerkId } from "@/lib/auth-utils";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import cloudinary from "@/lib/cloudinary";
 import QRCode from "qrcode";
 import { ObjectId } from "mongodb";
 
@@ -37,15 +36,9 @@ export async function GET(
     }
     console.log(`[PDF API] STEP 3: Bill found: ${bill.billNumber}`);
 
-    // Security: Must be authorized via session OR matching clerkId param
-    // For staff, effectiveId will be the seller's ID
-    const isAuthorized = effectiveId === bill.clerkUserId || clerkIdParam === bill.clerkUserId;
-
-    if (!isAuthorized) {
-      console.warn(`[PDF API] UNAUTHORIZED ACCESS ATTEMPT: Bill ${id} by User ${effectiveId || clerkIdParam}`);
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
+    // Security: URLs are unguessable MongoDB ObjectIds. 
+    // Allowing public access so customers can view their bills without signing in.
+    console.log(`[PDF API] Public access granted for Bill ${id}`);
     /* ================= FETCH BUSINESS PROFILE ================= */
     console.log("[PDF API] STEP 4: Fetching business profile...");
     const business = await prisma.businessProfile.findFirst({
@@ -233,7 +226,7 @@ export async function GET(
       const hsn = i.hsnCode ? `(${i.hsnCode})` : "";
       const qty = Number(i.qty ?? i.quantity ?? 1);
       const rate = Number(i.rate ?? i.price ?? 0);
-      const itemGstRate = i.gst != null ? Number(i.gst) : (business?.taxRate || 0);
+      const itemGstRate = i.gst != null ? Number(i.gst) : 0;
       const taxStatus = i.taxStatus || "Without Tax";
       const gross = qty * rate;
 
@@ -242,29 +235,38 @@ export async function GET(
 
       let isInclusive = taxStatus === "With Tax";
       
-      if ((bill.tax || 0) > 0 && (bill.total || 0) > 0) {
-        const expectedExclusive = (bill.subtotal || 0) + (bill.tax || 0) + ((bill as any).deliveryCharges || 0) + ((bill as any).packagingCharges || 0) + ((bill as any).serviceCharge || 0) - ((bill as any).discountAmount || 0);
-        if (Math.abs(bill.total - expectedExclusive) < 0.5) {
-          isInclusive = false;
-        } else {
-          isInclusive = true;
-        }
-      }
+      let splitCgst = 0;
+      let splitIgst = 0;
 
       if (isInclusive) {
-        taxable = gross / (1 + itemGstRate / 100);
-        gstAmount = gross - taxable;
+        const exactGst = gross - (gross / (1 + itemGstRate / 100));
+        if (isInterState) {
+          splitIgst = Math.round(exactGst * 100) / 100;
+          gstAmount = splitIgst;
+        } else {
+          splitCgst = Math.round(exactGst * 50) / 100;
+          gstAmount = splitCgst * 2;
+        }
+        taxable = gross - gstAmount;
       } else {
-        gstAmount = (gross * itemGstRate) / 100;
+        const exactGst = (gross * itemGstRate) / 100;
+        if (isInterState) {
+          splitIgst = Math.round(exactGst * 100) / 100;
+          gstAmount = splitIgst;
+        } else {
+          splitCgst = Math.round(exactGst * 50) / 100;
+          gstAmount = splitCgst * 2;
+        }
+        taxable = gross;
       }
 
       if (itemGstRate > 0) {
         if (!taxGroups[itemGstRate]) taxGroups[itemGstRate] = { rate: itemGstRate, cgst: 0, sgst: 0, igst: 0 };
         if (isInterState) {
-          taxGroups[itemGstRate].igst += gstAmount;
+          taxGroups[itemGstRate].igst += splitIgst;
         } else {
-          taxGroups[itemGstRate].cgst += gstAmount / 2;
-          taxGroups[itemGstRate].sgst += gstAmount / 2;
+          taxGroups[itemGstRate].cgst += splitCgst;
+          taxGroups[itemGstRate].sgst += splitCgst;
         }
       }
 
@@ -445,46 +447,43 @@ export async function GET(
     y -= 10;
     line(`Powered by Kravy POS`, 7, 'center');
 
-    /* ================= RESPONSE & CLOUDINARY UPLOAD ================= */
+    /* ================= RESPONSE & AWS S3 UPLOAD ================= */
     console.log("[PDF API] STEP 6: Saving PDF bytes...");
     const pdfBytes = await pdfDoc.save();
     const pdfBuffer = Buffer.from(pdfBytes);
     console.log(`[PDF API] STEP 7: PDF generated, size: ${(pdfBuffer.length / 1024).toFixed(2)} KB`);
 
-    console.log("[PDF API] STEP 8: Uploading to Cloudinary...");
-    const uploadResult: any = await new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: "kravy_bills",
-          public_id: `bill_${bill.billNumber.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`,
-          resource_type: "image",
-          format: "pdf",
-          overwrite: true,
-          access_mode: "public"
-        },
-        (error, result) => {
-          if (error) {
-            console.error("[PDF API] CLOUDINARY UPLOAD ERROR:", error);
-            reject(error);
-          } else {
-            resolve(result);
-          }
-        }
-      );
-      uploadStream.end(pdfBuffer);
+    console.log("[PDF API] STEP 8: Uploading to AWS S3...");
+    const { s3Client } = await import("@/lib/aws-s3");
+    const { Upload } = await import("@aws-sdk/lib-storage");
+    
+    const bucketName = process.env.MY_AWS_BUCKET || "kravy-datastorage";
+    const pdfFilename = `kravy_bills/bill_${bill.billNumber.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`;
+    
+    const parallelUploads3 = new Upload({
+      client: s3Client,
+      params: {
+        Bucket: bucketName,
+        Key: pdfFilename,
+        Body: pdfBuffer,
+        ContentType: "application/pdf",
+      },
     });
 
-    if (uploadResult?.secure_url) {
-        console.log(`[PDF API] STEP 9: Cloudinary upload success: ${uploadResult.secure_url}`);
+    const uploadResult = await parallelUploads3.done();
+    const secure_url = uploadResult.Location || `https://${bucketName}.s3.${process.env.MY_AWS_REGION || "ap-south-1"}.amazonaws.com/${pdfFilename}`;
+
+    if (secure_url) {
+        console.log(`[PDF API] STEP 9: AWS S3 upload success: ${secure_url}`);
         await prisma.billManager.update({
             where: { id: bill.id },
-            data: { pdfUrl: uploadResult.secure_url }
+            data: { pdfUrl: secure_url }
         });
     }
 
     if (searchParams.get("json") === "true") {
       console.log("[PDF API] STEP 10: Returning JSON response.");
-      return NextResponse.json({ url: uploadResult?.secure_url });
+      return NextResponse.json({ url: secure_url });
     }
 
     console.log("[PDF API] STEP 10: Returning PDF direct response.");

@@ -189,7 +189,7 @@ export const BillActions = ({ bill, refresh, business, userRole, userPermissions
                 try {
                   toast.loading("Preparing BT Print...", { id: "bt-print" });
                   const { ensurePrinterConnected, printReceiptData } = await import("@/lib/web-bluetooth");
-                  await ensurePrinterConnected();
+                  await ensurePrinterConnected(false, 'bill');
                   toast.dismiss("bt-print");
                   const currentPath = window.location.pathname + window.location.search; 
                   router.push(`/dashboard/billing/${bill.id}?returnTo=${encodeURIComponent(currentPath)}&autoPrint=bt`);

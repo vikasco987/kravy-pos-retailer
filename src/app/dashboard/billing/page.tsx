@@ -17,6 +17,7 @@ import { useAuthContext } from "@/components/AuthContext";
 import { kravy } from "@/lib/sounds";
 import { toast } from "react-hot-toast";
 import BillHistoryTable from "./BillHistoryTable";
+import UniversalReportExportOptions from "@/components/UniversalReportExportOptions";
 
 type BillManager = {
   id: string;
@@ -180,6 +181,7 @@ export default function BillingPage() {
   });
   const [isPaymentDropdownOpen, setIsPaymentDropdownOpen] = useState(false);
   const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
+  const [showCustomDateMobile, setShowCustomDateMobile] = useState(false);
   const searchParams = useSearchParams();
   const asUserId = searchParams.get("asUserId");
 
@@ -187,6 +189,12 @@ export default function BillingPage() {
     const today = getTodayIst();
     return { start: today, end: today };
   });
+
+  const isToday = dateRange.start === getTodayIst() && dateRange.end === getTodayIst();
+  const isYesterday = dateRange.start === getYesterdayIst() && dateRange.end === getYesterdayIst();
+  const isThisMonth = dateRange.start === getStartOfMonthIst() && dateRange.end === getTodayIst();
+  const isLast30 = dateRange.start === getLast30DaysIst() && dateRange.end === getTodayIst();
+  const isAllTime = !dateRange.start && !dateRange.end;
 
   const isFirstRender = useRef(true);
 
@@ -293,7 +301,11 @@ export default function BillingPage() {
             const globalRate = 0;
             const taxActive = prof?.taxEnabled ?? true;
 
-            const activeOrders = oData.filter((o: any) => o.status !== "COMPLETED" && !o.isDeleted).map((o: any) => {
+            const invoicedOrderIds = new Set(
+              combined.map((b: any) => b.orderId).filter(Boolean)
+            );
+
+            const activeOrders = oData.filter((o: any) => o.status !== "COMPLETED" && !o.isDeleted && !invoicedOrderIds.has(o.id)).map((o: any) => {
               const items = Array.isArray(o.items) ? o.items : [];
               let calcTax = 0;
               let calcSubtotal = 0;
@@ -322,7 +334,7 @@ export default function BillingPage() {
                 subtotal: calcSubtotal,
                 tax: calcTax,
                 paymentMode: "Pending", 
-                paymentStatus: o.status === "DELETED" ? "DELETED" : o.status === "CANCELLED" ? "CANCELLED" : "Pending", 
+                paymentStatus: o.status === "REJECTED" ? "REJECTED" : o.status === "DELETED" ? "DELETED" : o.status === "CANCELLED" ? "CANCELLED" : "Pending", 
                 customerName: o.customerName || "Walk-in",
                 customerPhone: o.customerPhone, 
                 isHeld: false, 
@@ -414,8 +426,94 @@ export default function BillingPage() {
   return (
     <div className="flex flex-col gap-6 kravy-page-fade pb-28 md:pb-24 lg:pb-16">
       
-      {/* --- Page Header --- */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 flex-wrap">
+      {/* ================= MOBILE VIEW HEADER (App-Style) ================= */}
+      <div className="md:hidden flex flex-col gap-2.5" style={{ fontFamily: "'Poppins', sans-serif" }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div style={{ width: "4px", height: "20px", background: "#8B5CF6", borderRadius: "10px" }} />
+            <div>
+              <h1 className="text-xl font-black text-[var(--kravy-text-primary)] tracking-tight">
+                Bill History
+              </h1>
+              <p className="text-[10px] font-bold text-[var(--kravy-text-muted)]">
+                {isFilterActive ? `${bills.length} of ${totalServerRecords} bills` : `${totalServerRecords} total records`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <Link href="/dashboard/billing/checkout">
+              <button className="flex items-center gap-1 px-3 py-2 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] active:scale-95 text-white text-xs font-black shadow-md shadow-indigo-500/25 transition-all">
+                <Plus size={15} /> New Order
+              </button>
+            </Link>
+          </div>
+        </div>
+
+        {/* Mobile Quick Utility Buttons Row */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 -mx-1 px-1">
+          <button
+            onClick={toggleStats}
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-colors whitespace-nowrap shrink-0 ${
+              showStats 
+                ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800" 
+                : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+            }`}
+          >
+            {showStats ? <EyeOff size={13} /> : <Eye size={13} />}
+            <span>{showStats ? "Hide Stats" : "Show Stats"}</span>
+          </button>
+
+          <button
+            onClick={() => {
+              if (!dateRange.start || !dateRange.end) {
+                toast.error("Please select a date range first");
+                return;
+              }
+              window.location.href = `/api/bill-manager/export?startDate=${dateRange.start}&endDate=${dateRange.end}`;
+              toast.success("Download started!");
+            }}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 transition-colors whitespace-nowrap shrink-0"
+          >
+            <FileText size={13} />
+            <span>Export</span>
+          </button>
+
+          <Link href="/dashboard/billing/history" className="shrink-0">
+            <button className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold border border-indigo-200 dark:border-indigo-800/40 bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 transition-colors whitespace-nowrap">
+              <History size={13} />
+              <span>Edit History</span>
+            </button>
+          </Link>
+
+          <Link href="/dashboard/billing/deleted" className="shrink-0">
+            <button className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors whitespace-nowrap">
+              <Trash2 size={13} />
+              <span>Deleted</span>
+            </button>
+          </Link>
+
+          {(userRole === "ADMIN" || userRole === "MASTER") && (
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(JSON.stringify({
+                  endpoints: ["/api/bill-manager", "/api/orders"],
+                  totalRecords: totalServerRecords,
+                  data: bills
+                }, null, 2));
+                toast.success("API Data Copied!");
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors whitespace-nowrap shrink-0"
+            >
+              <Copy size={13} />
+              <span>JSON</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ================= DESKTOP VIEW HEADER (Laptop Preserved) ================= */}
+      <div className="hidden md:flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 flex-wrap">
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
             <div style={{ width: "4px", height: "24px", background: "#8B5CF6", borderRadius: "10px" }} />
@@ -460,7 +558,7 @@ export default function BillingPage() {
             <HeaderBtn icon={<History size={15} />} label="Edit History" color="#6366F1" />
           </Link>
 
-          <Link href="/dashboard/billing/deleted"><HeaderBtn icon={<Trash2 size={15} />} label="Deleted Bills" /></Link>
+          <Link href="/dashboard/billing/deleted"><HeaderBtn icon={<Trash2 size={15} />} label="Deleted / Rejected" /></Link>
           <Link href="/dashboard/billing/checkout" className="shrink-0">
             <button className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-2.5 md:px-3 md:py-2 lg:px-4 lg:py-2.5 xl:px-5 xl:py-3 rounded-xl md:rounded-2xl border-none bg-[#8B5CF6] hover:bg-[#7C3AED] active:scale-95 text-white text-xs md:text-[13px] xl:text-sm font-extrabold cursor-pointer shadow-md shadow-indigo-500/25 transition-all whitespace-nowrap">
               <Plus size={16} /> New Order
@@ -523,8 +621,185 @@ export default function BillingPage() {
         </div>
       </motion.div>
 
-      {/* --- Filter Section --- */}
-      <div className="flex flex-col gap-4 bg-slate-50 dark:bg-slate-900/50 p-4 sm:p-5 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-full relative">
+      {/* ================= MOBILE VIEW FILTERS (Clean, App-Style) ================= */}
+      <div className="md:hidden flex flex-col gap-2.5 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-2xl border border-slate-200 dark:border-slate-800" style={{ fontFamily: "'Poppins', sans-serif" }}>
+        {/* Search Input */}
+        <div className="relative w-full">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input 
+            type="text" 
+            placeholder="Search Bill No, Phone or Name..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm("");
+                setApiPage(1);
+                fetchBills(false, 1, itemsPerPage, dateRange, "", colFilters.orderType, colFilters.paymentModeFilter, colFilters.statusFilter);
+              }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 p-1"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* 1-Tap Date Presets (Horizontal Scroll) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1">
+          {[
+            { label: "Today", active: isToday, range: () => ({ start: getTodayIst(), end: getTodayIst() }) },
+            { label: "Yesterday", active: isYesterday, range: () => ({ start: getYesterdayIst(), end: getYesterdayIst() }) },
+            { label: "This Month", active: isThisMonth, range: () => ({ start: getStartOfMonthIst(), end: getTodayIst() }) },
+            { label: "Last 30 Days", active: isLast30, range: () => ({ start: getLast30DaysIst(), end: getTodayIst() }) },
+            { label: "All Time", active: isAllTime, range: () => ({ start: "", end: "" }) },
+          ].map(preset => (
+            <button
+              key={preset.label}
+              type="button"
+              onClick={() => {
+                const r = preset.range();
+                setDateRange(r);
+                setApiPage(1);
+                setShowCustomDateMobile(false);
+                fetchBills(false, 1, itemsPerPage, r, searchTerm, colFilters.orderType, colFilters.paymentModeFilter, colFilters.statusFilter);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${
+                preset.active 
+                  ? "bg-indigo-600 text-white shadow-xs" 
+                  : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              {preset.label}
+            </button>
+          ))}
+
+          <button
+            type="button"
+            onClick={() => setShowCustomDateMobile(!showCustomDateMobile)}
+            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 flex items-center gap-1 border ${
+              showCustomDateMobile || (!isToday && !isYesterday && !isThisMonth && !isLast30 && !isAllTime)
+                ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border-indigo-300"
+                : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700"
+            }`}
+          >
+            <Calendar size={12} />
+            <span>Custom</span>
+          </button>
+        </div>
+
+        {/* Collapsible Custom Date Range Picker on Mobile */}
+        {(showCustomDateMobile || (!isToday && !isYesterday && !isThisMonth && !isLast30 && !isAllTime)) && (
+          <div className="flex items-center gap-2 p-2 bg-indigo-50/70 dark:bg-indigo-950/30 rounded-xl border border-indigo-100 dark:border-indigo-900/40 flex-wrap">
+            <input 
+              type="date" 
+              value={dateRange.start} 
+              onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
+              className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none" 
+            />
+            <span className="text-xs font-bold text-indigo-500">to</span>
+            <input 
+              type="date" 
+              value={dateRange.end} 
+              onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
+              className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none" 
+            />
+            <button 
+              onClick={() => { setApiPage(1); fetchBills(false, 1, itemsPerPage, dateRange, searchTerm, colFilters.orderType, colFilters.paymentModeFilter, colFilters.statusFilter); }}
+              className="px-3 py-1 rounded-lg bg-[#8B5CF6] text-white text-xs font-black active:scale-95 transition-all"
+            >
+              Apply
+            </button>
+          </div>
+        )}
+
+        {/* Quick Dropdowns Row */}
+        <div className="flex items-center gap-2">
+          {/* Order Type Dropdown */}
+          <div className="relative flex-1">
+            <button
+              onClick={() => {
+                setIsTypeDropdownOpen(!isTypeDropdownOpen);
+                setIsPaymentDropdownOpen(false);
+              }}
+              className="w-full flex items-center justify-between gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-xs font-bold shadow-xs"
+            >
+              <span className="truncate">{colFilters.orderType}</span>
+              <ChevronDown size={13} className={`text-slate-400 transition-transform ${isTypeDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {isTypeDropdownOpen && (
+              <>
+                <div style={{ position: "fixed", inset: 0, zIndex: 1000 }} onClick={() => setIsTypeDropdownOpen(false)} />
+                <div className="absolute left-0 top-[calc(100%+4px)] w-full min-w-[140px] bg-white dark:bg-slate-800 rounded-xl p-1 border border-slate-200 dark:border-slate-700 shadow-xl z-[1001]">
+                  {["All Types", "Counter", "Takeaway", "Dine-in"].map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => {
+                        setColFilters({ ...colFilters, orderType: type });
+                        setIsTypeDropdownOpen(false);
+                        setApiPage(1);
+                        fetchBills(false, 1, itemsPerPage, dateRange, searchTerm, type, colFilters.paymentModeFilter, colFilters.statusFilter);
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                        colFilters.orderType === type
+                          ? "bg-indigo-600 text-white"
+                          : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60"
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Payment Mode Dropdown */}
+          <div className="relative flex-1">
+            <button
+              onClick={() => {
+                setIsPaymentDropdownOpen(!isPaymentDropdownOpen);
+                setIsTypeDropdownOpen(false);
+              }}
+              className="w-full flex items-center justify-between gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-xs font-bold shadow-xs"
+            >
+              <span className="truncate">{colFilters.paymentModeFilter || colFilters.paymentMode || "All Payments"}</span>
+              <ChevronDown size={13} className={`text-slate-400 transition-transform ${isPaymentDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {isPaymentDropdownOpen && (
+              <>
+                <div style={{ position: "fixed", inset: 0, zIndex: 1000 }} onClick={() => setIsPaymentDropdownOpen(false)} />
+                <div className="absolute left-0 top-[calc(100%+4px)] w-full min-w-[140px] bg-white dark:bg-slate-800 rounded-xl p-1 border border-slate-200 dark:border-slate-700 shadow-xl z-[1001]">
+                  {["All Payments", "Cash", "UPI", "Card", "Wallet"].map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => {
+                        setColFilters({ ...colFilters, paymentMode: mode, paymentModeFilter: mode });
+                        setIsPaymentDropdownOpen(false);
+                        setApiPage(1);
+                        fetchBills(false, 1, itemsPerPage, dateRange, searchTerm, colFilters.orderType, mode, colFilters.statusFilter);
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                        (colFilters.paymentModeFilter === mode || colFilters.paymentMode === mode)
+                          ? "bg-indigo-600 text-white"
+                          : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60"
+                      }`}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ================= DESKTOP VIEW FILTERS (Laptop Preserved) ================= */}
+      <div className="hidden md:flex flex-col gap-4 bg-slate-50 dark:bg-slate-900/50 p-4 sm:p-5 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-full relative">
         <div className="flex flex-wrap gap-2.5 sm:gap-3 items-center">
           <div className="flex-1 min-w-[240px] sm:min-w-[280px] relative">
              <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />

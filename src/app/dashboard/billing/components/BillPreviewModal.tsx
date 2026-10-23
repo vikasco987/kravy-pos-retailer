@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X, Printer, Code, Share2 } from "lucide-react";
+import { X, Printer, Code, Share2, Smartphone } from "lucide-react";
 import { useCurrency } from "@/lib/currency-context";
+import { formatWhatsAppNumber } from "@/lib/whatsapp";
+import { toast } from "react-hot-toast";
 const numberToWords = (num: number): string => {
   const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
   const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
@@ -328,7 +330,7 @@ export const BillPreviewModal = ({ bill: initialBill, business, onClose }: { bil
                  )}
                  {(bill.serviceCharge > 0) && (
                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span>Service Charge</span>
+                      <span>{bill.serviceChargeName || "Service Charge"}</span>
                       <span>{sym}{format(bill.serviceCharge)}</span>
                    </div>
                  )}

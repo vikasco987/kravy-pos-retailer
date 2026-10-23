@@ -1,7 +1,7 @@
 "use client";
-
+import { useCurrency } from "@/lib/currency-context";
 import { useEffect, useState } from "react";
-import { getSavedOrders } from "@/lib/orderStorage";
+import { getSavedOrders, removeSavedOrder } from "@/lib/orderStorage";
 import {
     Clock,
     ArrowRight,
@@ -31,6 +31,8 @@ type ActiveOrder = {
 };
 
 export default function ActiveOrderBanner({ tableId, clerkId }: { tableId: string, clerkId: string }) {
+  const { currencySymbol: sym } = useCurrency();
+
     const [activeOrder, setActiveOrder] = useState<ActiveOrder | null>(null);
     const [loading, setLoading] = useState(true);
     const [dismissed, setDismissed] = useState(false);
@@ -57,8 +59,10 @@ export default function ActiveOrderBanner({ tableId, clerkId }: { tableId: strin
                 const res = await fetch(`/api/public/orders/track?orderId=${recentOnThisTable.orderId}`);
                 if (res.ok) {
                     const data = await res.json();
-                    if (data && !["COMPLETED", "CANCELLED"].includes(data.status)) {
+                    if (data && !["COMPLETED", "CANCELLED", "REJECTED"].includes(data.status) && !data.isDeleted) {
                         setActiveOrder(data);
+                    } else if (data && (["COMPLETED", "CANCELLED", "REJECTED"].includes(data.status) || data.isDeleted)) {
+                        removeSavedOrder(recentOnThisTable.orderId);
                     }
                 }
             } catch (err) {
@@ -119,7 +123,7 @@ export default function ActiveOrderBanner({ tableId, clerkId }: { tableId: strin
                             </div>
                         </div>
                         <div className="text-right">
-                            <div className="text-[15px] font-black text-slate-800">₹{activeOrder.total}</div>
+                            <div className="text-[15px] font-black text-slate-800">{sym}{activeOrder.total}</div>
                             <div className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Ongoing</div>
                         </div>
                     </div>

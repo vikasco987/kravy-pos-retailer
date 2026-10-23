@@ -57,7 +57,8 @@ export async function GET(req: NextRequest) {
           paymentStatus: rawSnap.status || rawSnap.paymentStatus || "Deleted",
           customer: { name: rawSnap.customerName || "Walk-in" },
           tableName: rawSnap.tableName || (rawSnap.table?.name) || "Counter",
-          items: rawSnap.items || []
+          items: rawSnap.items || [],
+          reason: rawSnap.reason || o.notes || ""
         }
       };
     });

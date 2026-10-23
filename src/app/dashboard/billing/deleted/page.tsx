@@ -10,15 +10,20 @@ type DeletedBill = {
   id: string;
   billId: string;
   createdAt: string;
+  type?: string;
   snapshot: {
     billNumber: string;
     total: number;
     paymentMode: string;
     paymentStatus: string;
+    status?: string;
     isHeld?: boolean;
     customer?: {
       name?: string;
     };
+    tableName?: string;
+    items?: any[];
+    reason?: string;
   };
 };
 
@@ -58,29 +63,33 @@ export default function DeletedBillsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 pt-20">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 pt-2 sm:pt-4 pb-36 sm:pb-32 mb-12 max-w-7xl mx-auto w-full">
       {/* HEADER */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-black text-[var(--kravy-text-primary)] tracking-tight">🗑️ Deleted Bills</h1>
-        <Link href="/dashboard/billing" className="px-4 py-2 bg-[var(--kravy-bg-2)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] font-bold rounded-xl hover:bg-[var(--kravy-surface-hover)] transition-all">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
+        <div>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-[var(--kravy-text-primary)] tracking-tight">🗑️ Deleted & Rejected Records</h1>
+          <p className="text-xs text-[var(--kravy-text-muted)] font-medium mt-1">View all deleted bills and rejected orders with full item breakdown and restore options</p>
+        </div>
+        <Link href="/dashboard/billing" className="px-3 py-1.5 sm:px-4 sm:py-2 bg-[var(--kravy-bg-2)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] font-bold text-xs sm:text-sm rounded-xl hover:bg-[var(--kravy-surface-hover)] transition-all whitespace-nowrap">
           ← Back to Bills
         </Link>
       </div>
 
       {/* TABLE */}
       <div className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl overflow-hidden shadow-xl">
-        <table className="w-full text-sm">
-          <thead className="bg-[var(--kravy-bg-2)]/50">
-            <tr>
-              <th className="p-4 text-xs font-black uppercase tracking-widest text-[var(--kravy-text-muted)]">Bill No</th>
-              <th className="p-4 text-xs font-black uppercase tracking-widest text-[var(--kravy-text-muted)]">Customer</th>
-              <th className="p-4 text-xs font-black uppercase tracking-widest text-[var(--kravy-text-muted)]">Deleted At</th>
-              <th className="p-4 text-xs font-black uppercase tracking-widest text-[var(--kravy-text-muted)]">Amount</th>
-              <th className="p-4 text-xs font-black uppercase tracking-widest text-[var(--kravy-text-muted)]">Payment</th>
-              <th className="p-4 text-xs font-black uppercase tracking-widest text-[var(--kravy-text-muted)] text-center">Status</th>
-              <th className="p-4 text-xs font-black uppercase tracking-widest text-[var(--kravy-text-muted)] text-right">Actions</th>
-            </tr>
-          </thead>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[720px]">
+            <thead className="bg-[var(--kravy-bg-2)]/50">
+              <tr>
+                <th className="p-3 sm:p-4 text-[10px] sm:text-xs font-black uppercase tracking-widest text-[var(--kravy-text-muted)] text-left">Bill No</th>
+                <th className="p-3 sm:p-4 text-[10px] sm:text-xs font-black uppercase tracking-widest text-[var(--kravy-text-muted)] text-left">Customer</th>
+                <th className="p-3 sm:p-4 text-[10px] sm:text-xs font-black uppercase tracking-widest text-[var(--kravy-text-muted)] text-left">Deleted At</th>
+                <th className="p-3 sm:p-4 text-[10px] sm:text-xs font-black uppercase tracking-widest text-[var(--kravy-text-muted)] text-left">Amount</th>
+                <th className="p-3 sm:p-4 text-[10px] sm:text-xs font-black uppercase tracking-widest text-[var(--kravy-text-muted)] text-left">Payment</th>
+                <th className="p-3 sm:p-4 text-[10px] sm:text-xs font-black uppercase tracking-widest text-[var(--kravy-text-muted)] text-center">Status</th>
+                <th className="p-3 sm:p-4 text-[10px] sm:text-xs font-black uppercase tracking-widest text-[var(--kravy-text-muted)] text-right">Actions</th>
+              </tr>
+            </thead>
 
           <tbody>
             {bills.map((b) => {
@@ -99,6 +108,11 @@ export default function DeletedBillsPage() {
                       <div className="flex flex-col">
                         <span className="font-bold text-[var(--kravy-text-primary)]">{snap.customer?.name ?? "Walk-in"}</span>
                         <span className="text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest">{snap.tableName}</span>
+                        {snap.reason && (
+                          <span className="text-[11px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40 rounded-md px-2 py-0.5 mt-1 max-w-xs">
+                            💬 Reason: {snap.reason}
+                          </span>
+                        )}
                       </div>
                     </td>
 
@@ -164,6 +178,7 @@ export default function DeletedBillsPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -188,6 +203,22 @@ function DeletedStatusBadge({
     return (
       <span className="px-2.5 py-1 text-[10px] bg-emerald-500/10 text-emerald-500 rounded-full font-black tracking-widest">
         PAID
+      </span>
+    );
+  }
+
+  if (snap.status === "REJECTED" || snap.paymentStatus === "REJECTED") {
+    return (
+      <span className="px-2.5 py-1 text-[10px] bg-rose-500/10 text-rose-500 rounded-full font-black tracking-widest">
+        REJECTED
+      </span>
+    );
+  }
+
+  if (snap.status === "CANCELLED" || snap.paymentStatus === "CANCELLED") {
+    return (
+      <span className="px-2.5 py-1 text-[10px] bg-rose-500/10 text-rose-500 rounded-full font-black tracking-widest">
+        CANCELLED
       </span>
     );
   }

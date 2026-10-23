@@ -195,7 +195,7 @@
 // src/app/api/parties/route.ts
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getEffectiveClerkId } from "@/lib/auth-utils";
+import { getEffectiveClerkId, getAuthUser } from "@/lib/auth-utils";
 import { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
@@ -213,7 +213,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const cleanPhone = phone.replace(/[\s\-\(\)\+]/g, "").slice(-10);
+      const cleanPhone = phone.replace(/[^\d+]/g, "").replace(/(?!^)\+/g, "");
       const party = await prisma.party.upsert({
         where: {
           phone_createdBy: {
@@ -265,7 +265,7 @@ export async function PUT(req: NextRequest) {
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
     if (existing.createdBy !== effectiveId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const cleanPhone = phone ? phone.replace(/[\s\-\(\)\+]/g, "").slice(-10) : existing.phone;
+    const cleanPhone = phone ? phone.replace(/[^\d+]/g, "").replace(/(?!^)\+/g, "") : existing.phone;
 
     const updated = await prisma.party.update({
       where: { id },
@@ -289,6 +289,7 @@ export async function PUT(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
+    const authUser = await getAuthUser();
     const effectiveId = await getEffectiveClerkId();
     if (!effectiveId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -299,11 +300,12 @@ export async function GET(req: NextRequest) {
     const whereClause: any = { createdBy: effectiveId };
     
     if (phone) {
-      whereClause.phone = phone.replace(/[\s\-\(\)\+]/g, "").slice(-10);
+      whereClause.phone = phone.replace(/[^\d+]/g, "").replace(/(?!^)\+/g, "");
     } else if (search) {
+      const cleanSearchPhone = search.replace(/[^\d+]/g, "");
       whereClause.OR = [
         { name: { contains: search, mode: "insensitive" } },
-        { phone: { contains: search } }
+        { phone: { contains: cleanSearchPhone.length > 0 ? cleanSearchPhone : search } }
       ];
     }
 
@@ -320,7 +322,24 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: "desc" },
       ...(takeVal !== undefined && { take: takeVal })
     });
-    return NextResponse.json(parties, { status: 200 });
+    
+    // Check permission to view customer phone
+    let canViewPhone = true;
+    if (authUser && authUser.role !== 'ADMIN' && authUser.role !== 'SELLER' && authUser.role !== 'OWNER' && authUser.role !== 'USER') {
+      canViewPhone = authUser.permissions?.includes("view-customer-phone") || false;
+    }
+
+    const modifiedParties = parties.map(party => {
+      if (!canViewPhone) {
+        return {
+          ...party,
+          phone: "" // explicitly removing the phone number from the response
+        };
+      }
+      return party;
+    });
+
+    return NextResponse.json(modifiedParties, { status: 200 });
   } catch (err) {
     console.error("❌ Error fetching parties:", err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

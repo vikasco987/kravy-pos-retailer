@@ -68,31 +68,31 @@ const StatusIndicator = ({ status }: { status: string }) => {
 };
 
 const StatsCard = ({ label, value, badge, subtext }: any) => (
-  <div style={{ background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "20px", padding: "24px", flex: 1, minWidth: "220px", display: "flex", flexDirection: "column", gap: "8px", boxShadow: "var(--kravy-card-shadow)" }}>
-    <div style={{ fontSize: "0.85rem", color: "var(--kravy-text-muted)", fontWeight: 600 }}>{label}</div>
-    <div style={{ fontSize: "2rem", fontWeight: 900, color: "var(--kravy-text-primary)", letterSpacing: "-1px" }}>{value}</div>
-    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
-      {badge && <span style={{ background: "rgba(16, 185, 129, 0.15)", color: "var(--kravy-green)", fontSize: "0.7rem", fontWeight: 900, padding: "4px 8px", borderRadius: "6px" }}>{badge}</span>}
-      <span style={{ fontSize: "0.75rem", color: "var(--kravy-text-muted)", fontWeight: 600 }}>{subtext}</span>
+  <div style={{ background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "20px", boxShadow: "var(--kravy-card-shadow)" }} className="p-3.5 sm:p-5 flex flex-col justify-between gap-1.5 sm:gap-2 min-w-0">
+    <div style={{ color: "var(--kravy-text-muted)" }} className="text-xs sm:text-sm font-semibold truncate">{label}</div>
+    <div style={{ color: "var(--kravy-text-primary)" }} className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight truncate">{value}</div>
+    <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1 flex-wrap">
+      {badge && <span style={{ background: "rgba(16, 185, 129, 0.15)", color: "var(--kravy-green)" }} className="text-[0.65rem] sm:text-xs font-black px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md">{badge}</span>}
+      <span style={{ color: "var(--kravy-text-muted)" }} className="text-[0.7rem] sm:text-xs font-semibold">{subtext}</span>
     </div>
   </div>
 );
 
 const ChartBar = ({ label, height, isPeak }: any) => (
-  <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", height: "100%", justifyContent: "flex-end" }}>
+  <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", height: "100%", justifyContent: "flex-end", minWidth: "16px" }}>
     <div style={{ width: "80%", background: isPeak ? "#3B82F6" : "rgba(59, 130, 246, 0.3)", height: `${height}%`, borderRadius: "4px", minHeight: "4px", transition: "height 1s" }} />
-    <span style={{ fontSize: "0.65rem", color: "var(--kravy-text-muted)", fontWeight: 700 }}>{label}</span>
+    <span style={{ fontSize: "0.65rem", color: "var(--kravy-text-muted)", fontWeight: 700 }} className="truncate">{label}</span>
   </div>
 );
 
 const BreakdownRow = ({ dotColor, label, count, revenue, sym }: any) => (
   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0" }}>
-    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-      <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: dotColor }} />
-      <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--kravy-text-primary)" }}>{label}</span>
+    <div style={{ display: "flex", alignItems: "center", gap: "10px" }} className="min-w-0">
+      <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: dotColor, flexShrink: 0 }} />
+      <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--kravy-text-primary)" }} className="truncate">{label}</span>
     </div>
-    <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>
-      {count} orders — <span style={{ color: "var(--kravy-text-muted)" }}>{sym}{new Intl.NumberFormat("en-IN").format(Math.round(revenue))}</span>
+    <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "var(--kravy-text-primary)" }} className="text-right shrink-0">
+      {count} <span className="hidden sm:inline">orders</span> — <span style={{ color: "var(--kravy-text-muted)" }}>{sym}{new Intl.NumberFormat("en-IN").format(Math.round(revenue))}</span>
     </div>
   </div>
 );
@@ -272,27 +272,50 @@ export default async function DailySalesReportPage({
   const format = (n: number) => new Intl.NumberFormat("en-IN").format(Math.round(n));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "40px", padding: "32px", background: "var(--kravy-bg)", minHeight: "100vh" }}>
+    <div className="flex flex-col gap-6 sm:gap-8 lg:gap-10 p-3 sm:p-6 lg:p-8 pb-32 max-w-7xl mx-auto min-h-screen w-full" style={{ background: "var(--kravy-bg)" }}>
       
       {/* --- Header & Top Filters --- */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "24px" }}>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 style={{ fontSize: "2.25rem", fontWeight: 900, marginBottom: "4px", color: "var(--kravy-text-primary)", letterSpacing: "-1.5px" }}>Sales Performance Report</h1>
-          <p style={{ fontSize: "1rem", color: "var(--kravy-text-muted)", fontWeight: 500 }}>{fromDateStr === toDateStr ? new Date(fromDateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'long' }) : `${fromDateStr} to ${toDateStr}`} — {businessName}</p>
+          <h1 className="text-xl sm:text-3xl lg:text-4xl font-black text-[var(--kravy-text-primary)] tracking-tight">
+            Sales Performance Report
+          </h1>
+          <p className="text-xs sm:text-sm text-[var(--kravy-text-muted)] font-medium mt-1">
+            {fromDateStr === toDateStr ? new Date(fromDateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'long' }) : `${fromDateStr} to ${toDateStr}`} — {businessName}
+          </p>
         </div>
         
         {/* Date Range Selector */}
-        <form style={{ display: "flex", gap: "10px", alignItems: "center", background: "var(--kravy-bg-2)", padding: "8px 16px", borderRadius: "16px", border: "1px solid var(--kravy-border)" }}>
-          <Calendar size={18} color="var(--kravy-text-muted)" />
-          <input name="from" type="date" defaultValue={fromDateStr} style={{ background: "transparent", border: "none", color: "var(--kravy-text-primary)", fontSize: "0.85rem", fontWeight: 700, outline: "none" }} />
-          <span style={{ color: "var(--kravy-text-muted)" }}>to</span>
-          <input name="to" type="date" defaultValue={toDateStr} style={{ background: "transparent", border: "none", color: "var(--kravy-text-primary)", fontSize: "0.85rem", fontWeight: 700, outline: "none" }} />
-          <button type="submit" style={{ padding: "6px 12px", background: "var(--kravy-purple)", color: "white", border: "none", borderRadius: "8px", fontSize: "0.75rem", fontWeight: 800, cursor: "pointer" }}>Apply</button>
+        <form className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-[var(--kravy-bg-2)] p-2 sm:px-4 sm:py-2 rounded-2xl border border-[var(--kravy-border)] shadow-sm w-full sm:w-auto">
+          <div className="flex items-center gap-1.5 flex-1 sm:flex-initial min-w-0">
+            <Calendar size={16} className="text-[var(--kravy-text-muted)] shrink-0" />
+            <input 
+              name="from" 
+              type="date" 
+              defaultValue={fromDateStr} 
+              className="bg-transparent border-none text-[var(--kravy-text-primary)] text-xs sm:text-sm font-bold outline-none cursor-pointer w-full" 
+            />
+          </div>
+          <span className="text-[var(--kravy-text-muted)] text-xs font-bold px-1">to</span>
+          <div className="flex items-center gap-1.5 flex-1 sm:flex-initial min-w-0">
+            <input 
+              name="to" 
+              type="date" 
+              defaultValue={toDateStr} 
+              className="bg-transparent border-none text-[var(--kravy-text-primary)] text-xs sm:text-sm font-bold outline-none cursor-pointer w-full" 
+            />
+          </div>
+          <button 
+            type="submit" 
+            className="w-full sm:w-auto px-4 py-2 sm:py-1.5 bg-[var(--kravy-purple)] text-white text-xs font-extrabold rounded-xl transition hover:opacity-90 active:scale-95 cursor-pointer"
+          >
+            Apply
+          </button>
         </form>
       </div>
 
       {/* --- Stats Cards --- */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "20px" }}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatsCard label="Net revenue (Combined)" value={`${sym}${format(totalRevenue)}`} badge={`${growth >= 0 ? "+" : ""}${Math.abs(growth).toFixed(0)}%`} subtext="vs prev period" />
         <StatsCard label="Total orders" value={combinedOrdersCount} badge={`${combinedOrdersCount >= prevOrdersCount ? "+" : ""}${combinedOrdersCount - prevOrdersCount}`} subtext="vs prev period" />
         <StatsCard label="Avg order value" value={`${sym}${format(avgOrder)}`} badge="+3%" subtext="this week" />
@@ -300,17 +323,22 @@ export default async function DailySalesReportPage({
       </div>
 
       {/* --- Analytics Row --- */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }} className="grid-cols-1 md:grid-cols-2">
-        <div style={{ background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "32px", padding: "32px" }}>
-          <h3 style={{ fontSize: "1.1rem", fontWeight: 800, marginBottom: "32px", color: "var(--kravy-text-primary)" }}>Hourly distribution</h3>
-          <div style={{ display: "flex", alignItems: "flex-end", height: "140px", gap: "10px" }}>
-            {[9,10,11,12,13,14,15,16,17,18,19,20,21,22].map(h => (
-              <ChartBar key={h} label={`${h % 12 || 12}${h >= 12 ? 'pm' : 'am'}`} height={(hourCounts[h] / maxHourCount) * 100} isPeak={hourCounts[h] === maxHourCount && maxHourCount > 0} />
-            ))}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <div style={{ background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "24px" }} className="p-4 sm:p-6 lg:p-8">
+          <div className="flex items-center justify-between mb-4 sm:mb-6">
+            <h3 className="text-base sm:text-lg font-extrabold text-[var(--kravy-text-primary)]">Hourly distribution</h3>
+            <span className="text-xs text-[var(--kravy-text-muted)] font-semibold hidden sm:inline">Orders per hour</span>
+          </div>
+          <div className="overflow-x-auto pb-2 no-scrollbar">
+            <div className="flex items-end h-[140px] gap-2 min-w-[320px]">
+              {[9,10,11,12,13,14,15,16,17,18,19,20,21,22].map(h => (
+                <ChartBar key={h} label={`${h % 12 || 12}${h >= 12 ? 'pm' : 'am'}`} height={(hourCounts[h] / maxHourCount) * 100} isPeak={hourCounts[h] === maxHourCount && maxHourCount > 0} />
+              ))}
+            </div>
           </div>
         </div>
-        <div style={{ background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "32px", padding: "32px" }}>
-          <h3 style={{ fontSize: "1.1rem", fontWeight: 800, marginBottom: "24px", color: "var(--kravy-text-primary)" }}>Summary breakdowns</h3>
+        <div style={{ background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "24px" }} className="p-4 sm:p-6 lg:p-8">
+          <h3 className="text-base sm:text-lg font-extrabold mb-4 sm:mb-6 text-[var(--kravy-text-primary)]">Summary breakdowns</h3>
           <BreakdownRow sym={sym} dotColor="#3B82F6" label="Counter / POS" count={types.COUNTER.c} revenue={types.COUNTER.r} />
           <BreakdownRow sym={sym} dotColor="#10B981" label="Dine-in" count={types.DINEIN.c} revenue={types.DINEIN.r} />
           <BreakdownRow sym={sym} dotColor="#F59E0B" label="Takeaway" count={types.TAKEAWAY.c} revenue={types.TAKEAWAY.r} />
@@ -324,108 +352,220 @@ export default async function DailySalesReportPage({
           <BreakdownRow sym={sym} dotColor="#8B5CF6" label="UPI Payments" count={payments.UPI.c} revenue={payments.UPI.r} />
         </div>
       </div>
+
       {/* --- Top Selling Items --- */}
-      <div style={{ background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "32px", padding: "32px", marginTop: "24px" }}>
-        <h3 style={{ fontSize: "1.1rem", fontWeight: 800, marginBottom: "24px", color: "var(--kravy-text-primary)" }}>Top Selling Items</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}>
+      <div style={{ background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", borderRadius: "24px" }} className="p-4 sm:p-6 lg:p-8">
+        <h3 className="text-base sm:text-lg font-extrabold mb-4 sm:mb-6 text-[var(--kravy-text-primary)]">Top Selling Items</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {topItems.map(([name, data]) => (
-            <div key={name} style={{ padding: "16px", background: "var(--kravy-bg-2)", borderRadius: "12px", border: `1px solid var(--kravy-border)`, boxShadow: "var(--kravy-card-shadow)" }}>
-              <div style={{ fontWeight: 900, color: "var(--kravy-text-primary)", fontSize: "0.95rem" }}>{name}</div>
-              <div style={{ fontSize: "0.75rem", color: "var(--kravy-text-muted)" }}>Qty: {data.qty}</div>
-              <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--kravy-text-primary)" }}>{sym}{format(data.revenue)}</div>
+            <div key={name} style={{ background: "var(--kravy-bg-2)", border: `1px solid var(--kravy-border)`, boxShadow: "var(--kravy-card-shadow)" }} className="p-3 sm:p-4 rounded-xl flex flex-col justify-between gap-1 min-w-0">
+              <div style={{ color: "var(--kravy-text-primary)" }} className="font-extrabold text-sm sm:text-base truncate" title={name}>{name}</div>
+              <div style={{ color: "var(--kravy-text-muted)" }} className="text-xs">Qty: {data.qty}</div>
+              <div style={{ color: "var(--kravy-text-primary)" }} className="text-sm sm:text-base font-extrabold mt-1">{sym}{format(data.revenue)}</div>
             </div>
           ))}
         </div>
       </div>
 
       {/* --- Transaction Ledger with Filters --- */}
-      <div style={{ background: "var(--kravy-surface)", borderRadius: "32px", border: "1px solid var(--kravy-border)", overflow: "hidden", boxShadow: "var(--kravy-card-shadow)" }}>
+      <div style={{ background: "var(--kravy-surface)", borderRadius: "24px", border: "1px solid var(--kravy-border)", boxShadow: "var(--kravy-card-shadow)" }} className="overflow-hidden">
         
         {/* Table Header & Local Filters */}
-        <div style={{ padding: "32px 40px", borderBottom: "1px solid var(--kravy-border)", display: "flex", flexDirection: "column", gap: "24px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h2 style={{ fontSize: "1.5rem", fontWeight: 950, color: "var(--kravy-text-primary)", letterSpacing: "-1px" }}>Transaction Ledger</h2>
-            <div style={{ color: "var(--kravy-text-muted)", fontSize: "0.85rem", fontWeight: 800, background: "var(--kravy-bg-2)", padding: "6px 16px", borderRadius: "10px" }}>
-              {bills.length} Bills Found
+        <div style={{ borderBottom: "1px solid var(--kravy-border)" }} className="p-4 sm:p-6 lg:p-8 flex flex-col gap-4 sm:gap-6">
+          <div className="flex flex-row justify-between items-center gap-2">
+            <div>
+              <h2 className="text-base sm:text-xl lg:text-2xl font-black text-[var(--kravy-text-primary)] tracking-tight">Transaction Ledger</h2>
+              <p className="text-xs text-[var(--kravy-text-muted)] font-medium hidden sm:block">Detailed log of all customer bills</p>
+            </div>
+            <div style={{ color: "var(--kravy-text-muted)", background: "var(--kravy-bg-2)" }} className="text-xs sm:text-sm font-extrabold px-3 py-1.5 rounded-xl border border-[var(--kravy-border)] shrink-0">
+              {bills.length} Bills
             </div>
           </div>
 
-          {/* New Filter Bar */}
-          <form style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+          {/* Filter Bar */}
+          <form className="flex flex-col sm:flex-row flex-wrap gap-2.5 sm:gap-3 items-stretch sm:items-center">
             {/* Date Range Selectors */}
-            <div style={{ display: "flex", gap: "6px", alignItems: "center", background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)", padding: "8px 12px", borderRadius: "12px" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--kravy-text-muted)" }}>From</span>
-              <input type="date" name="from" defaultValue={fromDateStr} style={{ background: "transparent", border: "none", color: "var(--kravy-text-primary)", fontSize: "0.85rem", fontWeight: 700, outline: "none", cursor: "pointer" }} />
-              <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--kravy-text-muted)", marginLeft: "4px" }}>To</span>
-              <input type="date" name="to" defaultValue={toDateStr} style={{ background: "transparent", border: "none", color: "var(--kravy-text-primary)", fontSize: "0.85rem", fontWeight: 700, outline: "none", cursor: "pointer" }} />
+            <div style={{ background: "var(--kravy-bg-2)", border: "1px solid var(--kravy-border)" }} className="flex items-center gap-2 px-3 py-2 rounded-xl w-full sm:w-auto">
+              <span className="text-[0.7rem] font-extrabold text-[var(--kravy-text-muted)] uppercase">From</span>
+              <input type="date" name="from" defaultValue={fromDateStr} className="bg-transparent border-none text-[var(--kravy-text-primary)] text-xs sm:text-sm font-bold outline-none flex-1 cursor-pointer" />
+              <span className="text-[0.7rem] font-extrabold text-[var(--kravy-text-muted)] uppercase">To</span>
+              <input type="date" name="to" defaultValue={toDateStr} className="bg-transparent border-none text-[var(--kravy-text-primary)] text-xs sm:text-sm font-bold outline-none flex-1 cursor-pointer" />
             </div>
 
             {/* Search */}
-            <div style={{ flex: 1, minWidth: "200px", position: "relative" }}>
-              <Search size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--kravy-text-muted)" }} />
+            <div className="w-full sm:flex-1 sm:min-w-[200px] relative">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--kravy-text-muted)]" />
               <input 
                 name="query" 
                 placeholder="Search Bill No, Phone or Name..." 
                 defaultValue={searchQuery}
-                style={{ width: "100%", padding: "10px 12px 10px 40px", borderRadius: "12px", border: "1px solid var(--kravy-border)", background: "var(--kravy-bg-2)", color: "var(--kravy-text-primary)", fontSize: "0.85rem", outline: "none" }} 
+                style={{ background: "var(--kravy-bg-2)", color: "var(--kravy-text-primary)", border: "1px solid var(--kravy-border)" }} 
+                className="w-full pl-9 pr-3 py-2 rounded-xl text-xs sm:text-sm outline-none"
               />
             </div>
 
-            {/* Order Type Filter */}
-            <select 
-              name="type" 
-              defaultValue={typeFilter}
-              style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid var(--kravy-border)", background: "var(--kravy-bg-2)", color: "var(--kravy-text-primary)", fontSize: "0.85rem", fontWeight: 700, outline: "none", cursor: "pointer" }}
-            >
-              <option value="ALL">All Types</option>
-              <option value="DINE">Dine-in Only</option>
-              <option value="DELIVERY">Delivery Only</option>
-              <option value="TAKEAWAY">Takeaway Only</option>
-              <option value="POS">POS / Counter</option>
-            </select>
+            {/* Dropdowns row */}
+            <div className="grid grid-cols-3 gap-2 w-full sm:w-auto sm:flex sm:flex-wrap">
+              {/* Order Type Filter */}
+              <select 
+                name="type" 
+                defaultValue={typeFilter}
+                style={{ background: "var(--kravy-bg-2)", color: "var(--kravy-text-primary)", border: "1px solid var(--kravy-border)" }}
+                className="w-full sm:w-auto px-2 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-bold outline-none cursor-pointer"
+              >
+                <option value="ALL">All Types</option>
+                <option value="DINE">Dine-in</option>
+                <option value="DELIVERY">Delivery</option>
+                <option value="TAKEAWAY">Takeaway</option>
+                <option value="POS">POS / Counter</option>
+              </select>
 
-            {/* Payment Filter */}
-            <select 
-              name="payment" 
-              defaultValue={paymentFilter}
-              style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid var(--kravy-border)", background: "var(--kravy-bg-2)", color: "var(--kravy-text-primary)", fontSize: "0.85rem", fontWeight: 700, outline: "none", cursor: "pointer" }}
-            >
-              <option value="ALL">All Payments</option>
-              <option value="CASH">Cash Only</option>
-              <option value="UPI">UPI Only</option>
-            </select>
+              {/* Payment Filter */}
+              <select 
+                name="payment" 
+                defaultValue={paymentFilter}
+                style={{ background: "var(--kravy-bg-2)", color: "var(--kravy-text-primary)", border: "1px solid var(--kravy-border)" }}
+                className="w-full sm:w-auto px-2 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-bold outline-none cursor-pointer"
+              >
+                <option value="ALL">All Payments</option>
+                <option value="CASH">Cash Only</option>
+                <option value="UPI">UPI Only</option>
+              </select>
 
-            {/* Status Filter */}
-            <select 
-              name="status" 
-              defaultValue={statusFilter}
-              style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid var(--kravy-border)", background: "var(--kravy-bg-2)", color: "var(--kravy-text-primary)", fontSize: "0.85rem", fontWeight: 700, outline: "none", cursor: "pointer" }}
-            >
-              <option value="ALL">All Status</option>
-              <option value="PAID">Settled</option>
-              <option value="PENDING">Pending</option>
-              <option value="CANCELLED">Cancelled</option>
-            </select>
+              {/* Status Filter */}
+              <select 
+                name="status" 
+                defaultValue={statusFilter}
+                style={{ background: "var(--kravy-bg-2)", color: "var(--kravy-text-primary)", border: "1px solid var(--kravy-border)" }}
+                className="w-full sm:w-auto px-2 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-bold outline-none cursor-pointer"
+              >
+                <option value="ALL">All Status</option>
+                <option value="PAID">Settled</option>
+                <option value="PENDING">Pending</option>
+                <option value="CANCELLED">Cancelled</option>
+              </select>
+            </div>
 
-            <button type="submit" style={{ padding: "10px 24px", background: "var(--kravy-text-primary)", color: "var(--kravy-bg)", border: "none", borderRadius: "12px", fontSize: "0.85rem", fontWeight: 900, cursor: "pointer" }}>Filter Results</button>
-            <a 
-              href={`/api/bill-manager/export?from=${fromDateStr}&to=${toDateStr}&type=${typeFilter}&payment=${paymentFilter}&status=${statusFilter}&query=${searchQuery}`}
-              target="_blank"
-              style={{ padding: "10px 24px", background: "#10B981", color: "white", textDecoration: "none", borderRadius: "12px", fontSize: "0.85rem", fontWeight: 900, cursor: "pointer", display: "flex", alignItems: "center", gap: "8px" }}
-            >
-              <Download size={16} /> Export Excel
-            </a>
-            <CopyJsonButton bills={bills} />
-            
-            {(searchQuery || typeFilter !== "ALL" || paymentFilter !== "ALL") && (
-              <Link href={`/dashboard/reports/sales/daily?from=${fromDateStr}&to=${toDateStr}`} style={{ color: "var(--kravy-red)", fontSize: "0.75rem", fontWeight: 800, textDecoration: "none", display: "flex", alignItems: "center", gap: "4px" }}>
-                <X size={14} /> Clear
-              </Link>
-            )}
+            {/* Action Buttons */}
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <button 
+                type="submit" 
+                style={{ background: "var(--kravy-text-primary)", color: "var(--kravy-bg)" }} 
+                className="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs sm:text-sm font-black cursor-pointer text-center hover:opacity-90 active:scale-95 transition border-none"
+              >
+                Filter
+              </button>
+              
+              <a 
+                href={`/api/bill-manager/export?from=${fromDateStr}&to=${toDateStr}&type=${typeFilter}&payment=${paymentFilter}&status=${statusFilter}&query=${searchQuery}`}
+                target="_blank"
+                className="flex-1 sm:flex-initial px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition active:scale-95 no-underline"
+              >
+                <Download size={15} /> Export
+              </a>
+
+              <CopyJsonButton bills={bills} className="flex-1 sm:flex-initial text-xs sm:text-sm py-2 px-3.5" />
+              
+              {(searchQuery || typeFilter !== "ALL" || paymentFilter !== "ALL" || statusFilter !== "ALL") && (
+                <Link 
+                  href={`/dashboard/reports/sales/daily?from=${fromDateStr}&to=${toDateStr}`} 
+                  style={{ color: "var(--kravy-red)" }} 
+                  className="text-xs font-bold flex items-center justify-center gap-1 no-underline px-2 py-2"
+                >
+                  <X size={14} /> Clear
+                </Link>
+              )}
+            </div>
           </form>
         </div>
 
-        <div style={{ overflowX: "auto" }}>
+        {/* --- Mobile Transaction Cards (block md:hidden) --- */}
+        <div className="block md:hidden divide-y divide-[var(--kravy-border)]">
+          {bills.length === 0 ? (
+            <div className="p-12 text-center text-[var(--kravy-text-muted)] text-sm">
+              No matching transactions found for this period.
+            </div>
+          ) : (
+            bills.map((bill, idx) => {
+              let items: any = bill.items;
+              if (typeof items === "string") try { items = JSON.parse(items); } catch { items = []; }
+              if (items && !Array.isArray(items) && items.items) items = items.items;
+              return (
+                <div key={bill.id} className="p-4 space-y-3 bg-[var(--kravy-surface)] hover:bg-[var(--kravy-bg-2)] transition">
+                  {/* Row 1: Bill Number + Type + Status + Total */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-black text-[var(--kravy-purple)] font-mono">
+                          #{bill.billNumber}
+                        </span>
+                        <TypeBadge type={bill.tableName || "POS"} />
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <StatusIndicator status={bill.paymentStatus} />
+                        <span className="text-xs text-[var(--kravy-text-muted)] font-medium">
+                          • {new Date(bill.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}, {new Date(bill.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="text-right shrink-0">
+                      <div className="text-lg font-black text-[var(--kravy-text-primary)]">
+                        {sym}{format(bill.total)}
+                      </div>
+                      <PaymentBadge mode={bill.paymentMode} />
+                    </div>
+                  </div>
+
+                  {/* Row 2: Customer details & Token/Source */}
+                  <div className="flex items-center justify-between text-xs text-[var(--kravy-text-muted)] bg-[var(--kravy-bg-2)] px-3 py-2 rounded-xl border border-[var(--kravy-border)]">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="font-bold text-[var(--kravy-text-primary)]">{bill.customerName || "Walk-in"}</span>
+                      {bill.customerPhone && (
+                        <span className="font-mono text-[var(--kravy-text-muted)]">• {bill.customerPhone}</span>
+                      )}
+                    </div>
+                    <div className="shrink-0 font-bold text-[var(--kravy-purple)] font-mono">
+                      {bill.kotNumbers?.length > 0 ? (
+                        `KOT: ${bill.kotNumbers.join(', ')}`
+                      ) : bill.tokenNumber ? (
+                        `Token #${String(bill.tokenNumber).padStart(2, '0')}`
+                      ) : (
+                        bill.tableName || "POS"
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Row 3: Items list (pills) */}
+                  {Array.isArray(items) && items.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {items.map((it: any, i: number) => (
+                        <span 
+                          key={i} 
+                          style={{ background: "var(--kravy-bg)", border: "1px solid var(--kravy-border)", color: "var(--kravy-text-muted)" }} 
+                          className="text-[0.7rem] px-2 py-0.5 rounded-md font-bold"
+                        >
+                          {it.name} <span className="text-[var(--kravy-text-primary)] font-black">x{it.quantity || it.qty}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Row 4: S.No & Actions menu */}
+                  <div className="flex items-center justify-between pt-1 border-t border-[var(--kravy-border)]">
+                    <span className="text-[0.7rem] text-[var(--kravy-text-faint)] font-bold">
+                      #{idx + 1}
+                    </span>
+                    <BillActionsReport billId={bill.id} bill={bill} business={profile} />
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* --- Desktop Table View (hidden md:block) --- */}
+        <div className="hidden md:block overflow-x-auto">
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: "var(--kravy-table-header)" }}>

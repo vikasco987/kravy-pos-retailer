@@ -266,3 +266,120 @@
 
   z-index: 999;
 }
+
+/* =========================
+   RESPONSIVE & SIDEBAR MODE
+========================= */
+
+@media (max-width: 640px) {
+  .subscription-dropdown {
+    width: min(320px, calc(100vw - 24px));
+    padding: 14px;
+    border-radius: 14px;
+  }
+}
+
+.subscription-sidebar-mode .subscription-pill {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  padding: 5px 10px;
+  background: var(--kravy-surface, #ffffff);
+  border: 1px solid var(--kravy-border, #ddd6fe);
+  border-radius: 10px;
+}
+
+.subscription-sidebar-mode .subscription-pill strong {
+  color: var(--kravy-text-primary, #17213c);
+}
+
+/* Compact Dropdown in Sidebar */
+.subscription-sidebar-mode .subscription-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0 !important;
+  right: auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 13px 14px;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--kravy-border, #e6e7ef);
+}
+
+.subscription-sidebar-mode .subscription-dropdown .dropdown-label {
+  font-size: 8.5px;
+  letter-spacing: 0.8px;
+}
+
+.subscription-sidebar-mode .subscription-dropdown .dropdown-header h3 {
+  font-size: 14px;
+  margin-top: 2px;
+  font-weight: 800;
+}
+
+.subscription-sidebar-mode .subscription-dropdown .dropdown-header button {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+
+.subscription-sidebar-mode .subscription-dropdown .days-section {
+  margin-top: 10px;
+}
+
+.subscription-sidebar-mode .subscription-dropdown .days-section strong {
+  font-size: 20px;
+}
+
+.subscription-sidebar-mode .subscription-dropdown .days-section span {
+  font-size: 8.5px;
+}
+
+.subscription-sidebar-mode .subscription-dropdown .active-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.subscription-sidebar-mode .subscription-dropdown .progress-bar {
+  height: 5px;
+  margin-top: 6px;
+}
+
+.subscription-sidebar-mode .subscription-dropdown .expiry {
+  margin-top: 10px;
+  font-size: 11px;
+  gap: 6px;
+}
+
+.subscription-sidebar-mode .subscription-dropdown .expiry svg {
+  width: 14px;
+  height: 14px;
+}
+
+.subscription-sidebar-mode .subscription-dropdown .view-plan {
+  height: 34px;
+  margin-top: 12px;
+  font-size: 11.5px;
+  border-radius: 8px;
+}
+
+.dark .subscription-dropdown {
+  background: #0f172a;
+  border-color: #1e293b;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+}
+
+.dark .dropdown-header h3,
+.dark .days-section strong {
+  color: #f8fafc;
+}
+
+.dark .dropdown-header button {
+  background: #1e293b;
+  color: #94a3b8;
+}
+
+.dark .expiry strong {
+  color: #cbd5e1;
+}

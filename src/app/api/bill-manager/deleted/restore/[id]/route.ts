@@ -24,13 +24,23 @@ export async function POST(
     });
 
     if (bill) {
-      await prisma.billManager.update({
-        where: { id },
-        data: {
-          isDeleted: false,
-          deletedAt: null,
-          deletedSnapshot: null,
-        },
+      const wasDeducted = (bill.deletedSnapshot as any)?.inventoryDeducted ?? (!bill.isHeld);
+      await prisma.$transaction(async (tx) => {
+        await tx.billManager.update({
+          where: { id },
+          data: {
+            isDeleted: false,
+            deletedAt: null,
+            deletedSnapshot: null,
+            paymentStatus: (bill.deletedSnapshot as any)?.paymentStatus || (bill.isHeld ? "HELD" : "Paid"),
+            inventoryDeducted: wasDeducted,
+          },
+        });
+
+        if (wasDeducted && Array.isArray(bill.items) && bill.items.length > 0) {
+          const { executeInventoryDeduction } = await import("@/lib/inventory-utils");
+          await executeInventoryDeduction(tx, bill.items);
+        }
       });
       return NextResponse.json({ success: true, type: "bill" });
     }
@@ -45,11 +55,21 @@ export async function POST(
     });
 
     if (order) {
-      await prisma.order.update({
-        where: { id },
-        data: {
-          isDeleted: false,
-          updatedAt: new Date()
+      const wasDeducted = (order.deletedSnapshot as any)?.inventoryDeducted ?? false;
+      await prisma.$transaction(async (tx) => {
+        await tx.order.update({
+          where: { id },
+          data: {
+            isDeleted: false,
+            status: (order.deletedSnapshot as any)?.status || "COMPLETED",
+            inventoryDeducted: wasDeducted,
+            updatedAt: new Date()
+          }
+        });
+
+        if (wasDeducted && Array.isArray(order.items) && order.items.length > 0) {
+          const { executeInventoryDeduction } = await import("@/lib/inventory-utils");
+          await executeInventoryDeduction(tx, order.items);
         }
       });
       return NextResponse.json({ success: true, type: "order" });

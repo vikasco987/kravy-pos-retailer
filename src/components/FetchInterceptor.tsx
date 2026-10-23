@@ -20,6 +20,14 @@ export default function FetchInterceptor() {
         return originalFetch(...args);
       }
 
+      const startTime = performance.now();
+      const reqUrl = typeof resource === "string" ? resource : resource instanceof URL ? resource.toString() : resource.url;
+      const reqMethod = (args[1] && args[1].method) || "GET";
+      let reqBody = undefined;
+      if (args[1] && args[1].body) {
+        try { reqBody = typeof args[1].body === 'string' ? JSON.parse(args[1].body) : args[1].body; } catch(e){}
+      }
+
       let response = await originalFetch(...args);
 
       // If unauthorized, attempt to refresh the token
@@ -70,6 +78,41 @@ export default function FetchInterceptor() {
              window.location.href = window.location.pathname.startsWith('/staff') ? '/staff/login?error=session_expired' : '/auth/custom?error=session_expired';
           }
         }
+      }
+
+      const duration = performance.now() - startTime;
+      
+      // Clone response for debugging
+      let resBody = null;
+      let parseError = null;
+      try {
+        const cloned = response.clone();
+        const text = await cloned.text();
+        try {
+          resBody = JSON.parse(text);
+        } catch (e) {
+          resBody = text;
+          parseError = (e as Error).message;
+        }
+      } catch (e) {
+        parseError = "Failed to clone/read response: " + (e as Error).message;
+      }
+
+      // Emit debug event for Developer Panel
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("agy-dev-debug", {
+          detail: {
+            url: reqUrl,
+            method: reqMethod,
+            status: response.status,
+            duration,
+            timestamp: new Date().toISOString(),
+            requestBody: reqBody,
+            responseBody: resBody,
+            parseError,
+            isError: !response.ok
+          }
+        }));
       }
 
       return response;

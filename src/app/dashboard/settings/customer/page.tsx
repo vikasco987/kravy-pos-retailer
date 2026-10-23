@@ -111,115 +111,116 @@ export default function CustomerDataSettings() {
         collectKey: keyof typeof settings, 
         requireKey: keyof typeof settings 
     }) => (
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 transition-all hover:border-blue-500/30 shadow-sm">
-            <div className="flex items-center gap-4 mb-6">
-                <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-600">
-                    <Icon size={24} />
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 transition-all hover:border-blue-500/30 shadow-sm">
+            <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-600 shrink-0">
+                    <Icon size={22} />
                 </div>
                 <div>
-                    <h3 className="text-lg font-bold text-slate-900 capitalize">{label}</h3>
-                    <p className="text-xs text-slate-500 font-mono">Configure how you collect {label} from QR Menu</p>
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white capitalize">{label}</h3>
+                    <p className="text-[11px] sm:text-xs text-slate-500 font-mono">Configure how you collect {label} from QR Menu</p>
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 {/* Collect Toggle */}
                 <button 
                     onClick={() => toggle(collectKey)}
-                    className={`flex flex-col gap-2 p-4 rounded-2xl border transition-all text-left ${
+                    className={`flex flex-col gap-1.5 sm:gap-2 p-3 sm:p-4 rounded-xl sm:rounded-2xl border transition-all text-left ${
                         settings[collectKey] 
-                        ? "bg-blue-600/10 border-blue-500/50 text-blue-600" 
-                        : "bg-slate-50 border-slate-200 text-slate-400"
+                        ? "bg-blue-600/10 border-blue-500/50 text-blue-600 dark:text-blue-400" 
+                        : "bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-400"
                     }`}
                 >
                     <div className="flex items-center justify-between w-full">
                         <span className="text-[10px] uppercase font-black tracking-widest">Visibility</span>
                         {settings[collectKey] ? <Check size={14} /> : null}
                     </div>
-                    <span className="text-sm font-bold">{settings[collectKey] ? "Visible (Enabled)" : "Hidden (Disabled)"}</span>
+                    <span className="text-xs sm:text-sm font-bold">{settings[collectKey] ? "Visible (Enabled)" : "Hidden (Disabled)"}</span>
                 </button>
 
                 {/* Mandatory Toggle */}
                 <button 
                     disabled={!settings[collectKey]}
                     onClick={() => toggle(requireKey)}
-                    className={`flex flex-col gap-2 p-4 rounded-2xl border transition-all text-left ${
+                    className={`flex flex-col gap-1.5 sm:gap-2 p-3 sm:p-4 rounded-xl sm:rounded-2xl border transition-all text-left ${
                         !settings[collectKey] 
-                        ? "opacity-30 cursor-not-allowed bg-slate-100 border-slate-200" 
+                        ? "opacity-30 cursor-not-allowed bg-slate-100 dark:bg-slate-800/20 border-slate-200 dark:border-slate-800" 
                         : settings[requireKey] 
-                            ? "bg-emerald-600/10 border-emerald-500/50 text-emerald-600" 
-                            : "bg-slate-50 border-slate-200 text-slate-400"
+                            ? "bg-emerald-600/10 border-emerald-500/50 text-emerald-600 dark:text-emerald-400" 
+                            : "bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-400"
                     }`}
                 >
                     <div className="flex items-center justify-between w-full">
                         <span className="text-[10px] uppercase font-black tracking-widest">Requirement</span>
                         {settings[requireKey] ? <Check size={14} /> : null}
                     </div>
-                    <span className="text-sm font-bold">{settings[requireKey] ? "Mandatory (Required)" : "Optional"}</span>
+                    <span className="text-xs sm:text-sm font-bold">{settings[requireKey] ? "Mandatory (Required)" : "Optional"}</span>
                 </button>
             </div>
         </div>
     );
 
     return (
-        <div className="max-w-4xl mx-auto space-y-8 kravy-page-fade">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+        <div className="w-full space-y-6 sm:space-y-8 pb-20 kravy-page-fade">
+            {/* HEADER */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start sm:items-center gap-3 sm:gap-4">
                     <button
                         onClick={() => router.back()}
-                        className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-all text-slate-600 cursor-pointer"
+                        className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-all text-slate-600 dark:text-slate-300 cursor-pointer shrink-0 mt-0.5 sm:mt-0"
                         title="Back"
                     >
                         <ArrowLeft size={18} />
                     </button>
                     <div>
-                        <h1 className="text-2xl font-black text-slate-900 tracking-tight">Customer Setup</h1>
-                        <p className="text-xs text-slate-500 font-mono uppercase tracking-widest">QR Menu Data Collection Rules</p>
+                        <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">Customer Setup</h1>
+                        <p className="text-[11px] sm:text-xs text-slate-500 font-mono uppercase tracking-widest mt-0.5">QR Menu Data Collection Rules</p>
                     </div>
                 </div>
 
                 <button 
                     onClick={handleSave}
                     disabled={saving}
-                    className="h-12 px-8 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 shadow-xl shadow-blue-600/20 disabled:opacity-50 transition-all active:scale-95"
+                    className="w-full sm:w-auto h-11 sm:h-12 px-6 sm:px-8 rounded-xl sm:rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center justify-center gap-2 shadow-lg sm:shadow-xl shadow-blue-600/20 disabled:opacity-50 transition-all active:scale-95 text-sm sm:text-base shrink-0"
                 >
                     <Save size={18} />
                     {saving ? "Saving..." : "Save Changes"}
                 </button>
             </div>
 
-            <div className="bg-blue-600/10 border border-blue-500/20 p-6 rounded-3xl flex gap-4 items-start">
+            <div className="bg-blue-600/10 border border-blue-500/20 p-4 sm:p-6 rounded-2xl sm:rounded-3xl flex gap-3 sm:gap-4 items-start">
                 <AlertCircle size={20} className="text-blue-600 mt-1 shrink-0" />
                 <div className="space-y-1">
-                    <p className="text-sm font-bold text-slate-900">Why configure this?</p>
-                    <p className="text-xs text-slate-600 leading-relaxed font-mono">
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">Why configure this?</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-mono">
                         Har restaurant ki zaroorat alag hoti hai. Agar aap chahte hain ki orders se pehle customers apna <b>Address</b> bhi dein, to niche toggles ka istemal karein. Mandatory karne pe customer bina detail bhare order nahi kar payega.
                     </p>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+            <div className="grid grid-cols-1 gap-4 sm:gap-6">
                 <FieldOption icon={User} label="Customer Name" collectKey="collectCustomerName" requireKey="requireCustomerName" />
                 <FieldOption icon={Phone} label="Customer Phone" collectKey="collectCustomerPhone" requireKey="requireCustomerPhone" />
                 <FieldOption icon={MapPin} label="Customer Address" collectKey="collectCustomerAddress" requireKey="requireCustomerAddress" />
             </div>
 
             {/* ✅ RESTAURANT TIMING & ONLINE STATUS */}
-            <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 space-y-8 shadow-sm">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-6">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center text-orange-600">
-                            <Zap size={24} />
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 space-y-6 sm:space-y-8 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5 sm:pb-6">
+                    <div className="flex items-center gap-3 sm:gap-4">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-orange-500/10 flex items-center justify-center text-orange-600 shrink-0">
+                            <Zap size={22} />
                         </div>
                         <div>
-                            <h3 className="text-xl font-bold text-slate-900">Ordering Status & Timing</h3>
+                            <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">Ordering Status & Timing</h3>
                             <p className="text-xs text-slate-500 font-mono">Set when customers can place orders via QR</p>
                         </div>
                     </div>
 
                     <button 
                         onClick={() => toggle("isOnline")}
-                        className={`h-12 px-6 rounded-2xl border transition-all font-bold flex items-center gap-2 ${
+                        className={`w-full sm:w-auto h-11 sm:h-12 px-4 sm:px-6 rounded-xl sm:rounded-2xl border transition-all font-bold flex items-center justify-center gap-2 text-xs sm:text-sm shrink-0 ${
                             settings.isOnline 
                             ? "bg-emerald-600/10 border-emerald-500/50 text-emerald-600" 
                             : "bg-rose-600/10 border-rose-500/50 text-rose-600"
@@ -271,35 +272,35 @@ export default function CustomerDataSettings() {
             </div>
 
                 {/* ── QR MENU PAYMENT OPTIONS ── */}
-                <div className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-[32px] overflow-hidden shadow-2xl relative mb-8">
-                    <div className="bg-gradient-to-r from-blue-500/10 to-indigo-500/10 p-6 border-b border-[var(--kravy-border)] flex justify-between items-center">
-                        <div className="flex gap-4 items-center">
-                            <div className="w-12 h-12 rounded-[16px] bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
-                                <Zap className="text-white w-6 h-6" />
+                <div className="bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl sm:rounded-[32px] overflow-hidden shadow-sm relative mb-6 sm:mb-8">
+                    <div className="bg-gradient-to-r from-blue-500/10 to-indigo-500/10 p-4 sm:p-6 border-b border-[var(--kravy-border)] flex justify-between items-center">
+                        <div className="flex gap-3 sm:gap-4 items-center">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-[16px] bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shrink-0">
+                                <Zap className="text-white w-5 h-5 sm:w-6 sm:h-6" />
                             </div>
                             <div>
-                                <h2 className="text-xl font-black text-[var(--kravy-text-primary)]">QR Menu Payments</h2>
-                                <p className="text-xs text-[var(--kravy-text-muted)] mt-1 font-medium">Select which payment methods customers can use on QR Menu</p>
+                                <h2 className="text-lg sm:text-xl font-black text-[var(--kravy-text-primary)]">QR Menu Payments</h2>
+                                <p className="text-[11px] sm:text-xs text-[var(--kravy-text-muted)] mt-0.5 font-medium">Select which payment methods customers can use on QR Menu</p>
                             </div>
                         </div>
                     </div>
 
-                    <div className="p-6 space-y-4">
+                    <div className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                         {[
                             { id: 'qrPayUpiEnabled', label: 'Pay via UPI', desc: 'Allow customers to pay via UPI QR code before placing order' },
                             { id: 'qrPayCashEnabled', label: 'Pay via Cash', desc: 'Allow customers to select cash (Pay at Counter)' },
                             { id: 'qrPayCardEnabled', label: 'Pay via Card', desc: 'Allow customers to select card payment' },
                         ].map(opt => (
-                            <div key={opt.id} className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-[var(--kravy-border)]">
-                                <div>
-                                    <div className="text-sm font-bold text-[var(--kravy-text-primary)]">{opt.label}</div>
-                                    <div className="text-xs text-[var(--kravy-text-muted)] mt-1">{opt.desc}</div>
+                            <div key={opt.id} className="flex justify-between items-center gap-3 p-3.5 sm:p-4 bg-slate-50 dark:bg-slate-800/30 rounded-xl sm:rounded-2xl border border-[var(--kravy-border)]">
+                                <div className="pr-2">
+                                    <div className="text-xs sm:text-sm font-bold text-[var(--kravy-text-primary)]">{opt.label}</div>
+                                    <div className="text-[11px] sm:text-xs text-[var(--kravy-text-muted)] mt-0.5">{opt.desc}</div>
                                 </div>
                                 <button
                                     onClick={() => toggle(opt.id as keyof typeof settings)}
-                                    className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${settings[opt.id as keyof typeof settings] ? "bg-blue-600" : "bg-slate-300 dark:bg-slate-700"}`}
+                                    className={`relative inline-flex h-6 w-11 sm:h-7 sm:w-12 shrink-0 items-center rounded-full transition-colors focus:outline-none ${settings[opt.id as keyof typeof settings] ? "bg-blue-600" : "bg-slate-300 dark:bg-slate-700"}`}
                                 >
-                                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${settings[opt.id as keyof typeof settings] ? "translate-x-6" : "translate-x-1"}`} />
+                                    <span className={`inline-block h-4 w-4 sm:h-5 sm:w-5 transform rounded-full bg-white transition-transform ${settings[opt.id as keyof typeof settings] ? "translate-x-6 sm:translate-x-6" : "translate-x-1"}`} />
                                 </button>
                             </div>
                         ))}
@@ -307,53 +308,53 @@ export default function CustomerDataSettings() {
                 </div>
 
                 {/* ── CUSTOMER REQUIREMENT TOGGLES ── */}
-            <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 space-y-6 shadow-sm">
-                <div className="flex items-center gap-4 border-b border-slate-100 pb-6">
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-600">
-                        <CheckCircle2 size={24} />
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 shadow-sm">
+                <div className="flex items-center gap-3 sm:gap-4 border-b border-slate-100 dark:border-slate-800 pb-4 sm:pb-6">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-600 shrink-0">
+                        <CheckCircle2 size={22} />
                     </div>
                     <div>
-                        <h3 className="text-xl font-bold text-slate-900">Custom Labels</h3>
+                        <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">Custom Labels</h3>
                         <p className="text-xs text-slate-500 font-mono">Customize the text displayed on the order tracking page</p>
                     </div>
                 </div>
 
-                <div className="space-y-4 max-w-md">
+                <div className="space-y-3 sm:space-y-4 max-w-md">
                     <label className="text-[10px] uppercase font-black tracking-widest text-slate-500 block">Completed Status Label</label>
                     <input 
                         type="text" 
                         value={(settings as any).servedStatusLabel}
                         onChange={(e) => setSettings(prev => ({ ...prev, servedStatusLabel: e.target.value.toUpperCase() }))}
                         placeholder="e.g. DELIVERED, SERVED"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-slate-900 font-black text-lg focus:border-indigo-500/50 outline-none transition-all uppercase"
+                        className="w-full bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 text-slate-900 dark:text-white font-black text-base sm:text-lg focus:border-indigo-500/50 outline-none transition-all uppercase"
                     />
                     <p className="text-[10px] text-slate-400 italic">This replaces "SERVED" on the tracking page.</p>
                 </div>
             </div>
 
             {/* ✅ QR SPECIFIC ADDITIONAL CHARGES */}
-            <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 space-y-6 shadow-sm">
-                <div className="flex items-center gap-4 border-b border-slate-100 pb-6">
-                    <div className="w-12 h-12 rounded-2xl bg-rose-500/10 flex items-center justify-center text-rose-600">
-                        <Zap size={24} />
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 shadow-sm">
+                <div className="flex items-center gap-3 sm:gap-4 border-b border-slate-100 dark:border-slate-800 pb-4 sm:pb-6">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-rose-500/10 flex items-center justify-center text-rose-600 shrink-0">
+                        <Zap size={22} />
                     </div>
                     <div>
-                        <h3 className="text-xl font-bold text-slate-900">QR Extra Charges</h3>
+                        <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">QR Extra Charges</h3>
                         <p className="text-xs text-slate-500 font-mono">Automatically apply these charges on QR Code orders</p>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8">
                     {/* Delivery Charge */}
-                    <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6">
-                        <div className="flex items-center justify-between mb-4">
+                    <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-2xl sm:rounded-3xl p-4 sm:p-6">
+                        <div className="flex items-center justify-between mb-3 sm:mb-4">
                             <div>
-                                <h4 className="font-bold text-slate-900">QR Delivery Charge</h4>
-                                <p className="text-[10px] text-slate-500 font-mono mt-1">Applied to all QR orders</p>
+                                <h4 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white">QR Delivery Charge</h4>
+                                <p className="text-[10px] text-slate-500 font-mono mt-0.5">Applied to all QR orders</p>
                             </div>
                             <button 
                                 onClick={() => toggle("qrDeliveryChargeEnabled")}
-                                className={`w-12 h-6 rounded-full transition-colors relative ${settings.qrDeliveryChargeEnabled ? "bg-emerald-500" : "bg-slate-300"}`}
+                                className={`w-12 h-6 rounded-full transition-colors relative shrink-0 ${settings.qrDeliveryChargeEnabled ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`}
                             >
                                 <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-all ${settings.qrDeliveryChargeEnabled ? "left-7" : "left-1"}`} />
                             </button>
@@ -366,22 +367,22 @@ export default function CustomerDataSettings() {
                                     min="0"
                                     value={settings.qrDeliveryChargeAmount}
                                     onChange={(e) => setSettings(prev => ({ ...prev, qrDeliveryChargeAmount: Number(e.target.value) }))}
-                                    className="w-full bg-white border border-slate-200 rounded-xl p-3 font-black text-slate-900 outline-none focus:border-rose-500 transition-all"
+                                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 font-black text-slate-900 dark:text-white outline-none focus:border-rose-500 transition-all text-sm sm:text-base"
                                 />
                             </div>
                         )}
                     </div>
 
                     {/* Packaging Charge */}
-                    <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6">
-                        <div className="flex items-center justify-between mb-4">
+                    <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-2xl sm:rounded-3xl p-4 sm:p-6">
+                        <div className="flex items-center justify-between mb-3 sm:mb-4">
                             <div>
-                                <h4 className="font-bold text-slate-900">QR Packaging Charge</h4>
-                                <p className="text-[10px] text-slate-500 font-mono mt-1">Applied to all QR orders</p>
+                                <h4 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white">QR Packaging Charge</h4>
+                                <p className="text-[10px] text-slate-500 font-mono mt-0.5">Applied to all QR orders</p>
                             </div>
                             <button 
                                 onClick={() => toggle("qrPackagingChargeEnabled")}
-                                className={`w-12 h-6 rounded-full transition-colors relative ${settings.qrPackagingChargeEnabled ? "bg-emerald-500" : "bg-slate-300"}`}
+                                className={`w-12 h-6 rounded-full transition-colors relative shrink-0 ${settings.qrPackagingChargeEnabled ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`}
                             >
                                 <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-all ${settings.qrPackagingChargeEnabled ? "left-7" : "left-1"}`} />
                             </button>
@@ -394,7 +395,7 @@ export default function CustomerDataSettings() {
                                     min="0"
                                     value={settings.qrPackagingChargeAmount}
                                     onChange={(e) => setSettings(prev => ({ ...prev, qrPackagingChargeAmount: Number(e.target.value) }))}
-                                    className="w-full bg-white border border-slate-200 rounded-xl p-3 font-black text-slate-900 outline-none focus:border-rose-500 transition-all"
+                                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 font-black text-slate-900 dark:text-white outline-none focus:border-rose-500 transition-all text-sm sm:text-base"
                                 />
                             </div>
                         )}
@@ -403,24 +404,24 @@ export default function CustomerDataSettings() {
             </div>
 
             {/* ✅ WALLET SECURITY & TRANSACTION EDITING RULES */}
-            <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 space-y-6 shadow-sm">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-6">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-600">
-                            <Clock size={24} />
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4 sm:pb-6">
+                    <div className="flex items-center gap-3 sm:gap-4">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0">
+                            <Clock size={22} />
                         </div>
                         <div>
-                            <h3 className="text-xl font-bold text-slate-900">Wallet History Controls</h3>
+                            <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">Wallet History Controls</h3>
                             <p className="text-xs text-slate-500 font-mono">Control staff permissions for editing and deleting past transactions</p>
                         </div>
                     </div>
 
                     <button 
                         onClick={() => toggle("allowWalletEditDelete")}
-                        className={`h-12 px-6 rounded-2xl border transition-all font-bold flex items-center gap-2 ${
+                        className={`w-full sm:w-auto h-11 sm:h-12 px-4 sm:px-6 rounded-xl sm:rounded-2xl border transition-all font-bold flex items-center justify-center gap-2 text-xs sm:text-sm shrink-0 ${
                             settings.allowWalletEditDelete 
-                            ? "bg-emerald-600/10 border-emerald-500/50 text-emerald-600" 
-                            : "bg-slate-100 border-slate-200 text-slate-400"
+                            ? "bg-emerald-600/10 border-emerald-500/50 text-emerald-600 dark:text-emerald-400" 
+                            : "bg-slate-100 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-400"
                         }`}
                     >
                         <div className={`w-2 h-2 rounded-full ${settings.allowWalletEditDelete ? "bg-emerald-500" : "bg-slate-400"}`} />
@@ -433,7 +434,7 @@ export default function CustomerDataSettings() {
                 </p>
             </div>
 
-            <div className="pt-10 border-t border-slate-100 text-center">
+            <div className="pt-6 sm:pt-10 border-t border-slate-100 dark:border-slate-800 text-center">
                 <p className="text-[10px] text-slate-400 uppercase tracking-[4px] font-black italic">
                     Kravy POS · Customer Experience Configuration
                 </p>

@@ -1,8 +1,9 @@
 "use client";
 import { useCurrency } from "@/lib/currency-context";
-import { useState, useEffect, useRef } from "react";
+import { kravy } from "@/lib/sounds";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Package, Search, Plus, Filter, ChevronDown, Download, Eye, Edit, Trash2, FileText, X, AlertTriangle, Save, Sparkles, TrendingUp, Layers, ArrowUpDown, CheckCircle2, XCircle, BadgePercent, BarChart3, Printer } from "lucide-react";
+import { Package, Search, Plus, Filter, ChevronDown, Download, Eye, Edit, Trash2, FileText, X, AlertTriangle, Save, Sparkles, TrendingUp, Layers, ArrowUpDown, CheckCircle2, XCircle, BadgePercent, BarChart3, Printer, Settings, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 import { useSearch } from "@/components/SearchContext";
 import Link from "next/link";
@@ -11,6 +12,7 @@ import { printBarcodeLabel } from "@/components/printing/BarcodeLabelPrint";
 import BarcodePrintModal from "./BarcodePrintModal";
 import { useTerminalContext } from "@/components/TerminalContext";
 import { useProfileCache } from "@/hooks/useProfileCache";
+import { useSocket } from "@/components/SocketContext";
 
 type InventoryItem = {
   id: string;
@@ -42,7 +44,8 @@ type RawMaterial = {
 
 export default function InventoryPage() {
   const { currencySymbol: sym } = useCurrency();
-  const { emitUpdate, lastUpdated } = useTerminalContext();
+  const { emitUpdate } = useTerminalContext();
+  const { socket, isConnected } = useSocket();
 
   const { confirm } = useConfirm();
   const { query: globalQuery } = useSearch();
@@ -102,58 +105,167 @@ export default function InventoryPage() {
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const { profile } = useProfileCache();
 
+  const isFetchingRef = useRef(false);
+  const pendingRefreshRef = useRef(false);
+  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const retryCountRef = useRef(0);
+  const pendingWhileHiddenRef = useRef(false);
+  const isInitialLoadDoneRef = useRef(false);
+
+  const fetchInventoryData = useCallback(async (isInitial = false) => {
+    if (isFetchingRef.current) {
+      pendingRefreshRef.current = true;
+      return;
+    }
+    isFetchingRef.current = true;
+    if (isInitial) setLoading(true);
+
+    try {
+      const [invRes, rawRes] = await Promise.all([
+        fetch("/api/inventory"),
+        fetch("/api/inventory/materials").catch(() => null)
+      ]);
+      if (invRes.ok) {
+        const data = await invRes.json();
+        setItems(data);
+        retryCountRef.current = 0; // Reset retry counter on successful fetch
+      }
+      if (rawRes?.ok) {
+        const rawData = await rawRes.json();
+        setRawMaterials(rawData);
+      }
+    } catch (error) {
+      console.error("Fetch inventory error:", error);
+      if (isInitial) toast.error("Failed to load inventory");
+
+      // Bounded retry for transient background network drops (max 1 retry after 3s)
+      if (!isInitial && retryCountRef.current < 1) {
+        retryCountRef.current += 1;
+        if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = setTimeout(() => {
+          if (typeof document !== "undefined" && !document.hidden) {
+            fetchInventoryData(false);
+          }
+        }, 3000);
+      }
+    } finally {
+      isFetchingRef.current = false;
+      if (isInitial) setLoading(false);
+
+      if (pendingRefreshRef.current) {
+        pendingRefreshRef.current = false;
+        setTimeout(() => {
+          fetchInventoryData(false);
+        }, 300);
+      }
+    }
+  }, []);
+
+  const scheduleInventoryRefresh = useCallback(() => {
+    // If tab is currently hidden, mark it so we fetch upon return
+    if (typeof document !== "undefined" && document.hidden) {
+      pendingWhileHiddenRef.current = true;
+      return;
+    }
+
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+    refreshTimerRef.current = setTimeout(() => {
+      fetchInventoryData(false);
+    }, 400);
+  }, [fetchInventoryData]);
+
+  // Backward compatibility aliases for local modals and actions
+  const fetchInventory = useCallback(() => fetchInventoryData(false), [fetchInventoryData]);
+  const fetchRawMaterials = useCallback(() => fetchInventoryData(false), [fetchInventoryData]);
+
+  // Initial load: strictly single fetch on mount
   useEffect(() => {
-    fetchInventory();
-    fetchCategories();
-    fetchRawMaterials();
+    if (!isInitialLoadDoneRef.current) {
+      isInitialLoadDoneRef.current = true;
+      fetchInventoryData(true);
+      fetchCategories();
+    }
 
     const handleKravySearch = (e: any) => {
       setSearchTerm(e.detail || "");
     };
     window.addEventListener("kravy-search", handleKravySearch);
     return () => window.removeEventListener("kravy-search", handleKravySearch);
-  }, []);
+  }, [fetchInventoryData]);
 
+  // Filtered Realtime Socket Sync
   useEffect(() => {
-    if (lastUpdated) {
-      fetchInventory();
-      fetchRawMaterials();
-    }
-  }, [lastUpdated]);
+    if (!socket) return;
 
-  const fetchRawMaterials = async () => {
-    try {
-      const res = await fetch("/api/inventory/materials");
-      if (res.ok) {
-        const data = await res.json();
-        setRawMaterials(data);
+    const handleDashboardUpdate = (data: any) => {
+      // 🛡️ Filter out events that do not affect inventory stock
+      if (
+        data?.type === "ITEM_PREPARED_UPDATE" ||
+        data?.type === "KDS_STATUS_UPDATE" ||
+        data?.type === "KDS_TICK"
+      ) {
+        return; // Skip kitchen status ticks
       }
-    } catch (err) {
-      console.error("Fetch raw materials error:", err);
-    }
-  };
+      if (data?.type === "TABLE_UPDATE" || (data?.type === "TABLE_STATUS" && !data?.order)) {
+        return; // Skip table-only structural changes
+      }
+
+      // Safe refresh for stock adjustments, bill settlements, checkout, or general updates
+      scheduleInventoryRefresh();
+    };
+
+    socket.on("dashboard_update", handleDashboardUpdate);
+
+    // Reconnect recovery: when socket drops and reconnects, sync any missed updates
+    const handleReconnect = () => {
+      scheduleInventoryRefresh();
+    };
+    socket.on("connect", handleReconnect);
+
+    return () => {
+      socket.off("dashboard_update", handleDashboardUpdate);
+      socket.off("connect", handleReconnect);
+    };
+  }, [socket, scheduleInventoryRefresh]);
+
+  // Fallback Polling ONLY when socket is disconnected/offline
+  useEffect(() => {
+    if (isConnected) return; // When socket is healthy, no polling needed!
+
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        fetchInventoryData(false);
+      }
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [isConnected, fetchInventoryData]);
+
+  // Tab visibility change handler: recover missed updates on tab focus
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && !document.hidden && pendingWhileHiddenRef.current) {
+        pendingWhileHiddenRef.current = false;
+        fetchInventoryData(false);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
+  }, [fetchInventoryData]);
 
   useEffect(() => {
     if (profile) {
       setTaxEnabled(profile.taxEnabled ?? true);
     }
   }, [profile]);
-
-  const fetchInventory = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch("/api/inventory");
-      if (res.ok) {
-        const data = await res.json();
-        setItems(data);
-      }
-    } catch (error) {
-      console.error("Fetch inventory error:", error);
-      toast.error("Failed to load inventory");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleStockUpdate = async (id: string, newStock: number, isRaw: boolean = false) => {
     try {
@@ -164,7 +276,7 @@ export default function InventoryPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, stock: newStock })
         });
-        emitUpdate();
+        emitUpdate({ type: "INVENTORY_UPDATE" });
       } else {
         setItems(prev => prev.map(m => m.id === id ? { ...m, currentStock: newStock } : m));
         await fetch('/api/items', {
@@ -172,7 +284,7 @@ export default function InventoryPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, currentStock: newStock })
         });
-        emitUpdate();
+        emitUpdate({ type: "INVENTORY_UPDATE" });
       }
     } catch (err) {
       console.error("Stock inline update failed:", err);
@@ -252,7 +364,7 @@ export default function InventoryPage() {
         setIsModalOpen(false);
         setEditingItem(null);
         fetchInventory();
-        emitUpdate();
+        emitUpdate({ type: "INVENTORY_UPDATE" });
       } else {
         const err = await res.json();
         toast.error(err.error || "Save failed");
@@ -271,7 +383,7 @@ export default function InventoryPage() {
       if (res.ok) {
         toast.success("Deleted successfully");
         fetchInventory();
-        emitUpdate();
+        emitUpdate({ type: "INVENTORY_UPDATE" });
       }
     } catch (error) {
       toast.error("Delete failed");
@@ -347,6 +459,13 @@ export default function InventoryPage() {
           >
             <BarChart3 size={15} className="shrink-0" /> REPORT
           </Link>
+          <Link 
+            href="/dashboard/settings/inventory"
+            className="h-9 sm:h-10 px-3 sm:px-4 bg-[var(--kravy-bg)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5 hover:border-[var(--kravy-brand)] transition-all whitespace-nowrap shrink-0"
+            title="Configure Inventory Settings & Rules"
+          >
+            <Settings size={15} className="shrink-0" /> SETTINGS
+          </Link>
           <button 
             onClick={() => setIsStockEditMode(!isStockEditMode)}
             className={`h-9 sm:h-10 px-3.5 sm:px-5 rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-95 shadow-sm whitespace-nowrap shrink-0 ${isStockEditMode ? 'bg-orange-500 text-white shadow-orange-500/20 border border-orange-500' : 'bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] hover:border-orange-500 hover:text-orange-500'}`}
@@ -358,6 +477,13 @@ export default function InventoryPage() {
             className="h-9 sm:h-10 px-3 sm:px-4 bg-[var(--kravy-bg)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5 hover:border-[var(--kravy-brand)] transition-all whitespace-nowrap shrink-0"
           >
             <Printer size={15} className="shrink-0" /> PRINT BARCODES
+          </button>
+          <button 
+            onClick={() => { kravy?.click?.(); fetchInventoryData(false); toast.success("Inventory refreshed"); }}
+            className="h-9 sm:h-10 px-3 sm:px-4 bg-[var(--kravy-bg)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5 hover:border-[var(--kravy-brand)] transition-all whitespace-nowrap shrink-0"
+            title="Refresh inventory"
+          >
+            <RefreshCw size={14} className="shrink-0" /> REFRESH
           </button>
           <button 
             onClick={async () => {
@@ -641,11 +767,12 @@ export default function InventoryPage() {
                             </div>
                           )}
                           <div className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tighter ${
+                            (item.currentStock ?? 0) < 0 ? 'bg-rose-500/15 text-rose-600 border border-rose-500/30' :
                             status === 'out-of-stock' ? 'bg-rose-500/10 text-rose-600' : 
                             status === 'low-stock' ? 'bg-amber-500/10 text-amber-600' : 
                             'bg-emerald-500/10 text-emerald-600'
                           }`}>
-                            {status.replace('-', ' ')}
+                            {(item.currentStock ?? 0) < 0 ? `Deficit (${item.currentStock})` : status.replace('-', ' ')}
                           </div>
                         </div>
                       </td>
@@ -756,11 +883,15 @@ export default function InventoryPage() {
                               </div>
                             )}
                             <span className="text-xs font-bold text-[var(--kravy-text-muted)]">{mat.unit}</span>
-                            {isLow && (
+                            {mat.stock < 0 ? (
+                              <div className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tighter bg-rose-500/15 text-rose-600 border border-rose-500/30">
+                                Deficit ({mat.stock})
+                              </div>
+                            ) : isLow ? (
                               <div className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tighter bg-rose-500/10 text-rose-600">
                                 LOW STOCK
                               </div>
-                            )}
+                            ) : null}
                           </div>
                         </td>
                         <td className="px-5 py-4">
@@ -794,7 +925,7 @@ export default function InventoryPage() {
                                 if(res.ok) {
                                   toast.success("Deleted");
                                   fetchRawMaterials();
-                                  emitUpdate();
+                                  emitUpdate({ type: "INVENTORY_UPDATE" });
                                 }
                               }}
                               className="w-8 h-8 rounded-lg bg-[var(--kravy-surface)] border border-[var(--kravy-border)] text-[var(--kravy-text-muted)] hover:text-rose-500 hover:border-rose-500/50 transition-all flex items-center justify-center"
@@ -1152,7 +1283,7 @@ export default function InventoryPage() {
                       toast.success("Saved");
                       setIsRawModalOpen(false);
                       fetchRawMaterials();
-                      emitUpdate();
+                      emitUpdate({ type: "INVENTORY_UPDATE" });
                     } else {
                       toast.error("Failed to save material");
                     }
@@ -1266,7 +1397,7 @@ export default function InventoryPage() {
                         if (res.ok) {
                           toast.success("Recipe saved successfully!");
                           setIsRecipeModalOpen(false);
-                          emitUpdate();
+                          emitUpdate({ type: "INVENTORY_UPDATE" });
                         }
                       } finally {
                         setIsRecipeSaving(false);

@@ -1,80 +1,223 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getEffectiveClerkId } from "@/lib/auth-utils";
+import { getEffectiveClerkId, getAuthUser } from "@/lib/auth-utils";
 import { calculateDiscount } from "@/lib/discount-utils";
+import { getInventorySettings, validateStockAvailability } from "@/lib/inventory-utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+
+function parseIstStart(dateStr: string): Date | null {
+  const parts = dateStr.split("-").map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return null;
+  const [y, m, d] = parts;
+  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0) - IST_OFFSET_MS);
+}
+
+function parseIstEnd(dateStr: string): Date | null {
+  const parts = dateStr.split("-").map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return null;
+  const [y, m, d] = parts;
+  return new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999) - IST_OFFSET_MS);
+}
 
 /**
  * GET → List bills
  */
 export async function GET(req: NextRequest) {
   try {
-    const effectiveId = await getEffectiveClerkId();
-
-    if (!effectiveId) {
+    const authUser = await getAuthUser();
+    if (!authUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { searchParams } = new URL(req.url);
+    const asUserIdParam = searchParams.get("asUserId");
+
+    // Admin / Merchant Data Isolation:
+    // Only ADMIN or MASTER can inspect another merchant via asUserId.
+    // Normal merchants are strictly restricted to their own business data.
+    const isPlatformAdmin = authUser.role === "ADMIN" || authUser.role === "MASTER" || authUser.type === "ADMIN";
+    let targetClerkId: string;
+
+    if (isPlatformAdmin && asUserIdParam) {
+      targetClerkId = asUserIdParam;
+    } else {
+      const effId = await getEffectiveClerkId();
+      if (!effId) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      targetClerkId = effId;
+    }
+
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
     const isHeld = searchParams.get("isHeld");
+    const search = searchParams.get("search");
+    const orderType = searchParams.get("orderType");
+    const paymentMode = searchParams.get("paymentMode");
+    const status = searchParams.get("status");
 
-    // Implement Option B: Cap the limit at 100 to prevent unbounded queries
     const limitParam = searchParams.get("limit");
     const pageParam = searchParams.get("page");
 
-    const take = Math.min(Number(limitParam) || 100, 100);
+    const take = Math.min(Math.max(Number(limitParam) || 10, 1), 100);
     const page = Math.max(Number(pageParam) || 1, 1);
     const skip = (page - 1) * take;
 
-    const whereClause: any = {
-      clerkUserId: effectiveId,
-      isDeleted: false,
-    };
+    const andConditions: any[] = [
+      { clerkUserId: targetClerkId },
+      { isDeleted: false },
+    ];
 
     if (isHeld === "true") {
-      whereClause.isHeld = true;
+      andConditions.push({ isHeld: true });
     }
 
+    // 1. Date Filtering (pure deterministic IST parsing)
     if (startDate || endDate) {
-      whereClause.createdAt = {};
+      const createdAtFilter: any = {};
       if (startDate) {
-        const [y, m, d] = startDate.split('-').map(Number);
-        const start = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
-        start.setMinutes(start.getMinutes() - 330); // IST 00:00:00
-        whereClause.createdAt.gte = start;
+        const start = parseIstStart(startDate);
+        if (start) createdAtFilter.gte = start;
       }
       if (endDate) {
-        const [y, m, d] = endDate.split('-').map(Number);
-        const end = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
-        end.setMinutes(end.getMinutes() - 330); // IST 23:59:59
-        whereClause.createdAt.lte = end;
+        const end = parseIstEnd(endDate);
+        if (end) createdAtFilter.lte = end;
+      }
+      if (Object.keys(createdAtFilter).length > 0) {
+        andConditions.push({ createdAt: createdAtFilter });
       }
     }
 
-    const bills = await prisma.billManager.findMany({
-      where: whereClause,
-      include: {
-        party: true
-      },
-      orderBy: { createdAt: "desc" },
-      take,
-      skip,
-    });
+    // 2. Search Filter (Invoice No, Customer Name, Phone, Table)
+    if (search && search.trim()) {
+      const q = search.trim();
+      andConditions.push({
+        OR: [
+          { billNumber: { contains: q, mode: "insensitive" } },
+          { customerName: { contains: q, mode: "insensitive" } },
+          { customerPhone: { contains: q, mode: "insensitive" } },
+          { tableName: { contains: q, mode: "insensitive" } },
+        ]
+      });
+    }
 
-    const modifiedBills = bills.map((bill) => {
+    // 3. Order Type Filter
+    if (orderType && orderType !== "All Types") {
+      if (orderType === "Counter") {
+        andConditions.push({
+          OR: [
+            { tableName: "POS" },
+            { tableName: "Counter" },
+            { tableName: null },
+          ]
+        });
+      } else if (orderType === "Takeaway") {
+        andConditions.push({ tableName: { contains: "TAKEAWAY", mode: "insensitive" } });
+      } else if (orderType === "Dine-in") {
+        andConditions.push({ tableName: { startsWith: "Table", mode: "insensitive" } });
+      }
+    }
+
+    // 4. Payment Mode Filter
+    if (paymentMode && paymentMode !== "All Payments" && paymentMode !== "All Modes") {
+      andConditions.push({
+        paymentMode: { equals: paymentMode, mode: "insensitive" }
+      });
+    }
+
+    // 5. Payment Status Filter
+    if (status && status !== "All Status") {
+      if (status.toLowerCase() === "pending") {
+        andConditions.push({
+          OR: [
+            { paymentStatus: { equals: "Pending", mode: "insensitive" } },
+            { isHeld: true }
+          ]
+        });
+      } else {
+        andConditions.push({
+          paymentStatus: { equals: status, mode: "insensitive" }
+        });
+      }
+    }
+
+    const whereClause = { AND: andConditions };
+
+    const [bills, totalRecords] = await Promise.all([
+      prisma.billManager.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          createdAt: true,
+          billNumber: true,
+          orderId: true,
+          paymentStatus: true,
+          tableName: true,
+          zoneName: true,
+          customerName: true,
+          customerPhone: true,
+          subtotal: true,
+          total: true,
+          discountAmount: true,
+          tax: true,
+          paymentMode: true,
+          amountPaid: true,
+          balanceDue: true,
+          tokenNumber: true,
+          kotNumbers: true,
+          items: true,
+          isHeld: true,
+          pdfUrl: true,
+          auditNote: true,
+          clerkUserId: true,
+        },
+        orderBy: [
+          { createdAt: "desc" },
+          { id: "desc" }
+        ],
+        take,
+        skip,
+      }),
+      prisma.billManager.count({ where: whereClause })
+    ]);
+
+    let canViewPhone = true;
+    if (authUser && authUser.role !== 'ADMIN' && authUser.role !== 'SELLER' && authUser.role !== 'OWNER' && authUser.role !== 'USER') {
+      canViewPhone = authUser.permissions?.includes("view-customer-phone") || false;
+    }
+
+    const modifiedBills = bills.map(bill => {
       const b: any = { ...bill };
       b.itemsCount = Array.isArray(bill.items) ? bill.items.length : 0;
       if (isHeld !== "true") {
-        delete b.items; // Reduces payload significantly for history list!
+        delete b.items; // Keeps payload small and fast for list views!
+      }
+      if (!canViewPhone) {
+        b.customerPhone = "";
       }
       return b;
     });
 
-    return NextResponse.json({ bills: modifiedBills, clerkUserId: effectiveId, pagination: { take, skip, page } });
+    const totalPages = Math.ceil(totalRecords / take) || 1;
+
+    return NextResponse.json({
+      bills: modifiedBills,
+      clerkUserId: targetClerkId,
+      totalRecords,
+      totalPages,
+      pagination: {
+        page,
+        limit: take,
+        take,
+        skip,
+        totalRecords,
+        totalPages,
+      }
+    });
   } catch (err) {
     console.error("BILL MANAGER LIST ERROR:", err);
     return NextResponse.json(
@@ -121,12 +264,15 @@ export async function POST(req: NextRequest) {
       isKotPrinted,
       deliveryCharges,
       serviceCharge,
+      serviceChargeName,
       kotNumbers,
       skipInventoryDeduction,
       amountPaid,
       packagingCharges,
       loyaltyPointsRedeemed,
       idempotencyKey,
+      isTaxInclusive,
+      placeOfSupply,
     } = body;
 
     // 🚀 0. IDEMPOTENCY FAST-PATH CHECK
@@ -168,15 +314,46 @@ export async function POST(req: NextRequest) {
     const [profile, dbItems, offer] = await Promise.all([
       body.profileId
         ? prisma.businessProfile.findUnique({ where: { id: body.profileId } })
-        : prisma.businessProfile.findFirst({ where: { userId: effectiveId }, orderBy: { createdAt: 'asc' } }),
+        : prisma.businessProfile.findFirst({ where: { userId: effectiveId }, orderBy: { createdAt: 'desc' } }),
       prisma.item.findMany({ where: { id: { in: itemIds }, clerkId: effectiveId } }),
       discountCode ? prisma.offer.findFirst({ where: { code: discountCode.toUpperCase(), isActive: true, clerkUserId: effectiveId } }) : Promise.resolve(null)
     ]);
     console.log(`[BILL_PERF_STEP] 0. Initial Parallel Fetch: ${Date.now() - tFetchStart}ms`);
 
+    const invSettings = getInventorySettings(profile);
+
+    // 🛑 1b. INVENTORY STOCK VALIDATION (Warn / Block behavior)
+    if (!isHeld && skipInventoryDeduction !== true && invSettings.enabled !== false && invSettings.insufficientStockBehavior !== "allow") {
+      const authUser = await getAuthUser();
+      const validation = await validateStockAvailability(
+        prisma,
+        items,
+        invSettings,
+        {
+          isManagerOverride: body.isManagerOverride === true,
+          confirmedWarning: body.confirmedWarning === true,
+          userRole: authUser?.role || authUser?.type,
+          userPermissions: authUser?.permissions || [],
+        }
+      );
+
+      if (!validation.valid) {
+        return NextResponse.json(
+          {
+            error: validation.message || "Insufficient stock for some items",
+            code: validation.action === "warn" ? "INSUFFICIENT_STOCK_WARN" : "INSUFFICIENT_STOCK_BLOCK",
+            insufficientItems: validation.insufficientItems,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    const isFloor = body.source === "FloorManagement";
     const isTaxEnabled = profile?.taxEnabled ?? true;
-    const globalGstRate = isTaxEnabled ? (profile?.taxRate ?? 0) : 0;
-    const perProductEnabled = profile?.perProductTaxEnabled ?? false;
+    const globalGstRate = (profile as any)?.taxRate || 0;
+    const perProductEnabled = (profile as any)?.perProductTaxEnabled ?? false;
+    const globalTaxInclusive = (profile as any)?.taxInclusive ?? false;
 
     let calcSubtotal = 0;
     let totalTax = 0;
@@ -184,30 +361,56 @@ export async function POST(req: NextRequest) {
     items.forEach((item: any) => {
       const dbItem = dbItems.find(it => it.id === item.id);
       const qty = Number(item.qty || item.quantity) || 0;
-      const rate = item.isCustomRate
-        ? Number(item.rate)
+      const rate = (item.isCustomRate || body.orderId)
+        ? Number(item.rate || item.price || 0)
         : (dbItem ? Number(dbItem.sellingPrice ?? dbItem.price) : Number(item.rate || item.price || 0));
-      const itemGstRate = (perProductEnabled && item.gst !== undefined && item.gst !== null) ? Number(item.gst) : globalGstRate;
-      const globalTaxInclusive = profile?.taxInclusive ?? false;
+      
+      // Trust the payload's gst snapshot if provided, otherwise fallback to business rules
+      const payloadGst = (item.gst !== undefined && item.gst !== null) ? Number(item.gst) : null;
+      const itemGstRate = isTaxEnabled 
+        ? (payloadGst !== null ? payloadGst : (perProductEnabled ? Number(dbItem?.gst || 0) : globalGstRate))
+        : 0;
 
       let isInclusive = false;
-      if (perProductEnabled && item.gst !== undefined && item.gst !== null) {
-        isInclusive = (item.taxStatus || "Without Tax") === "With Tax";
-      } else if (isTaxEnabled) {
-        isInclusive = globalTaxInclusive;
+      if (isTaxEnabled) {
+        if (item.taxStatus) {
+           isInclusive = item.taxStatus === "With Tax";
+        } else if (perProductEnabled && dbItem?.taxStatus) {
+           isInclusive = dbItem.taxStatus === "With Tax";
+        } else {
+           isInclusive = globalTaxInclusive;
+        }
       }
 
       const gross = qty * rate;
 
+      const isInterState = placeOfSupply && profile?.state && 
+        placeOfSupply.trim().toLowerCase() !== profile.state.trim().toLowerCase();
+
+      let splitCgst = 0;
+      let splitIgst = 0;
+
       if (isInclusive) {
-        const base = gross / (1 + itemGstRate / 100);
-        const gst = gross - base;
-        calcSubtotal += base;
-        totalTax += gst;
+        const exactGst = gross - (gross / (1 + itemGstRate / 100));
+        if (isInterState) {
+          splitIgst = Math.round(exactGst * 100) / 100;
+          totalTax += splitIgst;
+          calcSubtotal += (gross - splitIgst);
+        } else {
+          splitCgst = Math.round(exactGst * 50) / 100;
+          totalTax += (splitCgst * 2);
+          calcSubtotal += (gross - (splitCgst * 2));
+        }
       } else {
-        const gst = (gross * itemGstRate) / 100;
+        const exactGst = (gross * itemGstRate) / 100;
+        if (isInterState) {
+          splitIgst = Math.round(exactGst * 100) / 100;
+          totalTax += splitIgst;
+        } else {
+          splitCgst = Math.round(exactGst * 50) / 100;
+          totalTax += (splitCgst * 2);
+        }
         calcSubtotal += gross;
-        totalTax += gst;
       }
       item.rate = rate;
     });
@@ -225,7 +428,7 @@ export async function POST(req: NextRequest) {
       serverDiscountAmt = Number(discountAmount);
     }
 
-    const discountRatio = finalSubtotal > 0 ? Math.max(0, 1 - ((serverDiscountAmt + loyaltyPointsRedeemedAmt) / finalSubtotal)) : 1;
+    const discountRatio = finalSubtotal > 0 ? Math.max(0, 1 - (serverDiscountAmt / finalSubtotal)) : 1;
     const calculatedTax = Number((totalTax * discountRatio).toFixed(2));
 
     const finalDeliveryCharge = Number(deliveryCharges) || 0;
@@ -241,7 +444,8 @@ export async function POST(req: NextRequest) {
       serverPackagingGst = (finalPackagingCharge * (profile.packagingGstRate || 0)) / 100;
     }
 
-    const finalTotal = Number((finalSubtotal + calculatedTax - serverDiscountAmt - loyaltyPointsRedeemedAmt + finalDeliveryCharge + serverDeliveryGst + finalPackagingCharge + serverPackagingGst + finalServiceCharge).toFixed(2));
+    const unroundedTotal = finalSubtotal + calculatedTax - serverDiscountAmt - loyaltyPointsRedeemedAmt + finalDeliveryCharge + serverDeliveryGst + finalPackagingCharge + serverPackagingGst + finalServiceCharge;
+    const finalTotal = Math.round(unroundedTotal);
 
     // ✅ ATOMIC TRANSACTION FOR BILL CREATION, COUNTER ALLOCATION, & LEDGER
     _tPreTx = Date.now() - _t3;
@@ -249,6 +453,7 @@ export async function POST(req: NextRequest) {
 
     let result: any = null;
     let attempts = 0;
+    let counterOffset = 0;
     while (true) {
       const _tTxAttemptStart = Date.now();
       try {
@@ -261,18 +466,42 @@ export async function POST(req: NextRequest) {
           let nextToken = body.tokenNumber || (kotNumbers && Array.isArray(kotNumbers) && kotNumbers.length > 0 ? kotNumbers[kotNumbers.length - 1] : null);
           if (profile?.id) {
             const txStartDate = new Date();
+            const todayStr = txStartDate.toISOString().split('T')[0];
+            const currentMonthStr = yy + mm;
+            
+            const preFetchDateStr = profile.lastTokenDate ? new Date(profile.lastTokenDate).toISOString().split('T')[0] : "";
+            const preFetchMonthStr = profile.lastBillMonth || "";
+            
+            console.log(`[DEBUG_MIDNIGHT] todayStr: ${todayStr}, preFetchDateStr: ${preFetchDateStr}, profile.lastTokenDate: ${profile.lastTokenDate}`);
 
-            let updatedProfile = await tx.businessProfile.update({
+            // Reliable path with exact read to prevent Prisma `$inc` silent type-casting failures on MongoDB
+            const currentProfile = await tx.businessProfile.findUnique({ where: { id: profile.id } });
+            const lastTokenDateStr = currentProfile?.lastTokenDate ? new Date(currentProfile.lastTokenDate).toISOString().split('T')[0] : "";
+            const lastBillMonthStr = currentProfile?.lastBillMonth || "";
+            
+            const isNewDayTx = lastTokenDateStr !== todayStr;
+            const isNewMonthTx = lastBillMonthStr !== currentMonthStr;
+            const currentCounter = currentProfile?.billCounter || 0;
+
+            const updatedProf = await tx.businessProfile.update({
               where: { id: profile.id },
               data: {
-                billCounter: { increment: 1 },
+                // EXPLICIT SET: Bypasses Prisma's { increment } which silently fails if DB type is Float/String
+                billCounter: isNewMonthTx ? (1 + counterOffset) : (currentCounter + 1 + counterOffset),
+                ...(isNewMonthTx ? { lastBillMonth: currentMonthStr } : {}),
                 ...(!nextToken ? {
-                  lastTokenNumber: { increment: 1 },
+                  lastTokenNumber: isNewDayTx ? 1 : { increment: 1 },
                   lastTokenDate: txStartDate
                 } : {})
               },
               select: { billCounter: true, lastTokenNumber: true }
             });
+
+            const updatedProfile = {
+                ...currentProfile,
+                billCounter: updatedProf.billCounter,
+                lastTokenNumber: !nextToken ? updatedProf.lastTokenNumber : null
+            };
 
             nextSerial = updatedProfile.billCounter;
             if (!nextToken) nextToken = updatedProfile.lastTokenNumber;
@@ -283,6 +512,7 @@ export async function POST(req: NextRequest) {
 
           const serialLabel = String(nextSerial).padStart(4, '0');
           let finalBillNumber = body.billNumber || `INV/${yy}${mm}/${serialLabel}`;
+          console.log(`[BILL_MANAGER_DEBUG] Attempt ${attempts}: nextSerial=${nextSerial}, counterOffset=${counterOffset}, finalBillNumber=${finalBillNumber}`);
           console.log(`[BILL_PERF_STEP] 1/3. Profile Counter & Token Update: ${Date.now() - tProfileStart}ms`);
           _tProfileReadUpdate = Date.now() - _t4;
 
@@ -293,61 +523,9 @@ export async function POST(req: NextRequest) {
         console.log(`[BILL_PERF_STEP] 1b. Order Lookup: ${Date.now() - tOrderStart}ms`);
       }
 
-      // 2. ATOMIC PARTY UPSERT & LOYALTY
-      const tPartyStart = Date.now();
-      let partyId = null;
-      let partyWalletBalance = 0;
-      if (customerPhone && customerName && customerName !== "Walk-in Customer") {
-        const cleanPhone = customerPhone.replace(/[\s\-\(\)\+]/g, "").slice(-10);
-        const pointRatio = profile?.loyaltyPointRatio && profile.loyaltyPointRatio > 0 ? profile.loyaltyPointRatio : 0;
-        const earnedPoints = pointRatio > 0 ? Math.floor(finalSubtotal / pointRatio) : 0;
-        const redeemedPoints = Number(loyaltyPointsRedeemed) || 0;
-        const netPointsChange = earnedPoints - redeemedPoints;
-
-        const existingParty = await tx.party.findUnique({
-          where: {
-            phone_createdBy: {
-              phone: cleanPhone,
-              createdBy: effectiveId,
-            }
-          }
-        });
-
-        partyWalletBalance = existingParty?.walletBalance || 0;
-
-        const party = await tx.party.upsert({
-          where: {
-            phone_createdBy: {
-              phone: cleanPhone,
-              createdBy: effectiveId,
-            },
-          },
-          update: {
-            name: customerName,
-            address: customerAddress || null,
-            loyaltyPoints: { increment: netPointsChange }
-          },
-          create: {
-            name: customerName,
-            phone: cleanPhone,
-            createdBy: effectiveId,
-            address: customerAddress || null,
-            loyaltyPoints: Math.max(0, netPointsChange)
-          },
-        });
-        partyId = party.id;
-      }
-      console.log(`[BILL_PERF_STEP] 2. Party Upsert & Loyalty: ${Date.now() - tPartyStart}ms`);
-
-      // WALLET ADJUSTMENT LOGIC
+      // WALLET ADJUSTMENT & PAYMENT STATUS LOGIC
       let initPaymentMode = paymentMode || "Cash";
-      if (
-        initPaymentMode !== "UPI" &&
-        initPaymentMode !== "Card" &&
-        initPaymentMode !== "Pay on Counter" &&
-        initPaymentMode !== "Wallet" &&
-        !initPaymentMode.startsWith("Split")
-      ) {
+      if (!["UPI", "Card", "Pay on Counter", "Wallet"].includes(initPaymentMode) && !initPaymentMode.startsWith("Split")) {
         initPaymentMode = "Cash";
       }
 
@@ -355,6 +533,16 @@ export async function POST(req: NextRequest) {
       let finalBalanceDue = Math.max(0, finalTotal - finalAmountPaid);
       let walletUsed = 0;
       let calculatedPaymentMode = initPaymentMode;
+      
+      // We don't have partyWalletBalance yet, so we fetch party early.
+      let existingParty = null;
+      const cleanPhone = customerPhone ? customerPhone.replace(/[^\d+]/g, "").replace(/(?!^)\+/g, "") : null;
+      if (cleanPhone) {
+          existingParty = await tx.party.findUnique({
+              where: { phone_createdBy: { phone: cleanPhone, createdBy: effectiveId } }
+          });
+      }
+      const partyWalletBalance = existingParty?.walletBalance || 0;
 
       if (customerPhone && customerName && customerName !== "Walk-in Customer" && !isHeld && finalBalanceDue > 0 && partyWalletBalance > 0) {
         walletUsed = Math.min(partyWalletBalance, finalBalanceDue);
@@ -381,6 +569,53 @@ export async function POST(req: NextRequest) {
         calculatedPaymentStatus = paymentStatus === "Paid" ? "PAID" : "PENDING";
       }
 
+      // 2. ATOMIC PARTY UPSERT & LOYALTY
+      const tPartyStart = Date.now();
+      let partyId = null;
+      let earnedPoints = 0;
+      let redeemedPoints = Number(loyaltyPointsRedeemed) || 0;
+
+      if (cleanPhone && customerName && customerName !== "Walk-in Customer") {
+        const pointRatio = profile?.loyaltyPointRatio && profile.loyaltyPointRatio > 0 ? profile.loyaltyPointRatio : 0;
+        
+        // ✨ CORE BUSINESS RULE: Earned points ONLY if Paid & Not Held ✨
+        if (calculatedPaymentStatus === "PAID" && !isHeld) {
+            const minOrder = profile?.loyaltyMinOrderAmount || 0;
+            console.log(`[DEBUG LOYALTY] finalSubtotal=${finalSubtotal}, minOrder=${minOrder}, profile.id=${profile?.id}`);
+            if (finalSubtotal >= minOrder) {
+                const calculatedPoints = pointRatio > 0 ? Math.floor(finalSubtotal / pointRatio) : 0;
+                earnedPoints = (profile?.maxEarnPointsPerBill && profile.maxEarnPointsPerBill > 0) ? Math.min(calculatedPoints, profile.maxEarnPointsPerBill) : calculatedPoints;
+                console.log(`[DEBUG LOYALTY 2] calculatedPoints=${calculatedPoints}, earnedPoints=${earnedPoints}, maxEarnPointsPerBill=${profile?.maxEarnPointsPerBill}`);
+            }
+        }
+        
+        const netPointsChange = earnedPoints - redeemedPoints;
+
+        let party;
+        if (existingParty) {
+          party = await tx.party.update({
+            where: { id: existingParty.id },
+            data: {
+              name: customerName,
+              address: customerAddress || null,
+              loyaltyPoints: { increment: netPointsChange }
+            }
+          });
+        } else {
+          party = await tx.party.create({
+            data: {
+              name: customerName,
+              phone: cleanPhone,
+              createdBy: effectiveId,
+              address: customerAddress || null,
+              loyaltyPoints: Math.max(0, netPointsChange)
+            }
+          });
+        }
+        partyId = party.id;
+      }
+      console.log(`[BILL_PERF_STEP] 2. Party Upsert & Loyalty: ${Date.now() - tPartyStart}ms`);
+
 
 
       const processedItems = items.map((it: any) => ({
@@ -398,6 +633,7 @@ export async function POST(req: NextRequest) {
           clerkUserId: effectiveId || "Unknown",
           orderId: body.orderId || null,
           billNumber: finalBillNumber,
+          currencySymbol: profile?.currencySymbol || body.currencySymbol || "₹",
           items: processedItems,
           subtotal: finalSubtotal,
           tax: calculatedTax,
@@ -408,6 +644,8 @@ export async function POST(req: NextRequest) {
           balanceDue: finalBalanceDue,
           isHeld: isHeld === true,
           upiTxnRef: upiTxnRef || null,
+          isTaxInclusive: typeof isTaxInclusive === 'boolean' ? isTaxInclusive : null,
+          isTaxEnabled: profile?.taxEnabled ?? false,
           customerName: customerName || null,
           customerPhone: customerPhone || null,
           customerAddress: customerAddress || null,
@@ -425,9 +663,24 @@ export async function POST(req: NextRequest) {
           isKotPrinted: isKotPrinted === true,
           tokenNumber: nextToken,
           kotNumbers: kotNumbers || [],
+          loyaltyEarned: earnedPoints,
+          loyaltyRedeemed: redeemedPoints,
           inventoryDeducted: false, // Wait for transaction to set this to true!
-        },
+        } as any,
       });
+
+      // Atomically complete linked Order so it moves out of active kitchen queue
+      if (body.orderId) {
+        try {
+          await tx.order.updateMany({
+            where: { id: body.orderId, clerkUserId: effectiveId },
+            data: { status: "COMPLETED", isBillPrinted: true }
+          });
+        } catch (orderUpdateErr) {
+          console.error("[BILL_MANAGER] Failed to mark linked order as completed:", orderUpdateErr);
+        }
+      }
+
       console.log(`[BILL_PERF_STEP] 4. BillManager Record Create: ${Date.now() - tCreateStart}ms`);
       _tBillInsert = Date.now() - _t5;
       _tCommitStart = Date.now();
@@ -491,39 +744,38 @@ export async function POST(req: NextRequest) {
               console.log(`[BILL_MANAGER] Explicit billNumber ${body.billNumber} collided. Skipping retries.`);
               throw err;
             }
-            console.log(`[BILL_MANAGER] billNumber collision detected. Advancing counter outside transaction to recover.`);
-            if (profile?.id) {
-              try {
-                const prefix = `INV/${yy}${mm}/`;
-                const maxBill = await prisma.billManager.findFirst({
-                  where: { clerkUserId: effectiveId, billNumber: { startsWith: prefix } },
-                  orderBy: { billNumber: 'desc' }
-                });
-                let nextCounter = 2;
-                if (maxBill && maxBill.billNumber) {
-                  const parts = maxBill.billNumber.split('/');
-                  if (parts.length === 3) {
-                    const lastNum = parseInt(parts[2], 10);
-                    if (!isNaN(lastNum)) {
-                      nextCounter = lastNum + 1;
-                    }
-                  }
+            
+            console.log(`[BILL_MANAGER] billNumber collision detected. Retrying transaction safely with offset.`);
+            
+            // If we collided, check the actual max bill number in the DB to skip massive gaps
+            // (e.g. when lastBillMonth is missing and we incorrectly reset to 1)
+            const now = new Date();
+            const prefix = `INV/${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}/`;
+            // Fetch recent bills to find the TRUE numeric max, avoiding string-sort anomalies (like "9" > "0223")
+            const recentBills = await prisma.billManager.findMany({
+                where: { clerkUserId: effectiveId, billNumber: { startsWith: prefix } },
+                select: { billNumber: true },
+                orderBy: { createdAt: 'desc' },
+                take: 50
+            });
+            
+            let trueMax = 0;
+            for (const b of recentBills) {
+                if (b.billNumber) {
+                    const s = parseInt(b.billNumber.replace(prefix, ""), 10);
+                    if (!isNaN(s) && s > trueMax) trueMax = s;
                 }
-                const currentProfile = await prisma.businessProfile.findUnique({ where: { id: profile.id } });
-                const currentCounter = currentProfile?.billCounter || 0;
-                await prisma.businessProfile.update({
-                  where: { id: profile.id },
-                  data: { billCounter: Math.max(nextCounter, currentCounter + 1) }
-                });
-              } catch (recErr) {
-                console.error("[BILL_MANAGER] Recovery query failed", recErr);
-                await prisma.businessProfile.update({
-                  where: { id: profile.id },
-                  data: { billCounter: { increment: 1 } }
-                });
-              }
             }
-          }
+
+            console.log(`[BILL_MANAGER_DEBUG] Collision! trueMax in recent DB=${trueMax}, current counterOffset=${counterOffset}`);
+            
+            if (trueMax > 0 && counterOffset < trueMax) {
+                counterOffset = trueMax;
+            } else {
+                // If we are still colliding, aggressive jump to bypass blocks
+                counterOffset += (attempts > 3 ? 5 : 1);
+            }
+                      }
           if (attempts < 15) {
             attempts++;
             console.log(`[BILL_MANAGER] Retry ${attempts} due to ${err.code} / ${err.message.substring(0, 50)} | Duration: ${Date.now() - _tTxAttemptStart}ms`);
@@ -552,11 +804,12 @@ export async function POST(req: NextRequest) {
 
 
     // ✅ AUTO-DEDUCT INVENTORY IN BACKGROUND (NON-BLOCKING)
-    if (!bill.isHeld && skipInventoryDeduction !== true) {
+    if (!bill.isHeld && skipInventoryDeduction !== true && invSettings.enabled !== false) {
       console.log(`[BILL_MANAGER_DEBUG] Bill ${bill.billNumber} created. Awaiting background inventory deduction.`);
 
       const { withTransactionRetry, executeInventoryDeduction } = await import("@/lib/inventory-utils");
       const tInvStart = Date.now();
+      let didDeductInventory = false;
 
       try {
           // ENTIRE OPERATION WRAPPED IN ACID TRANSACTION WITH RETRY
@@ -614,7 +867,8 @@ export async function POST(req: NextRequest) {
 
               // 3. Execute Deduction
               if (itemsToDeduct.length > 0) {
-                  await executeInventoryDeduction(tx, itemsToDeduct);
+                  await executeInventoryDeduction(tx, itemsToDeduct, invSettings);
+                  didDeductInventory = true;
                   console.log(`[INVENTORY_PERF] source=bill_manager_post billId=${bill.id} durationMs=${Date.now() - tInvStart} status=success`);
               } else {
                   console.log(`[BILL_MANAGER_DEBUG] Bill ${bill.billNumber} has no new items to deduct after cross-entity protection.`);
@@ -625,6 +879,21 @@ export async function POST(req: NextRequest) {
           // Transaction automatically rolled back!
           // `inventoryDeducted` is safely false again.
           // We DO NOT throw the error to preserve the business contract (bill is still created successfully).
+      }
+
+      // Post-commit authoritative realtime broadcast for Inventory & connected screens
+      if (didDeductInventory && (global as any).io) {
+        try {
+          (global as any).io.to(`business_${effectiveId}`).emit("dashboard_update", {
+            businessId: effectiveId,
+            type: "INVENTORY_UPDATE",
+            action: "BILL_CREATED",
+            billId: bill.id,
+            timestamp: Date.now()
+          });
+        } catch (ioErr) {
+          console.error("[BILL_CREATE_SOCKET_ERROR]:", ioErr);
+        }
       }
     } else if (skipInventoryDeduction === true) {
       console.log(`[BILL_MANAGER_DEBUG] Bill ${bill.billNumber} created. Inventory deduction skipped by caller.`);

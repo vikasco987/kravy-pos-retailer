@@ -30,7 +30,7 @@ export async function GET() {
     }
 
     // priority 3: Fallback Hardcoded Defaults (if still empty)
-    const isPrivileged = authUser.type === "OWNER" || authUser.type === "ADMIN" || authUser.type === "SELLER" || authUser.type === "USER";
+    const isPrivileged = authUser.type === "OWNER" || authUser.type === "ADMIN" || authUser.type === "SELLER";
     
     if (finalAllowed.length === 0) {
       if (isPrivileged) {
@@ -41,6 +41,7 @@ export async function GET() {
           "/dashboard/billing", 
           "/dashboard/terminal",
           "/dashboard/kitchen",
+          "/dashboard/kds",
           "/dashboard/menu/view", 
           "/dashboard/menu-editor",
           "/dashboard/menu/addons",
@@ -117,6 +118,7 @@ export async function GET() {
 
     const metadata: any = user?.privateMetadata || staff?.privateMetadata || {};
     const hiddenSidebarItems = metadata.hiddenSidebarItems || [];
+    const sidebarOrder = metadata.sidebarOrder || null;
 
     return NextResponse.json({ 
         id: authUser.id,
@@ -130,7 +132,8 @@ export async function GET() {
         businessId: authUser.businessId,
         allowedPaths: finalPaths,
         uiPreferences: user?.uiPreferences || {},
-        hiddenSidebarItems
+        hiddenSidebarItems,
+        sidebarOrder
     });
 
   } catch (error) {

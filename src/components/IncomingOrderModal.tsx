@@ -1,5 +1,5 @@
 "use client";
-
+import { useCurrency } from "@/lib/currency-context";
 import { useEffect, useRef, useState } from "react";
 import { useTerminalContext } from "@/components/TerminalContext";
 import { kravy } from "@/lib/sounds";
@@ -8,10 +8,25 @@ import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ConfirmContext";
 
 export default function IncomingOrderModal() {
+  const { currencySymbol: sym } = useCurrency();
+
     const { confirm } = useConfirm();
-    const { orders, setOrders } = useTerminalContext();
+    const { orders, setOrders, emitUpdate } = useTerminalContext();
     const [isAccepting, setIsAccepting] = useState(false);
+    const [isRejecting, setIsRejecting] = useState(false);
+    const [showRejectModal, setShowRejectModal] = useState(false);
+    const [selectedReason, setSelectedReason] = useState("Item out of stock");
+    const [customReason, setCustomReason] = useState("");
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    const QUICK_REASONS = [
+        "Item out of stock",
+        "Kitchen too busy / Long wait time",
+        "Closing time / Kitchen closed",
+        "Invalid order details",
+        "Customer requested cancellation",
+        "Other"
+    ];
 
     // Get the oldest pending order
     const pendingOrders = orders
@@ -63,6 +78,7 @@ export default function IncomingOrderModal() {
                 toast.success("Order Accepted 🧑‍🍳");
                 // Optimistic local update
                 setOrders(prev => prev.map(o => o.id === currentOrder.id ? { ...o, status: "ACCEPTED" } : o));
+                emitUpdate();
             } else {
                 throw new Error("Failed to accept");
             }
@@ -74,22 +90,41 @@ export default function IncomingOrderModal() {
         }
     };
 
-    const handleReject = async () => {
-        if (!await confirm("Are you sure you want to reject this order? It will be deleted.")) return;
-        setIsAccepting(true);
+    const handleRejectClick = () => {
+        kravy.click();
+        setShowRejectModal(true);
+    };
+
+    const handleConfirmReject = async () => {
+        const finalReason = selectedReason === "Other" 
+            ? (customReason.trim() || "Rejected by restaurant") 
+            : (customReason.trim() ? `${selectedReason} - ${customReason.trim()}` : selectedReason);
+
+        setIsRejecting(true);
         kravy.click();
         
         try {
             const res = await fetch("/api/orders", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ orderId: currentOrder.id, isDeleted: true })
+                body: JSON.stringify({ 
+                    orderId: currentOrder.id, 
+                    isDeleted: true, 
+                    status: "REJECTED",
+                    reason: finalReason
+                })
             });
 
             if (res.ok) {
+                if (intervalRef.current) {
+                    clearInterval(intervalRef.current);
+                    intervalRef.current = null;
+                }
                 kravy.orderCancel();
                 toast.error("Order Rejected");
+                setShowRejectModal(false);
                 setOrders(prev => prev.filter(o => o.id !== currentOrder.id));
+                emitUpdate();
             } else {
                 throw new Error("Failed to reject");
             }
@@ -97,7 +132,7 @@ export default function IncomingOrderModal() {
             kravy.error();
             toast.error("Reject failed");
         } finally {
-            setIsAccepting(false);
+            setIsRejecting(false);
         }
     };
 
@@ -154,22 +189,27 @@ export default function IncomingOrderModal() {
                                     🏠 {currentOrder.customerAddress}
                                 </p>
                             )}
+                            {((currentOrder.preferences as any)?.earnedPointsPreview ?? 0) > 0 && (
+                                <p className="text-sm font-bold text-amber-600 dark:text-amber-500 mt-1 inline-flex items-center gap-1.5 bg-amber-50 dark:bg-amber-500/10 px-2 py-1 rounded-lg">
+                                    🎁 Earns ~{(currentOrder.preferences as any).earnedPointsPreview} pts
+                                </p>
+                            )}
                         </div>
                         <div className="text-right">
                             <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total</p>
                             <p className="text-4xl font-black text-emerald-500">
-                                ₹{currentOrder.total}
+                                {sym}{currentOrder.total}
                             </p>
                             {((currentOrder.deliveryCharges ?? 0) > 0 || (currentOrder.packagingCharges ?? 0) > 0) && (
                                 <div className="mt-2 text-right">
                                     {(currentOrder.packagingCharges ?? 0) > 0 && (
                                         <p className="text-[10px] font-bold text-slate-500">
-                                            +₹{currentOrder.packagingCharges} Packaging
+                                            +{sym}{currentOrder.packagingCharges} Packaging
                                         </p>
                                     )}
                                     {(currentOrder.deliveryCharges ?? 0) > 0 && (
                                         <p className="text-[10px] font-bold text-slate-500">
-                                            +₹{currentOrder.deliveryCharges} Delivery
+                                            +{sym}{currentOrder.deliveryCharges} Delivery
                                         </p>
                                     )}
                                 </div>
@@ -199,7 +239,7 @@ export default function IncomingOrderModal() {
                                         </div>
                                     </div>
                                     <p className="font-black text-slate-900 dark:text-white">
-                                        ₹{(it.price * it.quantity).toFixed(2)}
+                                        {sym}{(it.price * it.quantity).toFixed(2)}
                                     </p>
                                 </div>
                             ))}
@@ -217,16 +257,20 @@ export default function IncomingOrderModal() {
                 {/* Footer Actions */}
                 <div className="p-6 sm:p-8 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-4 shrink-0">
                     <button 
-                        onClick={handleReject}
-                        disabled={isAccepting}
-                        className="flex-1 py-4 px-6 rounded-2xl border-2 border-slate-200 dark:border-slate-800 text-slate-500 font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+                        onClick={handleRejectClick}
+                        disabled={isAccepting || isRejecting}
+                        className="flex-1 py-4 px-6 rounded-2xl border-2 border-rose-200 dark:border-rose-900/40 text-rose-600 dark:text-rose-400 font-black uppercase tracking-widest hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
                     >
-                        <X size={20} strokeWidth={3} /> Reject
+                        {isRejecting ? "Rejecting..." : (
+                            <>
+                                <X size={20} strokeWidth={3} /> Reject
+                            </>
+                        )}
                     </button>
                     <button 
                         onClick={handleAccept}
-                        disabled={isAccepting}
-                        className="flex-[2] py-4 px-6 rounded-2xl bg-emerald-500 text-white font-black text-lg uppercase tracking-widest hover:bg-emerald-600 active:scale-95 transition-all shadow-xl shadow-emerald-500/30 flex items-center justify-center gap-3"
+                        disabled={isAccepting || isRejecting}
+                        className="flex-[2] py-4 px-6 rounded-2xl bg-emerald-500 text-white font-black text-lg uppercase tracking-widest hover:bg-emerald-600 active:scale-95 transition-all shadow-xl shadow-emerald-500/30 flex items-center justify-center gap-3 disabled:opacity-50"
                     >
                         {isAccepting ? "Accepting..." : (
                             <>
@@ -236,6 +280,81 @@ export default function IncomingOrderModal() {
                     </button>
                 </div>
             </div>
+
+            {/* Reject Reason / Remark Modal */}
+            {showRejectModal && (
+                <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-150">
+                    <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-[2rem] p-6 shadow-2xl border border-rose-200 dark:border-rose-900/40 flex flex-col gap-4">
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-10 h-10 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center font-bold">
+                                    <X size={20} strokeWidth={3} />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-black text-slate-900 dark:text-white leading-tight">Reject Order</h3>
+                                    <p className="text-xs text-slate-500 font-medium">Select or enter a reason for rejection</p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setShowRejectModal(false)}
+                                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 flex items-center justify-center transition-colors"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        {/* Quick Reason Options */}
+                        <div className="space-y-2">
+                            <label className="text-[11px] font-black uppercase tracking-wider text-slate-400">Common Reasons</label>
+                            <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                                {QUICK_REASONS.map((r, i) => (
+                                    <button
+                                        key={i}
+                                        type="button"
+                                        onClick={() => setSelectedReason(r)}
+                                        className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between border ${selectedReason === r ? "bg-rose-500/10 border-rose-500 text-rose-600 dark:text-rose-400 shadow-sm" : "border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60"}`}
+                                    >
+                                        <span>{r}</span>
+                                        {selectedReason === r && <Check size={14} className="text-rose-600 dark:text-rose-400" />}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Custom Remark / Note */}
+                        <div className="space-y-1.5">
+                            <label className="text-[11px] font-black uppercase tracking-wider text-slate-400">Additional Remark / Notes (Optional)</label>
+                            <textarea
+                                value={customReason}
+                                onChange={(e) => setCustomReason(e.target.value)}
+                                placeholder="E.g. Item out of stock: Paneer Butter Masala unavailable today"
+                                rows={2}
+                                className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500 font-medium resize-none"
+                            />
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2.5 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowRejectModal(false)}
+                                disabled={isRejecting}
+                                className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs uppercase tracking-wider hover:bg-slate-200 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmReject}
+                                disabled={isRejecting}
+                                className="flex-[1.5] py-3 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-rose-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
+                            >
+                                {isRejecting ? "Rejecting..." : "Confirm Reject"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

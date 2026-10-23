@@ -10,305 +10,395 @@ export const PRINTER_SERVICE_UUIDS = [
     "49535343-fe7d-4ae5-8fa9-9fafd205e455"
 ];
 
-// Cache the connection to avoid prompting the user on every print
-let globalDevice: BluetoothDevice | null = null;
-let globalServer: BluetoothRemoteGATTServer | null = null;
-let globalChar: BluetoothRemoteGATTCharacteristic | null = null;
-let connectionPromise: Promise<any> | null = null;
+export type PrinterSlot = 'bill' | 'kot';
 
-// Capacitor BLE State
-let capacitorBleDevice: any = null;
-let capacitorBleService: string = "";
-let capacitorBleChar: string = "";
-let capacitorNegotiatedMtu: number = 20;
-let capacitorCanWriteWithoutResponse: boolean = false;
+// State per slot ('bill' and 'kot')
+interface PrinterState {
+    device: any | null;
+    server: any | null;
+    char: any | null;
+    capDevice: any | null;
+    capService: string;
+    capChar: string;
+    capMtu: number;
+    capCanWriteWithoutResponse: boolean;
+    connPromise: Promise<any> | null;
+}
 
-export async function ensurePrinterConnected(forcePrompt: boolean = false) {
+const printerSlots: Record<PrinterSlot, PrinterState> = {
+    bill: {
+        device: null,
+        server: null,
+        char: null,
+        capDevice: null,
+        capService: "",
+        capChar: "",
+        capMtu: 20,
+        capCanWriteWithoutResponse: false,
+        connPromise: null,
+    },
+    kot: {
+        device: null,
+        server: null,
+        char: null,
+        capDevice: null,
+        capService: "",
+        capChar: "",
+        capMtu: 20,
+        capCanWriteWithoutResponse: false,
+        connPromise: null,
+    }
+};
+
+function getStorageKeys(slot: PrinterSlot) {
+    if (slot === 'kot') {
+        return {
+            idKey: "LAST_CONNECTED_KOT_PRINTER_ID",
+            enabledKey: "bt_kot_printer_enabled",
+        };
+    }
+    return {
+        idKey: "LAST_CONNECTED_BILL_PRINTER_ID", // with fallback to LAST_CONNECTED_PRINTER_ID
+        enabledKey: "bt_bill_printer_enabled",
+    };
+}
+
+export async function ensurePrinterConnected(forcePrompt: boolean = false, slot: PrinterSlot = 'bill') {
     const isCapacitor = Capacitor.isNativePlatform();
 
     if (!isCapacitor && !navigator.bluetooth) {
         throw new Error("Web Bluetooth is not supported in this browser.");
     }
 
-    if (connectionPromise && !forcePrompt) {
-        return await connectionPromise;
+    const state = printerSlots[slot];
+    const { idKey } = getStorageKeys(slot);
+
+    if (state.connPromise && !forcePrompt) {
+        return await state.connPromise;
     }
 
-    connectionPromise = (async () => {
+    state.connPromise = (async () => {
         if (isCapacitor) {
             try {
                 await BleClient.initialize();
                 
-                if (!forcePrompt && capacitorBleDevice && capacitorBleChar) {
+                if (!forcePrompt && state.capDevice && state.capChar) {
                     return { capacitor: true };
                 }
 
-                if (forcePrompt && capacitorBleDevice) {
-                    await BleClient.disconnect(capacitorBleDevice.deviceId).catch(()=>{});
-                    capacitorBleDevice = null;
-                    capacitorBleChar = "";
+                if (forcePrompt && state.capDevice) {
+                    await BleClient.disconnect(state.capDevice.deviceId).catch(()=>{});
+                    state.capDevice = null;
+                    state.capChar = "";
                 }
 
-                if (!capacitorBleDevice) {
-                    capacitorBleDevice = await BleClient.requestDevice({
-                        // POS printers usually don't advertise standard UUIDs, accept all
+                let savedCapacitorId = typeof localStorage !== 'undefined' ? localStorage.getItem(idKey) : null;
+                if (!savedCapacitorId && slot === 'bill' && typeof localStorage !== 'undefined') {
+                    savedCapacitorId = localStorage.getItem("LAST_CONNECTED_PRINTER_ID");
+                }
+
+                if (!forcePrompt && !state.capDevice && savedCapacitorId) {
+                    try {
+                        state.capDevice = { deviceId: savedCapacitorId };
+                    } catch(e) {}
+                }
+
+                if (!state.capDevice) {
+                    state.capDevice = await BleClient.requestDevice({
+                        // POS printers accept all
                     });
                 }
 
-                await BleClient.connect(capacitorBleDevice.deviceId, (deviceId) => {
-                    capacitorBleDevice = null;
-                    capacitorBleChar = "";
-                    capacitorNegotiatedMtu = 20;
-                    capacitorCanWriteWithoutResponse = false;
-                    console.log("Capacitor Printer disconnected", deviceId);
+                await BleClient.connect(state.capDevice.deviceId, (deviceId) => {
+                    state.capDevice = null;
+                    state.capChar = "";
+                    state.capMtu = 20;
+                    state.capCanWriteWithoutResponse = false;
+                    console.log(`Capacitor Printer [${slot}] disconnected`, deviceId);
                 });
 
-                // Request high throughput priority and MTU
                 try {
-                    await BleClient.requestConnectionPriority(capacitorBleDevice.deviceId, 1); // 1 = CONNECTION_PRIORITY_HIGH
+                    await BleClient.requestConnectionPriority(state.capDevice.deviceId, 1);
                 } catch(e) {}
                 try {
-                    const mtuResult = await BleClient.requestMtu(capacitorBleDevice.deviceId, 512);
-                    // Safe chunk is negotiated MTU minus 3 bytes ATT header
+                    const mtuResult = await BleClient.requestMtu(state.capDevice.deviceId, 512);
                     if (typeof mtuResult === 'number' && mtuResult > 23) {
-                        capacitorNegotiatedMtu = mtuResult - 3;
+                        state.capMtu = mtuResult - 3;
                     } else {
-                        capacitorNegotiatedMtu = 128;
+                        state.capMtu = 128;
                     }
                 } catch(e) {
-                    capacitorNegotiatedMtu = 100;
+                    state.capMtu = 100;
                 }
 
-                const services = await BleClient.getServices(capacitorBleDevice.deviceId);
+                const services = await BleClient.getServices(state.capDevice.deviceId);
                 
-                // First try known printer service UUIDs
                 for (const knownUuid of PRINTER_SERVICE_UUIDS) {
                     const match = services.find(s => s.uuid.toLowerCase() === knownUuid.toLowerCase() || s.uuid.toLowerCase().includes(knownUuid.substring(4, 8).toLowerCase()));
                     if (match) {
                         const targetCharNoResp = match.characteristics.find(c => c.properties?.writeWithoutResponse);
                         const targetCharResp = match.characteristics.find(c => c.properties?.write);
                         if (targetCharNoResp) {
-                            capacitorBleService = match.uuid;
-                            capacitorBleChar = targetCharNoResp.uuid;
-                            capacitorCanWriteWithoutResponse = true;
+                            state.capService = match.uuid;
+                            state.capChar = targetCharNoResp.uuid;
+                            state.capCanWriteWithoutResponse = true;
                             break;
                         } else if (targetCharResp) {
-                            capacitorBleService = match.uuid;
-                            capacitorBleChar = targetCharResp.uuid;
-                            capacitorCanWriteWithoutResponse = false;
+                            state.capService = match.uuid;
+                            state.capChar = targetCharResp.uuid;
+                            state.capCanWriteWithoutResponse = false;
                             break;
                         }
                     }
                 }
 
-                // Fallback: any writable characteristic NOT in Generic Access (1800), Generic Attribute (1801), or Device Info (180a)
-                if (!capacitorBleChar) {
+                if (!state.capChar) {
                     for (const service of services) {
                         const sUuid = service.uuid.toLowerCase();
                         if (sUuid.includes("1800") || sUuid.includes("1801") || sUuid.includes("180a")) continue;
                         const targetCharNoResp = service.characteristics.find(c => c.properties?.writeWithoutResponse);
                         const targetCharResp = service.characteristics.find(c => c.properties?.write);
                         if (targetCharNoResp) {
-                            capacitorBleService = service.uuid;
-                            capacitorBleChar = targetCharNoResp.uuid;
-                            capacitorCanWriteWithoutResponse = true;
+                            state.capService = service.uuid;
+                            state.capChar = targetCharNoResp.uuid;
+                            state.capCanWriteWithoutResponse = true;
                             break;
                         } else if (targetCharResp) {
-                            capacitorBleService = service.uuid;
-                            capacitorBleChar = targetCharResp.uuid;
-                            capacitorCanWriteWithoutResponse = false;
+                            state.capService = service.uuid;
+                            state.capChar = targetCharResp.uuid;
+                            state.capCanWriteWithoutResponse = false;
                             break;
                         }
                     }
                 }
 
-                if (!capacitorBleChar) {
+                if (!state.capChar) {
                     throw new Error("No writable characteristic found on this device.");
+                }
+
+                if (state.capDevice?.deviceId && typeof localStorage !== 'undefined') {
+                    localStorage.setItem(idKey, state.capDevice.deviceId);
+                    if (slot === 'bill') localStorage.setItem("LAST_CONNECTED_PRINTER_ID", state.capDevice.deviceId);
                 }
 
                 return { capacitor: true };
             } catch (error: any) {
-                capacitorBleDevice = null;
+                state.capDevice = null;
                 throw new Error("Capacitor BLE Error: " + (error.message || error));
             }
         }
 
         try {
-            // Check if we are already connected and valid
-            if (!forcePrompt && globalDevice && globalDevice.gatt?.connected && globalChar) {
-                return globalChar;
+            if (!forcePrompt && state.device && state.device.gatt?.connected && state.char) {
+                return state.char;
             }
 
-            if (forcePrompt && globalDevice && globalDevice.gatt?.connected) {
-                globalDevice.gatt.disconnect();
-                globalDevice = null;
-                globalChar = null;
+            const previousDevice = state.device;
+            const previousServer = state.server;
+            const previousChar = state.char;
+
+            let autoReconnected = false;
+            let lastPrinterId = typeof localStorage !== 'undefined' ? localStorage.getItem(idKey) : null;
+            if (!lastPrinterId && slot === 'bill' && typeof localStorage !== 'undefined') {
+                lastPrinterId = localStorage.getItem("LAST_CONNECTED_PRINTER_ID");
             }
 
-    // Try auto-reconnect with existing permitted devices to avoid prompt
-    let autoReconnected = false;
-    const lastPrinterId = typeof localStorage !== 'undefined' ? localStorage.getItem("LAST_CONNECTED_PRINTER_ID") : null;
-    
-    if (!forcePrompt && !globalDevice && navigator.bluetooth.getDevices) {
-        try {
-            const devices = await navigator.bluetooth.getDevices();
-            if (lastPrinterId) {
-                const savedDevice = devices.find(d => d.id === lastPrinterId);
-                if (savedDevice) {
-                    globalDevice = savedDevice;
-                    autoReconnected = true;
+            let targetDevice: BluetoothDevice | null = null;
+
+            if (!forcePrompt && !state.device && navigator.bluetooth.getDevices) {
+                try {
+                    const devices = await navigator.bluetooth.getDevices();
+                    if (lastPrinterId) {
+                        const savedDevice = devices.find(d => d.id === lastPrinterId);
+                        if (savedDevice) {
+                            targetDevice = savedDevice;
+                            autoReconnected = true;
+                        }
+                    }
+                    if (!autoReconnected && devices.length > 0) {
+                        // If checking KOT slot and bill already has devices[0], try another if available
+                        const otherSlot = slot === 'bill' ? 'kot' : 'bill';
+                        const otherDeviceId = printerSlots[otherSlot]?.device?.id;
+                        const candidate = devices.find(d => d.id !== otherDeviceId) || devices[0];
+                        if (candidate) {
+                            targetDevice = candidate;
+                            autoReconnected = true;
+                        }
+                    }
+                } catch(e) {
+                    console.log(`Auto-reconnect getDevices failed for [${slot}]:`, e);
                 }
             }
-            if (!autoReconnected) {
-                for (const d of devices) {
-                    // Heuristic: try to connect to the first permitted device that looks like a printer
-                    if (d.name && (d.name.toLowerCase().includes("print") || d.name.toLowerCase().includes("pos") || d.name.toLowerCase().includes("bt"))) {
-                        globalDevice = d;
-                        autoReconnected = true;
+
+            if (!targetDevice) {
+                try {
+                    targetDevice = await navigator.bluetooth.requestDevice({
+                        acceptAllDevices: true,
+                        optionalServices: PRINTER_SERVICE_UUIDS
+                    });
+                } catch (error: any) {
+                    console.log(`Device request failed or cancelled [${slot}]:`, error);
+                    if (previousDevice && previousDevice.gatt?.connected && previousChar) {
+                        state.device = previousDevice;
+                        state.server = previousServer;
+                        state.char = previousChar;
+                        return previousChar;
+                    }
+                    if (error.name === 'NotFoundError' || error.message.includes('cancelled')) {
+                        throw new Error("Printer selection was cancelled.");
+                    }
+                    throw new Error("Failed to request bluetooth device: " + error.message);
+                }
+            }
+
+            if (previousDevice && previousDevice !== targetDevice && previousDevice.gatt?.connected) {
+                try {
+                    previousDevice.gatt.disconnect();
+                } catch(e) {}
+            }
+
+            state.device = targetDevice;
+
+            state.device.addEventListener("gattserverdisconnected", () => {
+                state.server = null;
+                state.char = null;
+                console.log(`Printer [${slot}] disconnected (gattserverdisconnected)`);
+            });
+
+            let retries = 4;
+            let connectError = null;
+            
+            while (retries > 0) {
+                try {
+                    if (state.device.gatt?.connected) {
+                        state.server = state.device.gatt;
                         break;
                     }
-                }
-                if (!autoReconnected && devices.length > 0) {
-                     globalDevice = devices[0];
-                     autoReconnected = true;
-                }
-            }
-        } catch(e) {
-            console.log("Auto-reconnect getDevices failed:", e);
-        }
-    }
-
-    if (!globalDevice) {
-        // 1. Request Device (Must be called directly from user gesture)
-        try {
-            globalDevice = await navigator.bluetooth.requestDevice({
-                acceptAllDevices: true,
-                optionalServices: PRINTER_SERVICE_UUIDS
-            });
-        } catch (error: any) {
-            console.log("Device request failed or cancelled:", error);
-            if (error.name === 'NotFoundError' || error.message.includes('cancelled')) {
-                throw new Error("Device connection was cancelled. Please try again and select a printer.");
-            }
-            throw new Error("Failed to request bluetooth device: " + error.message);
-        }
-    }
-
-    // Add disconnect listener only if not already added
-    globalDevice.addEventListener("gattserverdisconnected", () => {
-        globalDevice = null;
-        globalServer = null;
-        globalChar = null;
-        console.log("Printer disconnected");
-    });
-
-    if (autoReconnected && globalDevice && (globalDevice as any).watchAdvertisements) {
-        try {
-            console.log("Attempting to watch advertisements to wake up printer...");
-            await (globalDevice as any).watchAdvertisements();
-            await new Promise(resolve => setTimeout(resolve, 800)); // wait for advertisement
-        } catch(e) {
-            console.log("watchAdvertisements error:", e);
-        }
-    }
-
-        // 2. Connect GATT
-        let retries = 3;
-        let connectError = null;
-        
-        while (retries > 0) {
-            try {
-                globalServer = await globalDevice.gatt?.connect() || null;
-                if (globalServer) break; // Connected successfully
-            } catch (error) {
-                connectError = error;
-                console.log(`GATT Connect attempt failed. Retries left: ${retries - 1}`, error);
-                retries--;
-                if (retries > 0) {
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retrying
+                    state.server = await state.device.gatt?.connect() || null;
+                    if (state.server) break;
+                } catch (error) {
+                    connectError = error;
+                    console.log(`GATT Connect attempt [${slot}] failed. Retries left: ${retries - 1}`, error);
+                    retries--;
+                    if (retries > 0) {
+                        await new Promise(resolve => setTimeout(resolve, 350));
+                    }
                 }
             }
-        }
 
-        if (!globalServer) {
-            console.log("GATT Connect failed after retries, prompting user. Error:", connectError);
-            if (typeof window !== 'undefined' && autoReconnected) {
-                console.log("Auto-Reconnect failed with error: " + (connectError?.message || connectError));
-            }
-            // Fallback: The auto-recovered device is likely stale or out of range.
-            // We must request the device again via user prompt.
-            try {
-                globalDevice = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true,
-                    optionalServices: PRINTER_SERVICE_UUIDS
-                });
-            } catch (promptError: any) {
-                console.log("Fallback device request failed or cancelled:", promptError);
-                if (promptError.name === 'NotFoundError' || promptError.message.includes('cancelled')) {
-                    throw new Error("Device connection was cancelled. Please try again and select a printer.");
+            if (!state.server) {
+                console.log(`GATT Connect failed [${slot}]:`, connectError);
+                try {
+                    targetDevice = await navigator.bluetooth.requestDevice({
+                        acceptAllDevices: true,
+                        optionalServices: PRINTER_SERVICE_UUIDS
+                    });
+                    state.device = targetDevice;
+                    state.device.addEventListener("gattserverdisconnected", () => {
+                        state.server = null;
+                        state.char = null;
+                        console.log(`Printer [${slot}] disconnected (gattserverdisconnected)`);
+                    });
+                    state.server = await state.device.gatt?.connect() || null;
+                } catch (fallbackErr: any) {
+                    if (!forcePrompt && (fallbackErr.name === 'NotFoundError' || fallbackErr.message?.includes('cancelled'))) {
+                        throw new Error(`Bluetooth printer [${slot}] is offline. Please select printer to connect.`);
+                    }
+                    throw fallbackErr;
                 }
-                throw new Error("Failed to request bluetooth device: " + promptError.message);
+
+                if (!state.server) throw new Error(`Could not connect to ${slot.toUpperCase()} printer. Please ensure printer is turned on.`);
             }
             
-            globalDevice.addEventListener("gattserverdisconnected", () => {
-                globalDevice = null;
-                globalServer = null;
-                globalChar = null;
-                console.log("Printer disconnected");
-            });
-            
-            globalServer = await globalDevice.gatt?.connect() || null;
-            if (!globalServer) throw new Error("Could not connect to GATT Server after prompt");
-        }
-        
-        // Save the successful device ID for future auto-reconnects
-        if (globalDevice && globalDevice.id && typeof localStorage !== 'undefined') {
-            localStorage.setItem("LAST_CONNECTED_PRINTER_ID", globalDevice.id);
-        }
-
-        // 3. Find writable characteristic
-        let printChar: BluetoothRemoteGATTCharacteristic | null = null;
-        for (const uuid of PRINTER_SERVICE_UUIDS) {
-            try {
-                const service = await globalServer.getPrimaryService(uuid);
-                const characteristics = await service.getCharacteristics();
-                // Prioritize writeWithoutResponse for high-speed streaming without GATT ACK delay
-                printChar = characteristics.find(c => c.properties.writeWithoutResponse) ||
-                            characteristics.find(c => c.properties.write) || null;
-            } catch (e) {
-                // Ignore service not found
+            if (state.device && state.device.id && typeof localStorage !== 'undefined') {
+                localStorage.setItem(idKey, state.device.id);
+                if (slot === 'bill') localStorage.setItem("LAST_CONNECTED_PRINTER_ID", state.device.id);
             }
-            if (printChar) break;
-        }
 
-        if (!printChar) {
-            // Fallback: search all services
-            const services = await globalServer.getPrimaryServices();
-            for (const service of services) {
-                const characteristics = await service.getCharacteristics();
-                printChar = characteristics.find(c => c.properties.writeWithoutResponse) ||
-                            characteristics.find(c => c.properties.write) || null;
+            let printChar: BluetoothRemoteGATTCharacteristic | null = null;
+            for (const uuid of PRINTER_SERVICE_UUIDS) {
+                try {
+                    const service = await state.server.getPrimaryService(uuid);
+                    const characteristics = await service.getCharacteristics();
+                    printChar = characteristics.find(c => c.properties.writeWithoutResponse) ||
+                                characteristics.find(c => c.properties.write) || null;
+                } catch (e) {}
                 if (printChar) break;
             }
-        }
 
-        if (!printChar) {
-            throw new Error("No writable characteristic found on this printer.");
+            if (!printChar) {
+                const services = await state.server.getPrimaryServices();
+                for (const service of services) {
+                    const characteristics = await service.getCharacteristics();
+                    printChar = characteristics.find(c => c.properties.writeWithoutResponse) ||
+                                characteristics.find(c => c.properties.write) || null;
+                    if (printChar) break;
+                }
+            }
+
+            if (!printChar) {
+                throw new Error("No writable characteristic found on this printer.");
+            }
+            
+            state.char = printChar;
+            return state.char;
+        } catch (e) {
+            state.device = null;
+            state.server = null;
+            state.char = null;
+            throw e;
+        } finally {
+            state.connPromise = null;
         }
-        
-        globalChar = printChar;
-        return globalChar;
-    } catch (e) {
-        // Cleanup on failure
-        globalDevice = null;
-        globalServer = null;
-        globalChar = null;
-        throw e;
-    } finally {
-        connectionPromise = null;
+    })();
+    return state.connPromise;
+}
+
+export function isPrinterConnected(slot: PrinterSlot = 'bill'): boolean {
+    const isCapacitor = Capacitor.isNativePlatform();
+    const state = printerSlots[slot];
+    if (isCapacitor) {
+        if (state.capDevice && state.capChar) return true;
+        // Fallback: if checking KOT but only Bill is connected, fallback to Bill
+        if (slot === 'kot' && printerSlots.bill.capDevice && printerSlots.bill.capChar) return true;
+        return false;
     }
-})();
-return connectionPromise;
+    if (state.device && state.device.gatt?.connected && state.char) return true;
+    // Fallback: if checking KOT but only Bill is connected, fallback to Bill
+    if (slot === 'kot' && printerSlots.bill.device && printerSlots.bill.device.gatt?.connected && printerSlots.bill.char) return true;
+    return false;
+}
+
+export function isSlotStrictlyConnected(slot: PrinterSlot): boolean {
+    const isCapacitor = Capacitor.isNativePlatform();
+    const state = printerSlots[slot];
+    if (isCapacitor) {
+        return !!(state.capDevice && state.capChar);
+    }
+    return !!(state.device && state.device.gatt?.connected && state.char);
+}
+
+export function getConnectedPrinterName(slot: PrinterSlot = 'bill'): string | null {
+    const isCapacitor = Capacitor.isNativePlatform();
+    const state = printerSlots[slot];
+    if (isCapacitor) {
+        if (state.capDevice) {
+            return state.capDevice.name || (state.capDevice.deviceId ? `BLE Printer (${state.capDevice.deviceId.slice(0, 5)})` : null);
+        }
+        if (slot === 'kot' && printerSlots.bill.capDevice) {
+            const b = printerSlots.bill.capDevice;
+            return b.name || (b.deviceId ? `BLE Printer (${b.deviceId.slice(0, 5)})` : null);
+        }
+        return null;
+    }
+    if (state.device) {
+        return state.device.name || (state.device.id ? `BT Printer (${state.device.id.slice(0, 5)})` : null);
+    }
+    if (slot === 'kot' && printerSlots.bill.device) {
+        const b = printerSlots.bill.device;
+        return b.name || (b.id ? `BT Printer (${b.id.slice(0, 5)})` : null);
+    }
+    return null;
 }
 
 
@@ -375,14 +465,41 @@ const calculateTaxBreakup: any = (order, business) => {
     }));
 };
 
-export async function printReceiptData(order: any, business: any, elementToPrint?: HTMLElement | null) {
+export async function printReceiptData(order: any, business: any, elementToPrint?: HTMLElement | null, targetSlot?: PrinterSlot) {
     const isCapacitor = Capacitor.isNativePlatform();
 
-    if (!isCapacitor && (!globalChar || !globalDevice?.gatt?.connected)) {
-        throw new Error("Printer connection lost. Please reconnect.");
-    }
-    if (isCapacitor && (!capacitorBleDevice || !capacitorBleChar)) {
-        throw new Error("Printer connection lost. Please reconnect.");
+    // Auto-detect slot if not provided
+    const isKot = elementToPrint && elementToPrint.classList && elementToPrint.classList.contains('kot-container');
+    const slot: PrinterSlot = targetSlot || (isKot ? 'kot' : 'bill');
+
+    // Get primary target state or fallback to other slot if only one printer is paired
+    let activeState = printerSlots[slot];
+    let usingFallback = false;
+
+    if (isCapacitor) {
+        if (!activeState.capDevice || !activeState.capChar) {
+            // Check fallback slot
+            const altSlot: PrinterSlot = slot === 'kot' ? 'bill' : 'kot';
+            if (printerSlots[altSlot].capDevice && printerSlots[altSlot].capChar) {
+                activeState = printerSlots[altSlot];
+                usingFallback = true;
+            }
+        }
+        if (!activeState.capDevice || !activeState.capChar) {
+            throw new Error(`Bluetooth printer for ${slot.toUpperCase()} not connected. Please connect printer in settings.`);
+        }
+    } else {
+        if (!activeState.char || !activeState.device?.gatt?.connected) {
+            // Check fallback slot
+            const altSlot: PrinterSlot = slot === 'kot' ? 'bill' : 'kot';
+            if (printerSlots[altSlot].char && printerSlots[altSlot].device?.gatt?.connected) {
+                activeState = printerSlots[altSlot];
+                usingFallback = true;
+            }
+        }
+        if (!activeState.char || !activeState.device?.gatt?.connected) {
+            throw new Error(`Bluetooth printer for ${slot.toUpperCase()} not connected. Please connect printer in settings.`);
+        }
     }
 
     try {
@@ -794,7 +911,13 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                 
                 dataChunks.push(ALIGN_LEFT);
                 const tableStr = order?.tableName || "COUNTER";
-                const kotNum = order?.kotNumbers?.[order?.kotNumbers?.length - 1] || "";
+                const kotNum = order?.kotNumbers?.[order?.kotNumbers?.length - 1] 
+                    || order?.tokenNumber 
+                    || order?.reservedTokenNumber 
+                    || order?.kotNumber 
+                    || (Array.isArray(order?.items) && order.items.find((i: any) => i?.kotNumber)?.kotNumber) 
+                    || (business?.lastTokenNumber ? String(business.lastTokenNumber) : "") 
+                    || "1";
                 dataChunks.push(encoder.encode(pLR("TABLE: " + tableStr, "KOT NO: " + kotNum, WIDTH) + "\n"));
                 
                 const billNoStr = "Bill: " + (order?.billNumber || order?.orderNumber || "DRAFT");
@@ -813,10 +936,14 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                 dataChunks.push(encoder.encode(pLR("ITEM DESCRIPTION", "QTY", WIDTH) + "\n"));
                 dataChunks.push(BOLD_OFF);
                 
-                const items = order?.items || [];
+                const allItems = order?.items || [];
+                const newItemsOnly = allItems.filter((i: any) => i?.isNew);
+                const items = newItemsOnly.length > 0 ? newItemsOnly : allItems;
                 for (const item of items) {
                     const name = (item.name || "Item").toUpperCase();
-                    const qty = item.qty || item.quantity || 1;
+                    const fullQty = item.qty || item.quantity || 1;
+                    const printedQty = item.printedQty || 0;
+                    const qty = (item.isNew && printedQty) ? (fullQty - printedQty) : fullQty;
                     const rightCol = "x" + qty;
                     const maxNameWidth = WIDTH - rightCol.length - 1;
                     const lines = wrapText(name, maxNameWidth, maxNameWidth - 4);
@@ -966,7 +1093,8 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                 const packaging = order?.packagingCharges || 0;
                 if (packaging > 0) dataChunks.push(encoder.encode(pLR("Packaging", "+" + packaging.toFixed(2), WIDTH) + "\n"));
                 const service = order?.serviceCharge || 0;
-                if (service > 0) dataChunks.push(encoder.encode(pLR("Service Charge", "+" + service.toFixed(2), WIDTH) + "\n"));
+                const serviceLabel = order?.serviceChargeName || business?.serviceChargeName || "Service Charge";
+                if (service > 0) dataChunks.push(encoder.encode(pLR(serviceLabel, "+" + service.toFixed(2), WIDTH) + "\n"));
                 
                 if (taxActive) {
                     const taxBreakup = calculateTaxBreakup(order, business);
@@ -1086,40 +1214,42 @@ export async function printReceiptData(order: any, business: any, elementToPrint
         // High-Speed continuous streaming for Thermal POS Printers:
         // When writeWithoutResponse is available, stream in 240-512 byte packets without blocking queue.
         // Chrome prints fast because it writes directly to GATT buffer without queue overhead.
-        const CHUNK_SIZE = isCapacitor ? (capacitorCanWriteWithoutResponse ? Math.min(capacitorNegotiatedMtu || 244, 244) : 64) : 244; 
-        const CHUNK_DELAY = isCapacitor ? (capacitorCanWriteWithoutResponse ? 0 : 5) : 0;
+        const CHUNK_SIZE = isCapacitor ? (activeState.capCanWriteWithoutResponse ? Math.min(activeState.capMtu || 244, 244) : 64) : 244; 
+        const CHUNK_DELAY = isCapacitor ? (activeState.capCanWriteWithoutResponse ? 0 : 5) : 0;
 
         for (let i = 0; i < printData.length; i += CHUNK_SIZE) {
             const slice = printData.slice(i, i + CHUNK_SIZE);
             if (isCapacitor) {
                 const dataView = new DataView(slice.buffer, slice.byteOffset, slice.byteLength);
-                if (capacitorCanWriteWithoutResponse) {
+                if (activeState.capCanWriteWithoutResponse) {
                     try {
                         const hexVal = dataViewToHexString(dataView);
                         await BluetoothLe.writeWithoutResponse({
-                            deviceId: capacitorBleDevice.deviceId,
-                            service: capacitorBleService,
-                            characteristic: capacitorBleChar,
+                            deviceId: activeState.capDevice.deviceId,
+                            service: activeState.capService,
+                            characteristic: activeState.capChar,
                             value: hexVal
                         });
                     } catch(e) {
-                        await BleClient.write(capacitorBleDevice.deviceId, capacitorBleService, capacitorBleChar, dataView);
+                        await BleClient.write(activeState.capDevice.deviceId, activeState.capService, activeState.capChar, dataView);
                     }
                 } else {
-                    await BleClient.write(capacitorBleDevice.deviceId, capacitorBleService, capacitorBleChar, dataView);
+                    await BleClient.write(activeState.capDevice.deviceId, activeState.capService, activeState.capChar, dataView);
                 }
                 if (CHUNK_DELAY > 0) {
                     await new Promise(r => setTimeout(r, CHUNK_DELAY));
                 }
             } else {
-                if (globalChar.writeValueWithoutResponse && globalChar.properties?.writeWithoutResponse) {
+                const targetChar = activeState.char;
+                if (!targetChar) throw new Error("Printer connection lost during print");
+                if (targetChar.writeValueWithoutResponse && targetChar.properties?.writeWithoutResponse) {
                     try {
-                        await globalChar.writeValueWithoutResponse(slice);
+                        await targetChar.writeValueWithoutResponse(slice);
                     } catch (e) {
-                        await globalChar.writeValue(slice);
+                        await targetChar.writeValue(slice);
                     }
                 } else {
-                    await globalChar.writeValue(slice);
+                    await targetChar.writeValue(slice);
                 }
                 if (CHUNK_DELAY > 0) {
                     await new Promise(r => setTimeout(r, CHUNK_DELAY));
@@ -1214,7 +1344,13 @@ export function generateTextReceiptPreview(order: any, business: any, isKot: boo
         out += padCenter("K.O.T", WIDTH) + "\n";
         out += "-".repeat(WIDTH) + "\n";
         const tableStr = order?.tableName || "COUNTER";
-        const kotNum = order?.kotNumbers?.[order?.kotNumbers?.length - 1] || "";
+        const kotNum = order?.kotNumbers?.[order?.kotNumbers?.length - 1] 
+            || order?.tokenNumber 
+            || order?.reservedTokenNumber 
+            || order?.kotNumber 
+            || (Array.isArray(order?.items) && order.items.find((i: any) => i?.kotNumber)?.kotNumber) 
+            || (business?.lastTokenNumber ? String(business.lastTokenNumber) : "") 
+            || "1";
         out += pLR("TABLE: " + tableStr, "KOT NO: " + kotNum, WIDTH) + "\n";
         
         const billNoStr = "Bill: " + (order?.billNumber || order?.orderNumber || "DRAFT");
@@ -1231,10 +1367,14 @@ export function generateTextReceiptPreview(order: any, business: any, isKot: boo
         
         out += pLR("ITEM DESCRIPTION", "QTY", WIDTH) + "\n";
         
-        const items = order?.items || [];
+        const allItems = order?.items || [];
+        const newItemsOnly = allItems.filter((i: any) => i?.isNew);
+        const items = newItemsOnly.length > 0 ? newItemsOnly : allItems;
         for (const item of items) {
             const name = (item.name || "Item").toUpperCase();
-            const qty = item.qty || item.quantity || 1;
+            const fullQty = item.qty || item.quantity || 1;
+            const printedQty = item.printedQty || 0;
+            const qty = (item.isNew && printedQty) ? (fullQty - printedQty) : fullQty;
             const rightCol = "x" + qty;
             const maxNameWidth = WIDTH - rightCol.length - 1;
             const lines = wrapText(name, maxNameWidth, maxNameWidth - 4);
@@ -1367,7 +1507,8 @@ export function generateTextReceiptPreview(order: any, business: any, isKot: boo
         const packaging = order?.packagingCharges || 0;
         if (packaging > 0) out += pLR("Packaging", "+" + packaging.toFixed(2), WIDTH) + "\n";
         const service = order?.serviceCharge || 0;
-        if (service > 0) out += pLR("Service Charge", "+" + service.toFixed(2), WIDTH) + "\n";
+        const serviceLabel = order?.serviceChargeName || business?.serviceChargeName || "Service Charge";
+        if (service > 0) out += pLR(serviceLabel, "+" + service.toFixed(2), WIDTH) + "\n";
         
         if (taxActive) {
             const taxBreakup = calculateTaxBreakup(order, business);
@@ -1443,28 +1584,35 @@ export function generateTextReceiptPreview(order: any, business: any, isKot: boo
     }
 };
 
-export async function disconnectPrinter() {
+export async function disconnectPrinter(clearSavedId: boolean = false, targetSlot: PrinterSlot | 'all' = 'all') {
     try {
-        if (typeof localStorage !== 'undefined') {
-            localStorage.removeItem("LAST_CONNECTED_PRINTER_ID");
-        }
+        const slotsToDisconnect: PrinterSlot[] = targetSlot === 'all' ? ['bill', 'kot'] : [targetSlot];
         
-        const isCapacitor = Capacitor.isNativePlatform();
-        if (isCapacitor) {
-            if (capacitorBleDevice) {
-                await BleClient.disconnect(capacitorBleDevice.deviceId).catch(()=>{});
-                capacitorBleDevice = null;
-                capacitorBleChar = "";
+        for (const s of slotsToDisconnect) {
+            const { idKey } = getStorageKeys(s);
+            if (clearSavedId && typeof localStorage !== 'undefined') {
+                localStorage.removeItem(idKey);
+                if (s === 'bill') localStorage.removeItem("LAST_CONNECTED_PRINTER_ID");
             }
-        } else {
-            if (globalDevice && globalDevice.gatt?.connected) {
-                globalDevice.gatt.disconnect();
+
+            const state = printerSlots[s];
+            const isCapacitor = Capacitor.isNativePlatform();
+            if (isCapacitor) {
+                if (state.capDevice) {
+                    await BleClient.disconnect(state.capDevice.deviceId).catch(()=>{});
+                    state.capDevice = null;
+                    state.capChar = "";
+                }
+            } else {
+                if (state.device && state.device.gatt?.connected) {
+                    try { state.device.gatt.disconnect(); } catch(e) {}
+                }
+                state.device = null;
+                state.server = null;
+                state.char = null;
             }
-            globalDevice = null;
-            globalServer = null;
-            globalChar = null;
+            state.connPromise = null;
         }
-        connectionPromise = null;
     } catch(err) {
         console.error("Failed to disconnect printer:", err);
     }
