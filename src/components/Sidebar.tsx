@@ -207,11 +207,8 @@ const navGroups = [
     items: [
       { icon: <UserCircle size={18} />, label: "Business Profile", href: "/dashboard/profile", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <Mail size={18} />, label: "Gmail Integration", href: "/dashboard/integration/gmail", roles: ["ADMIN", "SELLER"] },
-      { icon: <Settings size={18} />, label: "POS Settings", href: "/dashboard/settings", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <Sliders size={18} />, label: "Sidebar Menu Layout", href: "/dashboard/settings/sidebar", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <Printer size={18} />, label: "Printing Setup", href: "/dashboard/settings/printing", roles: ["ADMIN", "SELLER", "STAFF"] },
-      { icon: <Smartphone size={18} />, label: "Android APK Printer", href: "/dashboard/printer", roles: ["ADMIN", "SELLER", "STAFF"] },
-      { icon: <Bluetooth size={18} />, label: "Direct Web Print", href: "/dashboard/web-printer", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <Smartphone size={18} />, label: "App Settings", href: "/dashboard/admin/app-settings", roles: ["ADMIN"] },
       { icon: <Database size={18} />, label: "Backups", href: "/dashboard/admin/backup", roles: ["ADMIN"] },
       { icon: <QrCode size={18} />, label: "Google Review QR", href: "/dashboard/admin/qr-manager", roles: ["ADMIN"] },
