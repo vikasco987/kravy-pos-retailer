@@ -22,7 +22,8 @@ import {
     Package,
     IndianRupee,
     Percent,
-    Plus
+    Plus,
+    Bluetooth
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuthContext } from "@/components/AuthContext";
@@ -221,6 +222,13 @@ export default function MobileBottomNav({ profile }: any) {
                                 icon: <UserCircle size={18} className="text-[#0D9488]" />,
                                 iconBg: "bg-[#CCFBF1] dark:bg-teal-950/50",
                                 border: "border-teal-200 dark:border-teal-900/50"
+                            },
+                            {
+                                label: "Connect Printer",
+                                href: "/dashboard/settings/connect-printer",
+                                icon: <Bluetooth size={18} className="text-[#4F46E5]" />,
+                                iconBg: "bg-[#EEF2FF] dark:bg-indigo-950/50",
+                                border: "border-indigo-200 dark:border-indigo-900/50"
                             },
                             {
                                 label: "POS Settings",

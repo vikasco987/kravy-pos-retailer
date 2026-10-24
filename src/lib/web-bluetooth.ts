@@ -1,7 +1,21 @@
 // @ts-nocheck
 import { Capacitor } from '@capacitor/core';
-import { BleClient, BluetoothLe, dataViewToHexString } from '@capacitor-community/bluetooth-le';
 import QRCode from 'qrcode';
+
+// Lazy loader for Capacitor Native Bluetooth LE plugin (only used in Android/iOS native app)
+let capBleModule: any = null;
+async function getCapacitorBle() {
+    if (!Capacitor.isNativePlatform()) return null;
+    if (!capBleModule) {
+        try {
+            capBleModule = await import('@capacitor-community/bluetooth-le');
+        } catch (e) {
+            console.warn("Capacitor Bluetooth LE plugin failed to load:", e);
+            return null;
+        }
+    }
+    return capBleModule;
+}
 
 export const PRINTER_SERVICE_UUIDS = [
     "000018f0-0000-1000-8000-00805f9b34fb", // Generic POS
@@ -11,6 +25,31 @@ export const PRINTER_SERVICE_UUIDS = [
 ];
 
 export type PrinterSlot = 'bill' | 'kot';
+
+export function isSamePrinterForKot(): boolean {
+    if (typeof localStorage === 'undefined') return true;
+    const val = localStorage.getItem("bt_same_printer_for_kot");
+    return val === null ? true : val === "true"; // Default to true for convenience
+}
+
+export function setSamePrinterForKot(val: boolean): void {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem("bt_same_printer_for_kot", String(val));
+    if (val && printerSlots.bill.device) {
+        printerSlots.kot.device = printerSlots.bill.device;
+        printerSlots.kot.server = printerSlots.bill.server;
+        printerSlots.kot.char = printerSlots.bill.char;
+    }
+    if (val && printerSlots.bill.capDevice) {
+        printerSlots.kot.capDevice = printerSlots.bill.capDevice;
+        printerSlots.kot.capService = printerSlots.bill.capService;
+        printerSlots.kot.capChar = printerSlots.bill.capChar;
+        printerSlots.kot.capMtu = printerSlots.bill.capMtu;
+        printerSlots.kot.capCanWriteWithoutResponse = printerSlots.bill.capCanWriteWithoutResponse;
+    }
+}
+
+export type PrinterLiveStatus = 'DISCONNECTED' | 'DISCOVERING' | 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'PRINTING' | 'ERROR';
 
 // State per slot ('bill' and 'kot')
 interface PrinterState {
@@ -23,6 +62,8 @@ interface PrinterState {
     capMtu: number;
     capCanWriteWithoutResponse: boolean;
     connPromise: Promise<any> | null;
+    status: PrinterLiveStatus;
+    lastError: string | null;
 }
 
 const printerSlots: Record<PrinterSlot, PrinterState> = {
@@ -36,6 +77,8 @@ const printerSlots: Record<PrinterSlot, PrinterState> = {
         capMtu: 20,
         capCanWriteWithoutResponse: false,
         connPromise: null,
+        status: 'DISCONNECTED',
+        lastError: null,
     },
     kot: {
         device: null,
@@ -47,11 +90,62 @@ const printerSlots: Record<PrinterSlot, PrinterState> = {
         capMtu: 20,
         capCanWriteWithoutResponse: false,
         connPromise: null,
+        status: 'DISCONNECTED',
+        lastError: null,
     }
 };
 
+type RecoveryModalCallback = (details: {
+    slot: PrinterSlot;
+    error: string;
+    printerName: string | null;
+    onRetry: () => Promise<void>;
+    onScan: () => Promise<void>;
+    uncertainOutcome?: boolean;
+}) => void;
+
+let recoveryModalHandler: RecoveryModalCallback | null = null;
+
+export function registerPrinterRecoveryHandler(handler: RecoveryModalCallback | null) {
+    recoveryModalHandler = handler;
+}
+
+export function triggerPrinterRecoveryModal(details: {
+    slot: PrinterSlot;
+    error: string;
+    printerName: string | null;
+    onRetry: () => Promise<void>;
+    onScan: () => Promise<void>;
+    uncertainOutcome?: boolean;
+}) {
+    if (recoveryModalHandler) {
+        recoveryModalHandler(details);
+    }
+}
+
+export function getPrinterLiveStatus(slot: PrinterSlot = 'bill'): { status: PrinterLiveStatus; lastError: string | null } {
+    const effectiveSlot: PrinterSlot = (slot === 'kot' && isSamePrinterForKot()) ? 'bill' : slot;
+    const state = printerSlots[effectiveSlot];
+    const isConn = isPrinterConnected(effectiveSlot);
+    if (!isConn && state.status === 'CONNECTED') {
+        state.status = 'DISCONNECTED';
+    } else if (isConn && (state.status === 'DISCONNECTED' || state.status === 'ERROR')) {
+        state.status = 'CONNECTED';
+    }
+    return { status: state.status, lastError: state.lastError };
+}
+
+// Global serial write queue to serialize all writes to physical Bluetooth printers
+let printQueuePromise: Promise<any> = Promise.resolve();
+export function enqueuePrintTask<T>(task: () => Promise<T>): Promise<T> {
+    const run = () => task();
+    const res = printQueuePromise.then(run, run);
+    printQueuePromise = res.catch(() => {});
+    return res;
+}
+
 function getStorageKeys(slot: PrinterSlot) {
-    if (slot === 'kot') {
+    if (slot === 'kot' && !isSamePrinterForKot()) {
         return {
             idKey: "LAST_CONNECTED_KOT_PRINTER_ID",
             enabledKey: "bt_kot_printer_enabled",
@@ -59,8 +153,149 @@ function getStorageKeys(slot: PrinterSlot) {
     }
     return {
         idKey: "LAST_CONNECTED_BILL_PRINTER_ID", // with fallback to LAST_CONNECTED_PRINTER_ID
-        enabledKey: "bt_bill_printer_enabled",
+        enabledKey: slot === 'kot' ? "bt_kot_printer_enabled" : "bt_bill_printer_enabled",
     };
+}
+
+// Disconnect helper that releases a slot or device safely
+async function safeDisconnectDevice(targetDevice: any, isCap: boolean) {
+    if (!targetDevice) return;
+    try {
+        if (isCap) {
+            const ble = await getCapacitorBle();
+            if (ble?.BleClient) {
+                await ble.BleClient.disconnect(targetDevice.deviceId).catch(() => {});
+            }
+        } else {
+            if (targetDevice.gatt?.connected) {
+                targetDevice.gatt.disconnect();
+            }
+        }
+    } catch (e) {
+        console.warn("safeDisconnectDevice error:", e);
+    }
+}
+
+export interface AuthorizedPrinterItem {
+    id: string;
+    name: string;
+    type: 'WEB_BLUETOOTH' | 'CAPACITOR_BLE';
+    isSaved: boolean;
+    isConnected: boolean;
+    nativeDeviceRef?: any;
+}
+
+/**
+ * Lists previously authorized / paired devices without opening a new device picker prompt.
+ * Uses Web Bluetooth navigator.bluetooth.getDevices() or localStorage/Capacitor state.
+ */
+export async function getAuthorizedPrinters(): Promise<AuthorizedPrinterItem[]> {
+    const list: AuthorizedPrinterItem[] = [];
+    const isCapacitor = Capacitor.isNativePlatform();
+
+    if (isCapacitor) {
+        if (typeof localStorage !== 'undefined') {
+            const billId = localStorage.getItem("LAST_CONNECTED_BILL_PRINTER_ID") || localStorage.getItem("LAST_CONNECTED_PRINTER_ID");
+            const kotId = localStorage.getItem("LAST_CONNECTED_KOT_PRINTER_ID");
+            if (billId) {
+                list.push({
+                    id: billId,
+                    name: printerSlots.bill.capDevice?.name || `Paired BLE (${billId.slice(0, 6)}...)`,
+                    type: 'CAPACITOR_BLE',
+                    isSaved: true,
+                    isConnected: isPrinterConnected('bill')
+                });
+            }
+            if (kotId && kotId !== billId && !isSamePrinterForKot()) {
+                list.push({
+                    id: kotId,
+                    name: printerSlots.kot.capDevice?.name || `Paired KOT BLE (${kotId.slice(0, 6)}...)`,
+                    type: 'CAPACITOR_BLE',
+                    isSaved: true,
+                    isConnected: isPrinterConnected('kot')
+                });
+            }
+        }
+        return list;
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.bluetooth?.getDevices) {
+        try {
+            const authorized = await navigator.bluetooth.getDevices();
+            const billSavedId = typeof localStorage !== 'undefined' ? (localStorage.getItem("LAST_CONNECTED_BILL_PRINTER_ID") || localStorage.getItem("LAST_CONNECTED_PRINTER_ID")) : null;
+            const kotSavedId = typeof localStorage !== 'undefined' ? localStorage.getItem("LAST_CONNECTED_KOT_PRINTER_ID") : null;
+
+            for (const dev of authorized) {
+                const isSaved = dev.id === billSavedId || dev.id === kotSavedId;
+                const isConnected = !!(dev.gatt?.connected);
+                list.push({
+                    id: dev.id,
+                    name: dev.name || `Authorized Printer (${dev.id.slice(0, 6)}...)`,
+                    type: 'WEB_BLUETOOTH',
+                    isSaved,
+                    isConnected,
+                    nativeDeviceRef: dev
+                });
+            }
+        } catch (err) {
+            console.log("getAuthorizedPrinters getDevices error:", err);
+        }
+    }
+
+    return list;
+}
+
+/**
+ * Revoke permission / remove a device from the authorized list
+ */
+export async function forgetAuthorizedPrinter(deviceId: string): Promise<boolean> {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            if (localStorage.getItem("LAST_CONNECTED_BILL_PRINTER_ID") === deviceId) {
+                localStorage.removeItem("LAST_CONNECTED_BILL_PRINTER_ID");
+            }
+            if (localStorage.getItem("LAST_CONNECTED_PRINTER_ID") === deviceId) {
+                localStorage.removeItem("LAST_CONNECTED_PRINTER_ID");
+            }
+            if (localStorage.getItem("LAST_CONNECTED_KOT_PRINTER_ID") === deviceId) {
+                localStorage.removeItem("LAST_CONNECTED_KOT_PRINTER_ID");
+            }
+        }
+
+        // Web Bluetooth modern forget() API supported in Chrome 100+
+        if (typeof navigator !== 'undefined' && navigator.bluetooth?.getDevices) {
+            const authorized = await navigator.bluetooth.getDevices().catch(() => []);
+            const target = authorized.find((d: any) => d.id === deviceId);
+            if (target && typeof (target as any).forget === 'function') {
+                if (target.gatt?.connected) {
+                    try { target.gatt.disconnect(); } catch (e) {}
+                }
+                await (target as any).forget();
+                return true;
+            }
+        }
+        return true;
+    } catch (e) {
+        console.warn("forgetAuthorizedPrinter error:", e);
+        return false;
+    }
+}
+
+/**
+ * Connect to an already authorized/bonded device directly without opening the OS scan dialog
+ */
+export async function connectAuthorizedPrinter(deviceId: string, slot: PrinterSlot = 'bill') {
+    const effectiveSlot: PrinterSlot = (slot === 'kot' && isSamePrinterForKot()) ? 'bill' : slot;
+    const isCapacitor = Capacitor.isNativePlatform();
+    const { idKey } = getStorageKeys(effectiveSlot);
+
+    if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(idKey, deviceId);
+        if (effectiveSlot === 'bill') localStorage.setItem("LAST_CONNECTED_PRINTER_ID", deviceId);
+    }
+
+    // Attempt connecting directly via existing authorization
+    return await ensurePrinterConnected(false, slot);
 }
 
 export async function ensurePrinterConnected(forcePrompt: boolean = false, slot: PrinterSlot = 'bill') {
@@ -70,8 +305,10 @@ export async function ensurePrinterConnected(forcePrompt: boolean = false, slot:
         throw new Error("Web Bluetooth is not supported in this browser.");
     }
 
-    const state = printerSlots[slot];
-    const { idKey } = getStorageKeys(slot);
+    // Determine actual effective target slot (if shared, 'kot' maps to 'bill')
+    const effectiveSlot: PrinterSlot = (slot === 'kot' && isSamePrinterForKot()) ? 'bill' : slot;
+    const state = printerSlots[effectiveSlot];
+    const { idKey } = getStorageKeys(effectiveSlot);
 
     if (state.connPromise && !forcePrompt) {
         return await state.connPromise;
@@ -80,20 +317,40 @@ export async function ensurePrinterConnected(forcePrompt: boolean = false, slot:
     state.connPromise = (async () => {
         if (isCapacitor) {
             try {
+                const ble = await getCapacitorBle();
+                if (!ble?.BleClient) {
+                    throw new Error("Capacitor Bluetooth plugin is unavailable on this device.");
+                }
+                const { BleClient } = ble;
+
                 await BleClient.initialize();
                 
+                // If not forcing prompt, check if connection is genuinely alive
                 if (!forcePrompt && state.capDevice && state.capChar) {
-                    return { capacitor: true };
+                    try {
+                        const isConn = await BleClient.isEnabled().catch(() => true);
+                        if (isConn) {
+                            if (slot === 'kot' && isSamePrinterForKot()) {
+                                syncSharedStateToKot();
+                            }
+                            return { capacitor: true };
+                        }
+                    } catch (e) {}
                 }
 
-                if (forcePrompt && state.capDevice) {
-                    await BleClient.disconnect(state.capDevice.deviceId).catch(()=>{});
+                if (forcePrompt) {
+                    // Only disconnect if the other slot is not actively using this device
+                    const otherSlot: PrinterSlot = effectiveSlot === 'bill' ? 'kot' : 'bill';
+                    const isOtherUsingSame = !isSamePrinterForKot() && printerSlots[otherSlot]?.capDevice?.deviceId === state.capDevice?.deviceId;
+                    if (state.capDevice && !isOtherUsingSame) {
+                        await safeDisconnectDevice(state.capDevice, true);
+                    }
                     state.capDevice = null;
                     state.capChar = "";
                 }
 
                 let savedCapacitorId = typeof localStorage !== 'undefined' ? localStorage.getItem(idKey) : null;
-                if (!savedCapacitorId && slot === 'bill' && typeof localStorage !== 'undefined') {
+                if (!savedCapacitorId && effectiveSlot === 'bill' && typeof localStorage !== 'undefined') {
                     savedCapacitorId = localStorage.getItem("LAST_CONNECTED_PRINTER_ID");
                 }
 
@@ -104,17 +361,20 @@ export async function ensurePrinterConnected(forcePrompt: boolean = false, slot:
                 }
 
                 if (!state.capDevice) {
-                    state.capDevice = await BleClient.requestDevice({
-                        // POS printers accept all
-                    });
+                    state.capDevice = await BleClient.requestDevice({});
                 }
 
+                // Connect with disconnect callback
                 await BleClient.connect(state.capDevice.deviceId, (deviceId) => {
-                    state.capDevice = null;
-                    state.capChar = "";
-                    state.capMtu = 20;
-                    state.capCanWriteWithoutResponse = false;
-                    console.log(`Capacitor Printer [${slot}] disconnected`, deviceId);
+                    if (state.capDevice?.deviceId === deviceId) {
+                        state.capChar = "";
+                        state.capMtu = 20;
+                        state.capCanWriteWithoutResponse = false;
+                    }
+                    if (isSamePrinterForKot() && printerSlots.kot.capDevice?.deviceId === deviceId) {
+                        printerSlots.kot.capChar = "";
+                    }
+                    console.log(`Capacitor Printer [${effectiveSlot}] disconnected`, deviceId);
                 });
 
                 try {
@@ -178,33 +438,66 @@ export async function ensurePrinterConnected(forcePrompt: boolean = false, slot:
 
                 if (state.capDevice?.deviceId && typeof localStorage !== 'undefined') {
                     localStorage.setItem(idKey, state.capDevice.deviceId);
-                    if (slot === 'bill') localStorage.setItem("LAST_CONNECTED_PRINTER_ID", state.capDevice.deviceId);
+                    if (effectiveSlot === 'bill') localStorage.setItem("LAST_CONNECTED_PRINTER_ID", state.capDevice.deviceId);
+                }
+
+                if (isSamePrinterForKot()) {
+                    syncSharedStateToKot();
                 }
 
                 return { capacitor: true };
             } catch (error: any) {
-                state.capDevice = null;
-                throw new Error("Capacitor BLE Error: " + (error.message || error));
+                state.capChar = "";
+                const rawMsg = error?.message || String(error);
+                let actionableMsg = rawMsg;
+                if (rawMsg.includes("133") || rawMsg.includes("status: 19") || rawMsg.includes("GATT") || rawMsg.includes("timeout") || rawMsg.includes("failed to connect")) {
+                    actionableMsg = `Printer connect nahi ho paya. Yeh kisi doosre phone se connected ho sakta hai. Kripya doosre phone se disconnect karein ya printer ko restart karein. (${rawMsg})`;
+                }
+                state.status = 'ERROR';
+                state.lastError = actionableMsg;
+                throw new Error("Capacitor BLE Error: " + actionableMsg);
             }
         }
 
         try {
+            // Web Bluetooth Flow
+            // If already connected and characteristic is valid, verify GATT connection
             if (!forcePrompt && state.device && state.device.gatt?.connected && state.char) {
+                if (slot === 'kot' && isSamePrinterForKot()) {
+                    syncSharedStateToKot();
+                }
                 return state.char;
             }
 
-            const previousDevice = state.device;
-            const previousServer = state.server;
-            const previousChar = state.char;
+            // If device exists but gatt.connected is false (idle sleep), attempt controlled reconnect
+            if (!forcePrompt && state.device && !state.device.gatt?.connected) {
+                try {
+                    console.log(`[${effectiveSlot}] Device idle/disconnected. Attempting single controlled reconnect...`);
+                    state.server = await state.device.gatt.connect();
+                    if (state.server) {
+                        state.char = await discoverPrinterCharacteristic(state.server);
+                        if (state.char) {
+                            if (isSamePrinterForKot()) syncSharedStateToKot();
+                            return state.char;
+                        }
+                    }
+                } catch (reconnectErr) {
+                    console.log(`Silent reconnect failed for [${effectiveSlot}], proceeding to discovery...`, reconnectErr);
+                    state.server = null;
+                    state.char = null;
+                }
+            }
 
+            const previousDevice = state.device;
             let autoReconnected = false;
             let lastPrinterId = typeof localStorage !== 'undefined' ? localStorage.getItem(idKey) : null;
-            if (!lastPrinterId && slot === 'bill' && typeof localStorage !== 'undefined') {
+            if (!lastPrinterId && effectiveSlot === 'bill' && typeof localStorage !== 'undefined') {
                 lastPrinterId = localStorage.getItem("LAST_CONNECTED_PRINTER_ID");
             }
 
             let targetDevice: BluetoothDevice | null = null;
 
+            // Try getDevices() for silent reconnection without popup if supported
             if (!forcePrompt && !state.device && navigator.bluetooth.getDevices) {
                 try {
                     const devices = await navigator.bluetooth.getDevices();
@@ -216,57 +509,103 @@ export async function ensurePrinterConnected(forcePrompt: boolean = false, slot:
                         }
                     }
                     if (!autoReconnected && devices.length > 0) {
-                        // If checking KOT slot and bill already has devices[0], try another if available
-                        const otherSlot = slot === 'bill' ? 'kot' : 'bill';
-                        const otherDeviceId = printerSlots[otherSlot]?.device?.id;
-                        const candidate = devices.find(d => d.id !== otherDeviceId) || devices[0];
-                        if (candidate) {
-                            targetDevice = candidate;
-                            autoReconnected = true;
-                        }
+                        targetDevice = devices[0];
+                        autoReconnected = true;
                     }
                 } catch(e) {
-                    console.log(`Auto-reconnect getDevices failed for [${slot}]:`, e);
+                    console.log(`Auto-reconnect getDevices failed for [${effectiveSlot}]:`, e);
+                }
+            }
+
+            // Before requesting device with prompt, if user explicitly clicked connect/change,
+            // gracefully release the old connection so the printer can advertise if necessary
+            if (forcePrompt && previousDevice && previousDevice.gatt?.connected) {
+                const otherSlot: PrinterSlot = effectiveSlot === 'bill' ? 'kot' : 'bill';
+                const isOtherUsingSame = !isSamePrinterForKot() && printerSlots[otherSlot]?.device === previousDevice;
+                if (!isOtherUsingSame) {
+                    try { previousDevice.gatt.disconnect(); } catch (e) {}
                 }
             }
 
             if (!targetDevice) {
+                // Strategy: 
+                // In Chrome, acceptAllDevices: true causes every nearby smart TV, earphone, smartwatch, beacon, etc.
+                // to appear as "Unknown or Unsupported Device", making the thermal printer almost impossible to spot!
+                // We first attempt a clean filtered discovery matching known POS printer services/prefixes.
+                // If cancelled or rejected, or if user prefers full scan, fallback gracefully.
                 try {
+                    // Try service-filtered search first so Chrome dialog shows clean printer devices
                     targetDevice = await navigator.bluetooth.requestDevice({
-                        acceptAllDevices: true,
+                        filters: [
+                            { services: ["000018f0-0000-1000-8000-00805f9b34fb"] },
+                            { services: ["e7810a71-73ae-499d-8c15-faa9aef0c3f2"] },
+                            { services: ["0000fee7-0000-1000-8000-00805f9b34fb"] },
+                            { services: ["49535343-fe7d-4ae5-8fa9-9fafd205e455"] },
+                            { namePrefix: "POS" },
+                            { namePrefix: "RP" },
+                            { namePrefix: "Printer" },
+                            { namePrefix: "BT" },
+                            { namePrefix: "MPT" },
+                            { namePrefix: "MTP" },
+                            { namePrefix: "MT" },
+                            { namePrefix: "PSF" },
+                            { namePrefix: "SR" },
+                            { namePrefix: "InnerPrinter" },
+                            { namePrefix: "Everycom" },
+                            { namePrefix: "TVS" },
+                            { namePrefix: "58" },
+                            { namePrefix: "80" },
+                            { namePrefix: "219" },
+                            { namePrefix: "M58" },
+                            { namePrefix: "Thermal" }
+                        ],
                         optionalServices: PRINTER_SERVICE_UUIDS
                     });
-                } catch (error: any) {
-                    console.log(`Device request failed or cancelled [${slot}]:`, error);
-                    if (previousDevice && previousDevice.gatt?.connected && previousChar) {
-                        state.device = previousDevice;
-                        state.server = previousServer;
-                        state.char = previousChar;
-                        return previousChar;
+                } catch (filterError: any) {
+                    if (filterError.name === 'NotFoundError' || filterError.message?.includes('cancelled')) {
+                        // User cancelled the dialog or the printer didn't match the prefix/service filter.
+                        // We do not immediately fail: if forcePrompt was clicked, give one fallback to acceptAllDevices
+                        // only if user didn't explicitly hit Cancel
+                        const isCancel = filterError.message?.includes('User cancelled') || filterError.message?.includes('cancelled');
+                        if (isCancel) {
+                            throw new Error("Printer selection was cancelled.");
+                        }
                     }
-                    if (error.name === 'NotFoundError' || error.message.includes('cancelled')) {
-                        throw new Error("Printer selection was cancelled.");
+                    
+                    // Fallback to acceptAllDevices if filtered scan was unsupported by specific printer firmware
+                    try {
+                        targetDevice = await navigator.bluetooth.requestDevice({
+                            acceptAllDevices: true,
+                            optionalServices: PRINTER_SERVICE_UUIDS
+                        });
+                    } catch (fallbackError: any) {
+                        console.log(`Device request cancelled or failed [${effectiveSlot}]:`, fallbackError);
+                        if (fallbackError.name === 'NotFoundError' || fallbackError.message?.includes('cancelled')) {
+                            throw new Error("Printer selection was cancelled.");
+                        }
+                        throw new Error("Failed to request bluetooth device: " + fallbackError.message);
                     }
-                    throw new Error("Failed to request bluetooth device: " + error.message);
                 }
-            }
-
-            if (previousDevice && previousDevice !== targetDevice && previousDevice.gatt?.connected) {
-                try {
-                    previousDevice.gatt.disconnect();
-                } catch(e) {}
             }
 
             state.device = targetDevice;
 
-            state.device.addEventListener("gattserverdisconnected", () => {
+            const onDisconnect = () => {
                 state.server = null;
                 state.char = null;
-                console.log(`Printer [${slot}] disconnected (gattserverdisconnected)`);
-            });
+                if (isSamePrinterForKot() && effectiveSlot === 'bill') {
+                    printerSlots.kot.server = null;
+                    printerSlots.kot.char = null;
+                }
+                console.log(`Printer [${effectiveSlot}] disconnected (gattserverdisconnected)`);
+            };
 
-            let retries = 4;
-            let connectError = null;
+            // Avoid adding duplicate listener
+            state.device.removeEventListener("gattserverdisconnected", onDisconnect);
+            state.device.addEventListener("gattserverdisconnected", onDisconnect);
+
+            let retries = 3;
+            let connectError: any = null;
             
             while (retries > 0) {
                 try {
@@ -278,74 +617,52 @@ export async function ensurePrinterConnected(forcePrompt: boolean = false, slot:
                     if (state.server) break;
                 } catch (error) {
                     connectError = error;
-                    console.log(`GATT Connect attempt [${slot}] failed. Retries left: ${retries - 1}`, error);
+                    console.log(`GATT Connect attempt [${effectiveSlot}] failed. Retries left: ${retries - 1}`, error);
                     retries--;
                     if (retries > 0) {
-                        await new Promise(resolve => setTimeout(resolve, 350));
+                        await new Promise(resolve => setTimeout(resolve, 400));
                     }
                 }
             }
 
             if (!state.server) {
-                console.log(`GATT Connect failed [${slot}]:`, connectError);
-                try {
-                    targetDevice = await navigator.bluetooth.requestDevice({
-                        acceptAllDevices: true,
-                        optionalServices: PRINTER_SERVICE_UUIDS
-                    });
-                    state.device = targetDevice;
-                    state.device.addEventListener("gattserverdisconnected", () => {
-                        state.server = null;
-                        state.char = null;
-                        console.log(`Printer [${slot}] disconnected (gattserverdisconnected)`);
-                    });
-                    state.server = await state.device.gatt?.connect() || null;
-                } catch (fallbackErr: any) {
-                    if (!forcePrompt && (fallbackErr.name === 'NotFoundError' || fallbackErr.message?.includes('cancelled'))) {
-                        throw new Error(`Bluetooth printer [${slot}] is offline. Please select printer to connect.`);
-                    }
-                    throw fallbackErr;
+                const rawMsg = connectError?.message || "";
+                let actionableMsg = `Could not connect to ${effectiveSlot.toUpperCase()} printer.`;
+                if (rawMsg.includes("Connection failed") || rawMsg.includes("GATT") || rawMsg.includes("busy") || rawMsg.includes("status: 133") || rawMsg.includes("status: 19") || rawMsg.includes("timeout")) {
+                    actionableMsg = `Printer busy ya kisi doosre phone se connected ho sakta hai. Kripya doosre phone ka Bluetooth OFF karein ya printer ko restart karein. (${rawMsg || "Connection Rejected"})`;
+                } else if (rawMsg) {
+                    actionableMsg = rawMsg;
                 }
-
-                if (!state.server) throw new Error(`Could not connect to ${slot.toUpperCase()} printer. Please ensure printer is turned on.`);
+                state.status = 'ERROR';
+                state.lastError = actionableMsg;
+                throw new Error(actionableMsg);
             }
             
             if (state.device && state.device.id && typeof localStorage !== 'undefined') {
                 localStorage.setItem(idKey, state.device.id);
-                if (slot === 'bill') localStorage.setItem("LAST_CONNECTED_PRINTER_ID", state.device.id);
+                if (effectiveSlot === 'bill') localStorage.setItem("LAST_CONNECTED_PRINTER_ID", state.device.id);
             }
 
-            let printChar: BluetoothRemoteGATTCharacteristic | null = null;
-            for (const uuid of PRINTER_SERVICE_UUIDS) {
-                try {
-                    const service = await state.server.getPrimaryService(uuid);
-                    const characteristics = await service.getCharacteristics();
-                    printChar = characteristics.find(c => c.properties.writeWithoutResponse) ||
-                                characteristics.find(c => c.properties.write) || null;
-                } catch (e) {}
-                if (printChar) break;
-            }
-
+            // Discover writable characteristic
+            const printChar = await discoverPrinterCharacteristic(state.server);
             if (!printChar) {
-                const services = await state.server.getPrimaryServices();
-                for (const service of services) {
-                    const characteristics = await service.getCharacteristics();
-                    printChar = characteristics.find(c => c.properties.writeWithoutResponse) ||
-                                characteristics.find(c => c.properties.write) || null;
-                    if (printChar) break;
-                }
-            }
-
-            if (!printChar) {
+                state.status = 'ERROR';
+                state.lastError = "No writable characteristic found on this printer.";
                 throw new Error("No writable characteristic found on this printer.");
             }
             
             state.char = printChar;
+            state.status = 'CONNECTED';
+            state.lastError = null;
+            if (isSamePrinterForKot()) {
+                syncSharedStateToKot();
+            }
             return state.char;
-        } catch (e) {
-            state.device = null;
+        } catch (e: any) {
             state.server = null;
             state.char = null;
+            state.status = 'ERROR';
+            state.lastError = e?.message || "Connection failed";
             throw e;
         } finally {
             state.connPromise = null;
@@ -354,17 +671,57 @@ export async function ensurePrinterConnected(forcePrompt: boolean = false, slot:
     return state.connPromise;
 }
 
+// Helper to discover writable characteristic from GATT server
+async function discoverPrinterCharacteristic(gattServer: any): Promise<BluetoothRemoteGATTCharacteristic | null> {
+    let printChar: BluetoothRemoteGATTCharacteristic | null = null;
+    for (const uuid of PRINTER_SERVICE_UUIDS) {
+        try {
+            const service = await gattServer.getPrimaryService(uuid);
+            const characteristics = await service.getCharacteristics();
+            printChar = characteristics.find((c: any) => c.properties.writeWithoutResponse) ||
+                        characteristics.find((c: any) => c.properties.write) || null;
+        } catch (e) {}
+        if (printChar) break;
+    }
+
+    if (!printChar) {
+        try {
+            const services = await gattServer.getPrimaryServices();
+            for (const service of services) {
+                const characteristics = await service.getCharacteristics();
+                printChar = characteristics.find((c: any) => c.properties.writeWithoutResponse) ||
+                            characteristics.find((c: any) => c.properties.write) || null;
+                if (printChar) break;
+            }
+        } catch (e) {}
+    }
+    return printChar;
+}
+
+function syncSharedStateToKot() {
+    const b = printerSlots.bill;
+    const k = printerSlots.kot;
+    k.device = b.device;
+    k.server = b.server;
+    k.char = b.char;
+    k.capDevice = b.capDevice;
+    k.capService = b.capService;
+    k.capChar = b.capChar;
+    k.capMtu = b.capMtu;
+    k.capCanWriteWithoutResponse = b.capCanWriteWithoutResponse;
+}
+
 export function isPrinterConnected(slot: PrinterSlot = 'bill'): boolean {
     const isCapacitor = Capacitor.isNativePlatform();
-    const state = printerSlots[slot];
+    const targetSlot: PrinterSlot = (slot === 'kot' && isSamePrinterForKot()) ? 'bill' : slot;
+    const state = printerSlots[targetSlot];
+
     if (isCapacitor) {
         if (state.capDevice && state.capChar) return true;
-        // Fallback: if checking KOT but only Bill is connected, fallback to Bill
         if (slot === 'kot' && printerSlots.bill.capDevice && printerSlots.bill.capChar) return true;
         return false;
     }
     if (state.device && state.device.gatt?.connected && state.char) return true;
-    // Fallback: if checking KOT but only Bill is connected, fallback to Bill
     if (slot === 'kot' && printerSlots.bill.device && printerSlots.bill.device.gatt?.connected && printerSlots.bill.char) return true;
     return false;
 }
@@ -466,41 +823,78 @@ const calculateTaxBreakup: any = (order, business) => {
 };
 
 export async function printReceiptData(order: any, business: any, elementToPrint?: HTMLElement | null, targetSlot?: PrinterSlot) {
-    const isCapacitor = Capacitor.isNativePlatform();
+    return enqueuePrintTask(async () => {
+        const isCapacitor = Capacitor.isNativePlatform();
 
-    // Auto-detect slot if not provided
-    const isKot = elementToPrint && elementToPrint.classList && elementToPrint.classList.contains('kot-container');
-    const slot: PrinterSlot = targetSlot || (isKot ? 'kot' : 'bill');
+        // Auto-detect slot if not provided
+        const isKot = elementToPrint && elementToPrint.classList && elementToPrint.classList.contains('kot-container');
+        const slot: PrinterSlot = targetSlot || (isKot ? 'kot' : 'bill');
+        const effectiveSlot: PrinterSlot = (slot === 'kot' && isSamePrinterForKot()) ? 'bill' : slot;
 
-    // Get primary target state or fallback to other slot if only one printer is paired
-    let activeState = printerSlots[slot];
-    let usingFallback = false;
+        // Ensure printer is connected and characteristic is alive before printing
+        let activeState = printerSlots[effectiveSlot];
+        const isAlive = isCapacitor 
+            ? !!(activeState.capDevice && activeState.capChar)
+            : !!(activeState.char && activeState.device?.gatt?.connected);
 
-    if (isCapacitor) {
-        if (!activeState.capDevice || !activeState.capChar) {
-            // Check fallback slot
-            const altSlot: PrinterSlot = slot === 'kot' ? 'bill' : 'kot';
-            if (printerSlots[altSlot].capDevice && printerSlots[altSlot].capChar) {
-                activeState = printerSlots[altSlot];
-                usingFallback = true;
+        if (!isAlive) {
+            console.log(`Printer [${effectiveSlot}] not active before print, attempting silent reconnect...`);
+            activeState.status = 'RECONNECTING';
+            try {
+                await ensurePrinterConnected(false, effectiveSlot);
+                activeState = printerSlots[effectiveSlot];
+            } catch (reconErr: any) {
+                activeState.status = 'ERROR';
+                activeState.lastError = reconErr?.message || "Reconnection failed";
+                console.warn(`Pre-print reconnect attempt failed for [${effectiveSlot}]:`, reconErr);
             }
         }
-        if (!activeState.capDevice || !activeState.capChar) {
-            throw new Error(`Bluetooth printer for ${slot.toUpperCase()} not connected. Please connect printer in settings.`);
-        }
-    } else {
-        if (!activeState.char || !activeState.device?.gatt?.connected) {
-            // Check fallback slot
-            const altSlot: PrinterSlot = slot === 'kot' ? 'bill' : 'kot';
-            if (printerSlots[altSlot].char && printerSlots[altSlot].device?.gatt?.connected) {
-                activeState = printerSlots[altSlot];
-                usingFallback = true;
+
+        if (isCapacitor) {
+            if (!activeState.capDevice || !activeState.capChar) {
+                // Check fallback slot
+                const altSlot: PrinterSlot = effectiveSlot === 'kot' ? 'bill' : 'kot';
+                if (printerSlots[altSlot].capDevice && printerSlots[altSlot].capChar) {
+                    activeState = printerSlots[altSlot];
+                }
+            }
+            if (!activeState.capDevice || !activeState.capChar) {
+                const err = `Bluetooth printer for ${slot.toUpperCase()} not connected. Please connect printer in settings.`;
+                activeState.status = 'DISCONNECTED';
+                activeState.lastError = err;
+                triggerPrinterRecoveryModal({
+                    slot,
+                    error: err,
+                    printerName: getConnectedPrinterName(slot),
+                    onRetry: async () => { await ensurePrinterConnected(false, slot); },
+                    onScan: async () => { await ensurePrinterConnected(true, slot); }
+                });
+                throw new Error(err);
+            }
+        } else {
+            if (!activeState.char || !activeState.device?.gatt?.connected) {
+                // Check fallback slot
+                const altSlot: PrinterSlot = effectiveSlot === 'kot' ? 'bill' : 'kot';
+                if (printerSlots[altSlot].char && printerSlots[altSlot].device?.gatt?.connected) {
+                    activeState = printerSlots[altSlot];
+                }
+            }
+            if (!activeState.char || !activeState.device?.gatt?.connected) {
+                const err = `Bluetooth printer for ${slot.toUpperCase()} not connected. Please connect printer in settings.`;
+                activeState.status = 'DISCONNECTED';
+                activeState.lastError = err;
+                triggerPrinterRecoveryModal({
+                    slot,
+                    error: err,
+                    printerName: getConnectedPrinterName(slot),
+                    onRetry: async () => { await ensurePrinterConnected(false, slot); },
+                    onScan: async () => { await ensurePrinterConnected(true, slot); }
+                });
+                throw new Error(err);
             }
         }
-        if (!activeState.char || !activeState.device?.gatt?.connected) {
-            throw new Error(`Bluetooth printer for ${slot.toUpperCase()} not connected. Please connect printer in settings.`);
-        }
-    }
+
+        activeState.status = 'PRINTING';
 
     try {
         const dataChunks: Uint8Array[] = [];
@@ -1220,8 +1614,13 @@ export async function printReceiptData(order: any, business: any, elementToPrint
         for (let i = 0; i < printData.length; i += CHUNK_SIZE) {
             const slice = printData.slice(i, i + CHUNK_SIZE);
             if (isCapacitor) {
+                const ble = await getCapacitorBle();
+                const BleClient = ble?.BleClient;
+                const BluetoothLe = ble?.BluetoothLe;
+                const dataViewToHexString = ble?.dataViewToHexString;
+
                 const dataView = new DataView(slice.buffer, slice.byteOffset, slice.byteLength);
-                if (activeState.capCanWriteWithoutResponse) {
+                if (activeState.capCanWriteWithoutResponse && BluetoothLe && dataViewToHexString) {
                     try {
                         const hexVal = dataViewToHexString(dataView);
                         await BluetoothLe.writeWithoutResponse({
@@ -1231,9 +1630,9 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                             value: hexVal
                         });
                     } catch(e) {
-                        await BleClient.write(activeState.capDevice.deviceId, activeState.capService, activeState.capChar, dataView);
+                        if (BleClient) await BleClient.write(activeState.capDevice.deviceId, activeState.capService, activeState.capChar, dataView);
                     }
-                } else {
+                } else if (BleClient) {
                     await BleClient.write(activeState.capDevice.deviceId, activeState.capService, activeState.capChar, dataView);
                 }
                 if (CHUNK_DELAY > 0) {
@@ -1257,14 +1656,30 @@ export async function printReceiptData(order: any, business: any, elementToPrint
             }
         }
 
+        activeState.status = 'CONNECTED';
         return true;
     } catch (error: any) {
         console.error("Direct Web Print Error:", error);
+        activeState.status = 'ERROR';
+        activeState.lastError = error?.message || "Failed to print over Bluetooth";
+        
         if (Capacitor.isNativePlatform()) {
             console.error("CAPACITOR BLE ERROR:", JSON.stringify(error));
         }
+
+        // Trigger Recovery Popup so user can Reconnect, Scan, or Retry without losing context
+        triggerPrinterRecoveryModal({
+            slot,
+            error: error?.message || "Bluetooth print write failed",
+            printerName: getConnectedPrinterName(slot),
+            uncertainOutcome: true, // Warn user to verify paper before duplicating receipt
+            onRetry: async () => { await printReceiptData(order, business, elementToPrint, targetSlot); },
+            onScan: async () => { await ensurePrinterConnected(true, slot); }
+        });
+
         throw new Error(error.message || "Failed to print over Bluetooth");
     }
+    });
 }
 // Force HMR trigger
 const pLR: any = (l, r, w = 32) => {
@@ -1587,24 +2002,35 @@ export function generateTextReceiptPreview(order: any, business: any, isKot: boo
 export async function disconnectPrinter(clearSavedId: boolean = false, targetSlot: PrinterSlot | 'all' = 'all') {
     try {
         const slotsToDisconnect: PrinterSlot[] = targetSlot === 'all' ? ['bill', 'kot'] : [targetSlot];
+        const shared = isSamePrinterForKot();
         
         for (const s of slotsToDisconnect) {
             const { idKey } = getStorageKeys(s);
             if (clearSavedId && typeof localStorage !== 'undefined') {
                 localStorage.removeItem(idKey);
-                if (s === 'bill') localStorage.removeItem("LAST_CONNECTED_PRINTER_ID");
+                if (s === 'bill' || shared) localStorage.removeItem("LAST_CONNECTED_PRINTER_ID");
+                if (s === 'kot') localStorage.removeItem("LAST_CONNECTED_KOT_PRINTER_ID");
             }
 
             const state = printerSlots[s];
+            const otherSlot: PrinterSlot = s === 'bill' ? 'kot' : 'bill';
+            const otherState = printerSlots[otherSlot];
+            
+            // If disconnecting only one slot while both share same physical printer and the other is still active, don't drop GATT hardware connection
+            const shouldDisconnectHardware = targetSlot === 'all' || !shared;
+
             const isCapacitor = Capacitor.isNativePlatform();
             if (isCapacitor) {
-                if (state.capDevice) {
-                    await BleClient.disconnect(state.capDevice.deviceId).catch(()=>{});
-                    state.capDevice = null;
-                    state.capChar = "";
+                if (shouldDisconnectHardware && state.capDevice) {
+                    const ble = await getCapacitorBle();
+                    if (ble?.BleClient) {
+                        await ble.BleClient.disconnect(state.capDevice.deviceId).catch(()=>{});
+                    }
                 }
+                state.capDevice = null;
+                state.capChar = "";
             } else {
-                if (state.device && state.device.gatt?.connected) {
+                if (shouldDisconnectHardware && state.device && state.device.gatt?.connected) {
                     try { state.device.gatt.disconnect(); } catch(e) {}
                 }
                 state.device = null;

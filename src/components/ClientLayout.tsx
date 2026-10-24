@@ -18,6 +18,12 @@ import { CurrencyProvider } from "@/lib/currency-context";
 import SchemaDebugger from "@/components/SchemaDebugger";
 import DeveloperDebugPanel from "@/components/DeveloperDebugPanel";
 import { useProfileCache } from "@/hooks/useProfileCache";
+import dynamic from "next/dynamic";
+
+const PrinterRecoveryModal = dynamic(
+  () => import("@/components/printing/PrinterRecoveryModal").then(mod => mod.PrinterRecoveryModal),
+  { ssr: false }
+);
 
 
 
@@ -47,6 +53,34 @@ export default function ClientLayout({
   
   useEffect(() => {
     setIsApp(Capacitor.isNativePlatform());
+
+    // Auto-reconnect saved Bluetooth printer(s) on load/refresh (Windows, Android, Phone, Laptop)
+    const savedBillPrinter = typeof localStorage !== 'undefined' ? (localStorage.getItem("LAST_CONNECTED_BILL_PRINTER_ID") || localStorage.getItem("LAST_CONNECTED_PRINTER_ID")) : null;
+    const savedKotPrinter = typeof localStorage !== 'undefined' ? localStorage.getItem("LAST_CONNECTED_KOT_PRINTER_ID") : null;
+    const isBillEnabled = typeof localStorage !== 'undefined' ? (localStorage.getItem("bt_printer_enabled_bill") !== "false" && localStorage.getItem("bt_printer_enabled") !== "false") : true;
+    const isKotEnabled = typeof localStorage !== 'undefined' ? localStorage.getItem("bt_printer_enabled_kot") !== "false" : true;
+    
+    if ((savedBillPrinter && isBillEnabled) || (savedKotPrinter && isKotEnabled)) {
+      const timer = setTimeout(async () => {
+        try {
+          // In standard web browsers, ensure Web Bluetooth is present before attempting
+          if (!Capacitor.isNativePlatform() && (typeof navigator === 'undefined' || !navigator.bluetooth)) {
+            return;
+          }
+          const { ensurePrinterConnected } = await import("@/lib/web-bluetooth");
+          if (savedBillPrinter && isBillEnabled) {
+            await ensurePrinterConnected(false, 'bill').catch((e) => console.log("Silent bill printer reconnect deferred:", e));
+          }
+          if (savedKotPrinter && isKotEnabled && savedKotPrinter !== savedBillPrinter) {
+            await ensurePrinterConnected(false, 'kot').catch((e) => console.log("Silent kot printer reconnect deferred:", e));
+          }
+          console.log("✅ Auto-reconnected saved printer(s) on refresh");
+        } catch(e) {
+          console.log("Silent printer auto-reconnect deferred until print:", e);
+        }
+      }, 800);
+      return () => clearTimeout(timer);
+    }
   }, []);
 
   useEffect(() => {
@@ -321,8 +355,11 @@ export default function ClientLayout({
           </div>
         </div>
       </div>
-      <DeveloperDebugPanel />
-      <SchemaDebugger />
+      <div className="print:hidden">
+        <DeveloperDebugPanel />
+        <SchemaDebugger />
+        <PrinterRecoveryModal />
+      </div>
     </CurrencyProvider>
   );
 }

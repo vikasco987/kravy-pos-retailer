@@ -96,11 +96,11 @@ export function QuickPrinterStatus({ className = "", compact = false }: QuickPri
           type="button"
           onClick={handleDisconnect}
           disabled={loading}
-          title="Disconnect Printer"
-          className="ml-0.5 px-1.5 py-0.5 rounded-md bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 transition-colors flex items-center gap-0.5 font-black uppercase text-[8.5px] cursor-pointer"
+          title="Disconnect this printer (Release connection for other devices)"
+          className="ml-0.5 px-1.5 py-0.5 rounded-md bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 transition-colors flex items-center gap-1 font-bold text-[8.5px] cursor-pointer"
         >
           {loading ? <RefreshCw size={8} className="animate-spin" /> : <Unplug size={8} />}
-          <span>Off</span>
+          <span>Disconnect</span>
         </button>
       ) : (
         <button

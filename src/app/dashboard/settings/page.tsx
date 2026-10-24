@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   UserCircle, Activity, Users, BarChart3,
-  ChevronRight, Shield, Bell, Palette, HelpCircle, Database, Percent, Book, Award, Zap, LayoutDashboard, Printer, Sliders, Package
+  ChevronRight, Shield, Bell, Palette, HelpCircle, Database, Percent, Book, Award, Zap, LayoutDashboard, Printer, Sliders, Package, Bluetooth
 } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 
@@ -80,6 +80,13 @@ export default function SettingsPage() {
           color: "#EC4899",
           label: "Sidebar Menu Controls",
           desc: "Hide unnecessary sidebar items & customize your navigation menu"
+        },
+        {
+          href: "/dashboard/settings/connect-printer",
+          icon: <Bluetooth size={20} />,
+          color: "#4F46E5",
+          label: "Connect Printer",
+          desc: "Pair and manage wireless Bluetooth thermal printers for Bill & KOT"
         },
         {
           href: "/dashboard/settings/printing",
