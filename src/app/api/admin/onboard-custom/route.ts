@@ -73,10 +73,110 @@ export async function POST(req: Request) {
       return u;
     });
 
-    // Handle Menu Excel if provided
+    // Handle Menu (Excel or JSON)
+    const manualJson = formData.get("manualJson")?.toString();
     const menuFile = formData.get("menuFile");
     let itemsCreated = 0;
-    
+
+    // Helper to get or create Category
+    const categoriesMap = new Map<string, string>();
+    const getCategoryId = async (categoryName: string) => {
+      const cleanCat = categoryName.trim() || "General";
+      if (!categoriesMap.has(cleanCat)) {
+        let cat = await prisma.category.findFirst({
+          where: { name: cleanCat, clerkId }
+        });
+        if (!cat) {
+          cat = await prisma.category.create({
+            data: { name: cleanCat, clerkId }
+          });
+        }
+        categoriesMap.set(cleanCat, cat.id);
+      }
+      return categoriesMap.get(cleanCat)!;
+    };
+
+    // 1. Process Manual JSON if provided
+    if (manualJson && manualJson.trim()) {
+      try {
+        let parsed: any;
+        const text = manualJson.trim();
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          // Extract JSON object or array if surrounded by markdown or extra text
+          let depth = 0;
+          let start = -1;
+          for (let i = 0; i < text.length; i++) {
+            if (text[i] === "{" || text[i] === "[") {
+              if (depth === 0) start = i;
+              depth++;
+            } else if (text[i] === "}" || text[i] === "]") {
+              depth--;
+              if (depth === 0 && start !== -1) {
+                try {
+                  parsed = JSON.parse(text.substring(start, i + 1));
+                  break;
+                } catch {}
+              }
+            }
+          }
+        }
+
+        const rawList: any[] = Array.isArray(parsed)
+          ? parsed
+          : Array.isArray(parsed?.m)
+          ? parsed.m
+          : Array.isArray(parsed?.menu)
+          ? parsed.menu
+          : [];
+
+        for (const item of rawList) {
+          try {
+            const name = (item.n || item.name || "").toString().trim();
+            if (!name) continue;
+
+            const categoryName = (item.c || item.category || "General").toString().trim();
+            const categoryId = await getCategoryId(categoryName);
+
+            const rawPrice = item.p ?? item.price ?? 0;
+            const price = typeof rawPrice === "number" ? rawPrice : parseFloat(String(rawPrice).replace(/[^\d.-]/g, "")) || 0;
+
+            const rawType = (item.t || item.type || "Pure Veg").toString().toLowerCase();
+            const isVeg = !rawType.includes("non") && !rawType.includes("egg");
+            const isEgg = rawType.includes("egg");
+
+            const description = (item.d || item.description || "").toString().trim() || null;
+            const imageUrl = (item.imageUrl || item.image || item.img || "").toString().trim() || null;
+
+            await prisma.item.create({
+              data: {
+                name,
+                description,
+                price,
+                sellingPrice: price,
+                mrp: price,
+                imageUrl,
+                categoryId,
+                clerkId,
+                userId: user.id,
+                isActive: true,
+                isVeg,
+                isEgg,
+                zones: []
+              }
+            });
+            itemsCreated++;
+          } catch (itemErr) {
+            console.error("ONBOARD_CUSTOM: Error importing JSON item:", itemErr);
+          }
+        }
+      } catch (jsonErr) {
+        console.error("ONBOARD_CUSTOM: Failed to parse manualJson:", jsonErr);
+      }
+    }
+
+    // 2. Handle Menu Excel if provided
     if (menuFile && menuFile instanceof File) {
       try {
         const buffer = await menuFile.arrayBuffer();
@@ -115,7 +215,6 @@ export async function POST(req: Request) {
             zones: findCol(/zone|area|section|location|स्थान/i)
           };
 
-          const categoriesMap = new Map<string, string>();
 
           for (const row of dataRows) {
             try {
