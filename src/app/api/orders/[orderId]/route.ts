@@ -14,6 +14,11 @@ export async function GET(
 
     const { orderId } = await params;
 
+    // Validate 24-character hexadecimal MongoDB ObjectId
+    if (!orderId || !/^[0-9a-fA-F]{24}$/.test(orderId)) {
+      return NextResponse.json({ error: "Invalid order ID format" }, { status: 400 });
+    }
+
     const order = await prisma.order.findFirst({
       where: {
         id: orderId,
