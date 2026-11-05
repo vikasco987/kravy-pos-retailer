@@ -6,8 +6,8 @@ import {
     ArrowLeft, Save, Printer, Eye, Settings, 
     Image as ImageIcon, Type, Phone, MapPin, 
     Hash, User, Users, Percent, MessageSquare, QrCode,
-    Receipt, ChefHat, Clock, FileText, Check, Zap, MoreVertical,
-    ChevronDown, ChevronUp, RefreshCw
+    Receipt, ChefHat, Clock, FileText, Check, Zap, MoreVertical, Tag,
+    ChevronDown, ChevronUp, RefreshCw, Bluetooth, ArrowRight
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -48,6 +48,7 @@ const defaults: any = {
     sepKOTFooter: true,
     // QR Settings
     showReviewQR: false,
+    printTokenTicket: false,
     
     // Printer Queue & Feed Spacing Safety Settings
     paperBottomPadding: 80,
@@ -553,6 +554,24 @@ export default function PrintingSettings() {
                 </button>
             </div>
 
+            {/* Print Mode Navigation Tabs: USB / Browser Print vs Bluetooth Thermal */}
+            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-white/5 rounded-2xl max-w-xl mx-1 sm:mx-2 border border-slate-200/50 dark:border-white/5">
+                <div
+                    className="py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider bg-white dark:bg-white/10 text-violet-600 dark:text-violet-400 shadow-xs flex items-center justify-center gap-2"
+                >
+                    <Printer size={15} />
+                    <span>USB / Browser Print (Active)</span>
+                </div>
+                <Link
+                    href="/dashboard/settings/printing/bluetooth"
+                    className="py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 group"
+                >
+                    <Bluetooth size={15} className="group-hover:scale-110 transition-transform" />
+                    <span>Bluetooth Setup</span>
+                    <ArrowRight size={13} className="opacity-60 group-hover:translate-x-0.5 transition-transform" />
+                </Link>
+            </div>
+
             {/* Mobile / Tablet Tab Switcher (hidden on desktop) */}
             <div className="xl:hidden flex bg-slate-100 dark:bg-white/5 p-1 rounded-xl sm:rounded-2xl gap-1 mx-1 sm:mx-2 shadow-sm border border-slate-200/50 dark:border-white/5">
                 <button
@@ -670,6 +689,7 @@ export default function PrintingSettings() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-4">
                             <SettingToggle icon={Receipt} label="Invoice Number" sKey="showInvoiceNumber" desc="Print Invoice # / Bill No on receipt" color="bg-purple-600" />
                             <SettingToggle icon={Clock} label="Token Number" sKey="showToken" desc="Order sequence token" color="bg-pink-500" />
+                            <SettingToggle icon={Tag} label="Print Token Ticket" sKey="printTokenTicket" desc="Show separate Token Ticket printing button after bill print" color="bg-amber-500" />
                             <SettingToggle icon={MapPin} label="Table / Counter" sKey="showTableInfo" desc="Show table name/counter badge" color="bg-rose-400" />
                             <SettingToggle icon={User} label="Customer Info" sKey="showCustomerDetails" desc="Name, Phone, Address" color="bg-violet-500" />
                         </div>

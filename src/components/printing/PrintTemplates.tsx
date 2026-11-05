@@ -1,6 +1,7 @@
 import { useCurrency } from '@/lib/currency-context';
 import React, { useState, useEffect } from 'react';
 import { getQRCodeDataUrl } from '@/lib/qrHelper';
+import { devanagariToHinglish } from '@/lib/transliterate';
 
 interface PrintTemplatesProps {
   receiptRef: React.RefObject<HTMLDivElement | null>;
@@ -45,6 +46,10 @@ interface PrintTemplatesProps {
   balanceDue?: number;
   canPrintCustomerPhone?: boolean;
   isPreviewMode?: boolean;
+  isOfflineKOT?: boolean;
+  isAddonKOT?: boolean;
+  addonSequence?: number | null;
+  offlineKotRef?: string;
 }
 
 const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
@@ -56,7 +61,7 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
     globalRate, totalTaxable, totalGst, taxBreakup, deliveryCharge, deliveryGst,
     packagingCharge, packagingGst, serviceCharge, serviceChargeName, finalTotal, paymentMode,
     paymentStatus, upiTxnRef, qrUrl, prevWalletBalance, selectedParty, numberToWords, kotNumbers,
-    amountPaid, balanceDue, canPrintCustomerPhone, isPreviewMode
+    amountPaid, balanceDue, canPrintCustomerPhone, isPreviewMode, isOfflineKOT, isAddonKOT, addonSequence, offlineKotRef
   } = props;
 
   const [menuQrBase64, setMenuQrBase64] = useState<string>("");
@@ -373,6 +378,18 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
         
         {items.map((i, idx) => {
           const itemRate = (taxActive && perProductEnabled && i.gst !== undefined && i.gst !== null) ? i.gst : (taxActive ? globalRate : 0);
+          const rawTotal = (Number(i.qty ?? 0) * Number(i.rate ?? 0));
+          let discDeduction = 0;
+          let discLabel = "";
+          if (i.itemDiscountType === 'PERCENT' && i.itemDiscountValue) {
+            discDeduction = (rawTotal * i.itemDiscountValue) / 100;
+            discLabel = `${i.itemDiscountValue}%`;
+          } else if (i.itemDiscountType === 'FLAT' && i.itemDiscountValue) {
+            discDeduction = i.itemDiscountValue;
+            discLabel = `${sym}${i.itemDiscountValue.toFixed(2)}`;
+          }
+          const lineTotal = i.overriddenAmount ?? Math.max(0, rawTotal - discDeduction);
+
           return (
             <div key={idx} className={`mb-2 ${s('showItemDivider') !== false ? 'border-b border-dotted border-black/20' : ''} pb-1`} style={{ fontSize: 'var(--r-items-size)' }}>
               {is80 ? (
@@ -383,8 +400,14 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
                       {s('showFoodTypeSuffix') ? i.name : i.name.replace(/\s?\((V|NV|R)\)/gi, "").trim()}
                     </span>
                     <span className="w-[26mm] text-right shrink-0 pr-2 whitespace-nowrap">{i.qty} x {sym}{Number(i.rate ?? 0).toFixed(2)}</span>
-                    <span className="w-[16mm] text-right shrink-0 whitespace-nowrap">{sym}{(Number(i.qty ?? 0) * Number(i.rate ?? 0)).toFixed(2)}</span>
+                    <span className="w-[16mm] text-right shrink-0 whitespace-nowrap">{sym}{lineTotal.toFixed(2)}</span>
                   </div>
+                  {/* Item discount breakdown */}
+                  {discDeduction > 0 && (
+                    <div className="font-semibold italic text-[calc(var(--r-items-size)-2px)] text-black/80 pl-0.5 leading-tight">
+                      Disc: -{sym}{discDeduction.toFixed(2)} ({discLabel})
+                    </div>
+                  )}
                   {/* Variants, Add-ons & Modifiers for 3-inch */}
                   {i.variants && i.variants.length > 0 && (
                     <div className="font-normal italic text-[calc(var(--r-items-size)-2px)] opacity-80 pl-0.5 leading-tight" style={{ fontSize: 'calc(var(--r-items-size) - 2px)' }}>
@@ -394,7 +417,7 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
                   {/* Item-level notes */}
                   {i.notes && (
                     <div className="font-normal italic text-[calc(var(--r-items-size)-2px)] opacity-75 pl-0.5 leading-tight" style={{ fontSize: 'calc(var(--r-items-size) - 2px)' }}>
-                      Note: {i.notes}
+                      Note: {devanagariToHinglish(i.notes)}
                     </div>
                   )}
                   {/* HSN and Per-product GST for 3-inch */}
@@ -413,10 +436,10 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
                     <span className="flex-1 min-w-0 pr-1 break-words leading-[1.2]">
                       {s('showFoodTypeSuffix') ? i.name : i.name.replace(/\s?\((V|NV|R)\)/gi, "").trim()}
                     </span>
-                    <span className="w-[12mm] text-right shrink-0">{sym}{(Number(i.qty ?? 0) * Number(i.rate ?? 0)).toFixed(2)}</span>
+                    <span className="w-[12mm] text-right shrink-0">{sym}{lineTotal.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between items-center font-bold mt-0.5" style={{ fontSize: 'calc(var(--r-items-size) - 1px)', fontWeight: ps.itemsWeight || undefined }}>
-                    <span>{i.qty} x {sym}{Number(i.rate ?? 0).toFixed(2)}</span>
+                    <span>{i.qty} x {sym}{Number(i.rate ?? 0).toFixed(2)}{discDeduction > 0 ? ` (-${sym}${discDeduction.toFixed(2)})` : ''}</span>
                     <span className="font-bold">
                       {((business?.hsnEnabled && i.hsnCode) ? `HSN: ${i.hsnCode}` : "")} 
                       {(s('showPerProductGST') !== false && taxActive) ? ` | GST: ${itemRate}%` : ""}
@@ -697,7 +720,14 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
           overflow: 'visible'
         }}
       >
-        <div className={`text-center font-black ${s('sepKOTTop') !== false ? 'border-b-2 border-black' : ''} pb-1 mb-2`} style={{ fontSize: 'calc(var(--k-items-size) * 1.8)' }}>K.O.T</div>
+        {isOfflineKOT && (
+          <div className="bg-black text-white text-center font-black py-1 px-2 mb-1.5 uppercase tracking-widest text-[11px] border border-black">
+            {isAddonKOT ? `*** OFFLINE ADD-ON KOT (QT${addonSequence || 2}) — NOT OFFICIAL TOKEN ***` : "*** OFFLINE KOT — NOT OFFICIAL TOKEN ***"}
+          </div>
+        )}
+        <div className={`text-center font-black ${s('sepKOTTop') !== false ? 'border-b-2 border-black' : ''} pb-1 mb-2`} style={{ fontSize: 'calc(var(--k-items-size) * 1.8)' }}>
+          {isOfflineKOT ? (isAddonKOT ? `OFFLINE ADD-ON K.O.T [QT${addonSequence || 2}]` : "OFFLINE K.O.T") : (isAddonKOT ? `ADD-ON K.O.T [QT${addonSequence || 2}]` : "K.O.T")}
+        </div>
         
         <div className="flex flex-wrap justify-between items-center font-black mb-2 px-0.5 gap-y-1" style={{ fontSize: 'var(--k-header-size)' }}>
           <div className="border-2 border-black text-black px-1.5 py-1 rounded-sm font-black whitespace-nowrap" style={{ fontSize: 'calc(var(--k-header-size) + 1px)' }}>
@@ -708,12 +738,14 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
           </div>
           {s('showKOTToken') && (
             <div className="text-right leading-none">
-              <div style={{ fontSize: 'calc(var(--k-header-size) - 2px)', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.5px' }}>KOT No.</div>
+              <div style={{ fontSize: 'calc(var(--k-header-size) - 2px)', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                {isOfflineKOT ? "Offline Ref" : "KOT No."}
+              </div>
               <div 
                 className="font-black kot-token-display"
-                style={{ fontSize: 'var(--k-token-size)', fontWeight: ps.kotTokenWeight || undefined }}
+                style={{ fontSize: isOfflineKOT ? 'calc(var(--k-token-size) * 0.72)' : 'var(--k-token-size)', fontWeight: ps.kotTokenWeight || undefined }}
               >
-                #{(() => {
+                {isOfflineKOT ? (offlineKotRef || "OFF-KOT-0001") : `#${(() => {
                   if (kotNumbers && kotNumbers.length > 0) {
                     return kotNumbers[kotNumbers.length - 1];
                   }
@@ -728,7 +760,7 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
                     return business.lastTokenNumber;
                   }
                   return "1";
-                })()}
+                })()}`}
               </div>
             </div>
           )}
@@ -758,12 +790,18 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
               return itemsToPrint.map((i, idx) => (
                 <tr key={idx} className={`${s('showKOTItemDivider') !== false ? 'border-b border-dotted border-black/30' : ''}`} style={{ fontWeight: ps.kotItemsWeight || undefined }}>
                   <td className="py-2 pr-1 leading-[1.1] uppercase">
-                  {s('showFoodTypeSuffix') ? i.name : i.name.replace(/\s?\((V|NV|R)\)/gi, "").trim()}
-                     {i.variants && i.variants.length > 0 && (
-                       <div className="font-bold lowercase" style={{ fontSize: 'calc(var(--k-items-size) - 2px)' }}>
-                          ({i.variants.map((v:any) => v.name).join(', ')})
-                       </div>
-                     )}
+                    {s('showFoodTypeSuffix') ? i.name : i.name.replace(/\s?\((V|NV|R)\)/gi, "").trim()}
+                    {i.variants && i.variants.length > 0 && (
+                      <div className="font-bold lowercase" style={{ fontSize: 'calc(var(--k-items-size) - 2px)' }}>
+                        ({i.variants.map((v:any) => v.name).join(', ')})
+                      </div>
+                    )}
+                    {/* Item-level special instructions / notes */}
+                    {i.notes && (
+                      <div className="font-black italic text-black pl-0.5 mt-0.5 leading-tight" style={{ fontSize: 'calc(var(--k-items-size) - 2px)' }}>
+                        *** Note: {devanagariToHinglish(i.notes)} ***
+                      </div>
+                    )}
                   </td>
                   <td className="text-right py-2 align-top font-black whitespace-nowrap pl-2 pr-1" style={{ fontSize: 'var(--k-qty-size)', fontWeight: ps.kotQtyWeight || undefined }}>x{i.isNew && i.printedQty ? i.qty - i.printedQty : i.qty}</td>
                 </tr>

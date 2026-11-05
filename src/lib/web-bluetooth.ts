@@ -1,6 +1,162 @@
 // @ts-nocheck
 import { Capacitor } from '@capacitor/core';
 import QRCode from 'qrcode';
+import { devanagariToHinglish } from './transliterate';
+
+export interface BluetoothPrintSettings {
+    // Bill Toggles
+    showLogo?: boolean;
+    showBusinessName?: boolean;
+    showTagline?: boolean;
+    showContact?: boolean;
+    showAddress?: boolean;
+    showGST?: boolean;
+    showFSSAI?: boolean;
+    showInvoiceNumber?: boolean;
+    showToken?: boolean;
+    showDate?: boolean;
+    showTableInfo?: boolean;
+    showCustomerDetails?: boolean;
+    showCustomerPhone?: boolean;
+    showCustomerAddress?: boolean;
+    showFoodTypeSuffix?: boolean;
+    showVariants?: boolean;
+    showSubtotal?: boolean;
+    showDiscount?: boolean;
+    showDeliveryCharge?: boolean;
+    showPackagingCharge?: boolean;
+    showServiceCharge?: boolean;
+    showTaxBreakup?: boolean;
+    showGrandTotal?: boolean;
+    showAmountInWords?: boolean;
+    showPaymentMode?: boolean;
+    showPaymentStatus?: boolean;
+    showBalanceDue?: boolean;
+    showUpiQr?: boolean;
+    showMenuQr?: boolean;
+    showGreetings?: boolean;
+    showPoweredBy?: boolean;
+    printTokenTicket?: boolean;
+
+    // KOT Toggles
+    showKOTHeader?: boolean;
+    showKOTTable?: boolean;
+    showKOTToken?: boolean;
+    showKOTBillNo?: boolean;
+    showKOTDateTime?: boolean;
+    showKOTCustomer?: boolean;
+    showKOTItemDivider?: boolean;
+    showKOTVariants?: boolean;
+    showKOTInstructions?: boolean;
+    showKOTFooter?: boolean;
+
+    // Element Sizing Sliders (Pixels - matching USB sizers)
+    logoSize?: number;
+    logoBottomSpace?: number;
+    businessNameSize?: number;
+    addressSize?: number;
+    taglineSize?: number;
+    receiptTokenSize?: number;
+    itemsFontSize?: number;
+    grandTotalFontSize?: number;
+    customerDetailsFontSize?: number;
+    detailsFontSize?: number;
+    greetingsFooterSize?: number;
+
+    // KOT Sizing Sliders
+    kotTokenSize?: number;
+    kotHeaderDetailsSize?: number;
+    kotItemsFontSize?: number;
+    kotQuantityFontSize?: number;
+
+    // Typography & Formatting
+    paperWidth?: "58mm" | "80mm";
+    businessNameStyle?: "normal" | "bold" | "double_h" | "double_hw";
+    tokenStyle?: "normal" | "bold" | "double_h" | "double_hw";
+    grandTotalStyle?: "normal" | "bold" | "double_h" | "double_hw";
+    kotHeaderStyle?: "normal" | "bold" | "double_h" | "double_hw";
+    kotTokenStyle?: "normal" | "bold" | "double_h" | "double_hw";
+    bottomFeeds?: number;
+    cutPaper?: boolean;
+}
+
+export const DEFAULT_BT_PRINT_SETTINGS: BluetoothPrintSettings = {
+    showLogo: true,
+    showBusinessName: true,
+    showTagline: true,
+    showContact: true,
+    showAddress: true,
+    showGST: true,
+    showFSSAI: true,
+    showInvoiceNumber: true,
+    showToken: true,
+    showDate: true,
+    showTableInfo: true,
+    showCustomerDetails: true,
+    showCustomerPhone: true,
+    showCustomerAddress: true,
+    showFoodTypeSuffix: true,
+    showVariants: true,
+    showSubtotal: true,
+    showDiscount: true,
+    showDeliveryCharge: true,
+    showPackagingCharge: true,
+    showServiceCharge: true,
+    showTaxBreakup: true,
+    showGrandTotal: true,
+    showAmountInWords: true,
+    showPaymentMode: true,
+    showPaymentStatus: true,
+    showBalanceDue: true,
+    showUpiQr: true,
+    showMenuQr: true,
+    showGreetings: true,
+    showPoweredBy: true,
+    printTokenTicket: false,
+
+    showKOTHeader: true,
+    showKOTTable: true,
+    showKOTToken: true,
+    showKOTBillNo: true,
+    showKOTDateTime: true,
+    showKOTCustomer: true,
+    showKOTItemDivider: true,
+    showKOTVariants: true,
+    showKOTInstructions: true,
+    showKOTFooter: true,
+
+    // Default Sliders (matching USB defaults)
+    logoSize: 50,
+    logoBottomSpace: 0,
+    businessNameSize: 18,
+    addressSize: 11,
+    taglineSize: 11,
+    receiptTokenSize: 28,
+    itemsFontSize: 11,
+    grandTotalFontSize: 13,
+    customerDetailsFontSize: 10,
+    detailsFontSize: 10,
+    greetingsFooterSize: 12,
+
+    kotTokenSize: 16,
+    kotHeaderDetailsSize: 11,
+    kotItemsFontSize: 11,
+    kotQuantityFontSize: 14,
+
+    paperWidth: "58mm",
+    businessNameStyle: "double_h",
+    tokenStyle: "double_h",
+    grandTotalStyle: "double_h",
+    kotHeaderStyle: "bold",
+    kotTokenStyle: "double_h",
+    bottomFeeds: 4,
+    cutPaper: true
+};
+
+export function getEffectiveBtSettings(business: any): BluetoothPrintSettings {
+    const raw = business?.btPrintSettings || business?.printSettings?.bluetooth || {};
+    return { ...DEFAULT_BT_PRINT_SETTINGS, ...raw };
+}
 
 // Lazy loader for Capacitor Native Bluetooth LE plugin (only used in Android/iOS native app)
 let capBleModule: any = null;
@@ -95,19 +251,51 @@ const printerSlots: Record<PrinterSlot, PrinterState> = {
     }
 };
 
-type RecoveryModalCallback = (details: {
+export type RecoveryModalCallback = (details: {
     slot: PrinterSlot;
     error: string;
     printerName: string | null;
     onRetry: () => Promise<void>;
     onScan: () => Promise<void>;
     uncertainOutcome?: boolean;
+    isPermissionError?: boolean;
+    onOpenAppSettings?: () => Promise<void>;
+    onOpenLocationSettings?: () => Promise<void>;
 }) => void;
 
 let recoveryModalHandler: RecoveryModalCallback | null = null;
 
 export function registerPrinterRecoveryHandler(handler: RecoveryModalCallback | null) {
     recoveryModalHandler = handler;
+}
+
+export function isBluetoothPermissionError(errorMsg: string): boolean {
+    if (!errorMsg) return false;
+    const lower = errorMsg.toLowerCase();
+    return (
+        lower.includes("permission denied") ||
+        lower.includes("permission decline") ||
+        lower.includes("not allowed") ||
+        lower.includes("securityexception") ||
+        lower.includes("bluetooth_scan") ||
+        lower.includes("bluetooth_connect") ||
+        lower.includes("access_fine_location") ||
+        lower.includes("location permission")
+    );
+}
+
+export async function openNativeAppSettings(): Promise<void> {
+    const ble = await getCapacitorBle();
+    if (ble?.BleClient?.openAppSettings) {
+        await ble.BleClient.openAppSettings();
+    }
+}
+
+export async function openNativeLocationSettings(): Promise<void> {
+    const ble = await getCapacitorBle();
+    if (ble?.BleClient?.openLocationSettings) {
+        await ble.BleClient.openLocationSettings();
+    }
 }
 
 export function triggerPrinterRecoveryModal(details: {
@@ -117,6 +305,9 @@ export function triggerPrinterRecoveryModal(details: {
     onRetry: () => Promise<void>;
     onScan: () => Promise<void>;
     uncertainOutcome?: boolean;
+    isPermissionError?: boolean;
+    onOpenAppSettings?: () => Promise<void>;
+    onOpenLocationSettings?: () => Promise<void>;
 }) {
     if (recoveryModalHandler) {
         recoveryModalHandler(details);
@@ -450,7 +641,20 @@ export async function ensurePrinterConnected(forcePrompt: boolean = false, slot:
                 state.capChar = "";
                 const rawMsg = error?.message || String(error);
                 let actionableMsg = rawMsg;
-                if (rawMsg.includes("133") || rawMsg.includes("status: 19") || rawMsg.includes("GATT") || rawMsg.includes("timeout") || rawMsg.includes("failed to connect")) {
+                const isPermError = isBluetoothPermissionError(rawMsg);
+                if (isPermError) {
+                    actionableMsg = `Bluetooth / Location permission allow nahi hai. Kripya app settings mein jakar Nearby devices (Bluetooth) aur Location permissions allow karein. (${rawMsg})`;
+                    triggerPrinterRecoveryModal({
+                        slot,
+                        error: actionableMsg,
+                        printerName: getConnectedPrinterName(slot) || "Bluetooth Thermal Printer",
+                        isPermissionError: true,
+                        onRetry: async () => { await ensurePrinterConnected(false, slot); },
+                        onScan: async () => { await ensurePrinterConnected(true, slot); },
+                        onOpenAppSettings: openNativeAppSettings,
+                        onOpenLocationSettings: openNativeLocationSettings,
+                    });
+                } else if (rawMsg.includes("133") || rawMsg.includes("status: 19") || rawMsg.includes("GATT") || rawMsg.includes("timeout") || rawMsg.includes("failed to connect")) {
                     actionableMsg = `Printer connect nahi ho paya. Yeh kisi doosre phone se connected ho sakta hai. Kripya doosre phone se disconnect karein ya printer ko restart karein. (${rawMsg})`;
                 }
                 state.status = 'ERROR';
@@ -1062,8 +1266,9 @@ export async function printReceiptData(order: any, business: any, elementToPrint
         
         if (!printedAsImage) {
             const encoder = new TextEncoder();
-            
-            const is80 = business?.printSettings?.paperWidth === '80mm';
+            const bt = getEffectiveBtSettings(business);
+
+            const is80 = bt.paperWidth === '80mm' || business?.printSettings?.paperWidth === '80mm';
             const WIDTH = is80 ? 48 : 32;
 
             const pLR: any = (l, r, w = WIDTH) => {
@@ -1122,21 +1327,27 @@ export async function printReceiptData(order: any, business: any, elementToPrint
             };
 
             // Universal High-Speed QR Code generator:
-            // Instead of GS ( k which fails or hangs on budget POS printers, this generates a clean,
-            // razor-sharp 1-bit raster strip directly from the QR matrix in ~600 bytes total!
-            // It prints in one smooth continuous sweep with zero motor stutter.
-            const addFastRasterQr = (qrText: string, scale = 4) => {
+            // High reliability raster bitmap with standard 4-module quiet zone (white margin)
+            // Ensures scanability and prevents overlap with surrounding text.
+            const addFastRasterQr = (qrText: string, scale = 3) => {
                 try {
                     const qr = QRCode.create(qrText, { errorCorrectionLevel: 'M' });
                     const modules = qr.modules;
                     const modCount = modules.size;
-                    const dotScale = Math.max(2, Math.min(scale, 5));
-                    const imgWidth = modCount * dotScale;
-                    const imgHeight = modCount * dotScale;
+                    // Scale 3 on 58mm printer (384 dots) produces ~100-115 dots width, which fits cleanly with ample margin and zero overflow
+                    const dotScale = Math.max(2, Math.min(scale, 4));
+                    
+                    // Add standard 4-module quiet zone around QR so phone cameras immediately recognize and scan it
+                    const quietMargin = 4;
+                    const totalModules = modCount + (quietMargin * 2);
+                    const imgWidth = totalModules * dotScale;
+                    const imgHeight = totalModules * dotScale;
                     const bytesWidth = Math.ceil(imgWidth / 8);
 
+                    // Ensure default line spacing before raster image
+                    dataChunks.push(new Uint8Array([0x1B, 0x32])); // ESC 2 (Default line spacing)
                     // Center alignment
-                    dataChunks.push(new Uint8Array([0x1B, 0x61, 0x01]));
+                    dataChunks.push(new Uint8Array([0x1B, 0x61, 0x01])); // ESC a 1
 
                     // GS v 0 0 raster bit image header
                     const rasterHeader = new Uint8Array([
@@ -1149,15 +1360,17 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                     const rasterData = new Uint8Array(bytesWidth * imgHeight);
                     let idx = 0;
                     for (let y = 0; y < imgHeight; y++) {
-                        const modY = Math.floor(y / dotScale);
+                        const modY = Math.floor(y / dotScale) - quietMargin;
                         for (let x = 0; x < bytesWidth; x++) {
                             let byte = 0;
                             for (let b = 0; b < 8; b++) {
                                 const px = (x * 8) + b;
                                 if (px < imgWidth) {
-                                    const modX = Math.floor(px / dotScale);
-                                    if (modules.get(modX, modY)) {
-                                        byte |= (1 << (7 - b));
+                                    const modX = Math.floor(px / dotScale) - quietMargin;
+                                    if (modX >= 0 && modX < modCount && modY >= 0 && modY < modCount) {
+                                        if (modules.get(modX, modY)) {
+                                            byte |= (1 << (7 - b));
+                                        }
                                     }
                                 }
                             }
@@ -1165,17 +1378,20 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                         }
                     }
                     dataChunks.push(rasterData);
+                    // Explicit line feeds & restore default line spacing after image
+                    dataChunks.push(new Uint8Array([0x1B, 0x32])); // ESC 2
+                    dataChunks.push(new Uint8Array([0x0A, 0x0A]));
                 } catch(e) {
                     console.error("Fast QR Generation error:", e);
                 }
             };
 
-            const printImageToChunks = (img, targetWidth) => {
-                // Keep logo clear and well-proportioned for 2-inch (384px) & 3-inch (576px) thermal paper
-                // Allow logo to scale up nicely (up to 240px wide instead of 120px)
-                const maxDim = Math.min(targetWidth, 240);
-                const scale = maxDim / img.width;
-                const effectiveWidth = Math.min(maxDim, Math.round(img.width * scale));
+            const printImageToChunks = (img: any, targetWidth: number) => {
+                // Determine printer printable width: 58mm (384 dots) vs 80mm (576 dots)
+                const maxPaperDots = is80 ? 576 : 384;
+                const maxAllowed = Math.min(targetWidth, maxPaperDots);
+                const scale = maxAllowed / img.width;
+                const effectiveWidth = Math.min(maxPaperDots, Math.max(24, Math.round(img.width * scale)));
                 const targetHeight = Math.max(1, Math.round(img.height * scale));
 
                 const canvas = document.createElement('canvas');
@@ -1226,10 +1442,8 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                 }
             };
 
-            // Logo Print
-            
             // Logo Print (Only for Bill, standard practice)
-            if (!isKot && business?.logoUrl) {
+            if (!isKot && bt.showLogo !== false && business?.logoUrl) {
                 try {
                     const img = new Image();
                     img.crossOrigin = 'Anonymous';
@@ -1274,18 +1488,27 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                     }, 1000)) ]);
                     
                     if (success) {
-                        // Increase logo size on receipt: 240 width instead of 180 (and maxDim 240 instead of 120)
-                        printImageToChunks(img, 240);
+                        // Slider ranges from 20 to 90. Map directly to printable pixels:
+                        // 20 -> ~100px, 50 -> ~240px, 90 -> up to 380px (for 58mm) or 450px (for 80mm)
+                        const maxPaperWidth = is80 ? 520 : 360;
+                        const targetLogoWidth = bt.logoSize 
+                            ? Math.min(maxPaperWidth, Math.max(60, Math.round(bt.logoSize * 4.6))) 
+                            : (is80 ? 320 : 220);
+                        printImageToChunks(img, targetLogoWidth);
+                        if (bt.logoBottomSpace !== undefined && bt.logoBottomSpace !== 0) {
+                            // Convert logo bottom space into ESC J micro-feeds (0 to 255 dots)
+                            const feedDots = Math.max(0, Math.min(255, Math.round((bt.logoBottomSpace + 10) * 3)));
+                            if (feedDots > 0) {
+                                dataChunks.push(new Uint8Array([0x1B, 0x4A, feedDots]));
+                            }
+                        }
                     }
                 } catch (e) {
                     console.error("Logo thermal conversion failed:", e);
                 }
             }
 
-            
-            
-
-                        const ALIGN_CENTER = new Uint8Array([0x1B, 0x61, 0x01]);
+            const ALIGN_CENTER = new Uint8Array([0x1B, 0x61, 0x01]);
             const ALIGN_LEFT = new Uint8Array([0x1B, 0x61, 0x00]);
             const BOLD_ON = new Uint8Array([0x1B, 0x45, 0x01]);
             const BOLD_OFF = new Uint8Array([0x1B, 0x45, 0x00]);
@@ -1294,17 +1517,54 @@ export async function printReceiptData(order: any, business: any, elementToPrint
             const TEXT_DOUBLE_H = new Uint8Array([0x1D, 0x21, 0x01]);
             const TEXT_DOUBLE_W = new Uint8Array([0x1D, 0x21, 0x10]);
             const TEXT_DOUBLE_HW = new Uint8Array([0x1D, 0x21, 0x11]);
+
+            const applyStyle = (style?: string) => {
+                if (style === 'triple' || style === 'giant') {
+                    // 3x height, 3x width (0x22 = 34)
+                    dataChunks.push(new Uint8Array([0x1D, 0x21, 0x22]));
+                    dataChunks.push(BOLD_ON);
+                } else if (style === 'double_hw') {
+                    dataChunks.push(TEXT_DOUBLE_HW);
+                    dataChunks.push(BOLD_ON);
+                } else if (style === 'double_h') {
+                    dataChunks.push(TEXT_DOUBLE_H);
+                    dataChunks.push(BOLD_ON);
+                } else if (style === 'double_w') {
+                    dataChunks.push(TEXT_DOUBLE_W);
+                    dataChunks.push(BOLD_ON);
+                } else if (style === 'bold') {
+                    dataChunks.push(TEXT_NORMAL);
+                    dataChunks.push(BOLD_ON);
+                } else {
+                    dataChunks.push(TEXT_NORMAL);
+                    dataChunks.push(BOLD_OFF);
+                }
+            };
+
+            const resolveStyle = (explicitStyle?: string, pxSize?: number, defaultStyle: string = "normal") => {
+                if (explicitStyle && explicitStyle !== 'normal') return explicitStyle;
+                if (!pxSize) return defaultStyle;
+                if (pxSize >= 30) return "triple";
+                if (pxSize >= 20) return "double_hw";
+                if (pxSize >= 15) return "double_h";
+                if (pxSize >= 12) return "bold";
+                return "normal";
+            };
             
             if (isKot) {
                 // KOT Format
-                dataChunks.push(ALIGN_CENTER);
-                dataChunks.push(BOLD_ON);
-                dataChunks.push(encoder.encode("K.O.T\n"));
-                dataChunks.push(BOLD_OFF);
-                dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
+                if (bt.showKOTHeader !== false) {
+                    dataChunks.push(ALIGN_CENTER);
+                    const khStyle = resolveStyle(bt.kotHeaderStyle, bt.kotHeaderDetailsSize, 'bold');
+                    applyStyle(khStyle);
+                    dataChunks.push(encoder.encode("K.O.T\n"));
+                    dataChunks.push(BOLD_OFF);
+                    dataChunks.push(TEXT_NORMAL);
+                    dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
+                }
                 
                 dataChunks.push(ALIGN_LEFT);
-                const tableStr = order?.tableName || "COUNTER";
+                const tableStr = (bt.showKOTTable !== false) ? ("TABLE: " + (order?.tableName || "COUNTER")) : "";
                 const kotNum = order?.kotNumbers?.[order?.kotNumbers?.length - 1] 
                     || order?.tokenNumber 
                     || order?.reservedTokenNumber 
@@ -1312,9 +1572,31 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                     || (Array.isArray(order?.items) && order.items.find((i: any) => i?.kotNumber)?.kotNumber) 
                     || (business?.lastTokenNumber ? String(business.lastTokenNumber) : "") 
                     || "1";
-                dataChunks.push(encoder.encode(pLR("TABLE: " + tableStr, "KOT NO: " + kotNum, WIDTH) + "\n"));
+                const kotNumStr = (bt.showKOTToken !== false) ? ("KOT NO: " + kotNum) : "";
                 
-                const billNoStr = "Bill: " + (order?.billNumber || order?.orderNumber || "DRAFT");
+                if (tableStr || kotNumStr) {
+                    const kotPx = bt.kotTokenSize ?? 16;
+                    if (kotNumStr && kotPx >= 20) {
+                        if (tableStr) {
+                            dataChunks.push(encoder.encode(tableStr + "\n"));
+                        }
+                        dataChunks.push(ALIGN_CENTER);
+                        const ktStyle = resolveStyle(bt.kotTokenStyle, kotPx, 'double_hw');
+                        applyStyle(ktStyle);
+                        dataChunks.push(encoder.encode(`KOT NO: #${kotNum}\n`));
+                        dataChunks.push(BOLD_OFF);
+                        dataChunks.push(TEXT_NORMAL);
+                        dataChunks.push(ALIGN_LEFT);
+                    } else {
+                        const ktStyle = resolveStyle(bt.kotTokenStyle, kotPx, 'double_h');
+                        applyStyle(ktStyle);
+                        dataChunks.push(encoder.encode(pLR(tableStr, kotNumStr, WIDTH) + "\n"));
+                        dataChunks.push(TEXT_NORMAL);
+                        dataChunks.push(BOLD_OFF);
+                    }
+                }
+                
+                const billNoStr = (bt.showKOTBillNo !== false) ? ("Bill: " + (order?.billNumber || order?.orderNumber || "DRAFT")) : "";
                 let timeStr = "";
                 let fullDateStr = "";
                 try { 
@@ -1323,7 +1605,16 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                     const dPart = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
                     fullDateStr = dPart + " " + timeStr;
                 } catch(e){}
-                dataChunks.push(encoder.encode(pLR(billNoStr, timeStr, WIDTH) + "\n"));
+                const datePrintStr = (bt.showKOTDateTime !== false) ? timeStr : "";
+
+                if (billNoStr || datePrintStr) {
+                    dataChunks.push(encoder.encode(pLR(billNoStr, datePrintStr, WIDTH) + "\n"));
+                }
+
+                if (bt.showKOTCustomer !== false && (order?.customerName || order?.customerPhone)) {
+                    dataChunks.push(encoder.encode("Customer: " + (order?.customerName || "Walk-in") + (order?.customerPhone ? ` (${order.customerPhone})` : "") + "\n"));
+                }
+
                 dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
                 
                 dataChunks.push(BOLD_ON);
@@ -1338,62 +1629,105 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                     const fullQty = item.qty || item.quantity || 1;
                     const printedQty = item.printedQty || 0;
                     const qty = (item.isNew && printedQty) ? (fullQty - printedQty) : fullQty;
-                    const rightCol = "x" + qty;
+                    
+                    const kItemPx = bt.kotItemsFontSize ?? 11;
+                    const kQtyPx = bt.kotQuantityFontSize ?? 14;
+                    const kotItemStyle = kItemPx >= 15 ? 'bold' : 'normal';
+                    
+                    // If KOT quantity is enlarged (>= 18px), use standout formatting
+                    const isGiantQty = kQtyPx >= 18;
+                    const rightCol = isGiantQty ? `[QTY: ${qty}]` : `x${qty}`;
                     const maxNameWidth = WIDTH - rightCol.length - 1;
                     const lines = wrapText(name, maxNameWidth, maxNameWidth - 4);
-                    
-                    dataChunks.push(TEXT_NORMAL);
+
                     for (let i = 0; i < lines.length; i++) {
                         if (i === 0) {
+                            applyStyle(kotItemStyle);
                             const paddedName = lines[i].padEnd(maxNameWidth, " ");
-                            dataChunks.push(encoder.encode(paddedName + " " + rightCol + "\n"));
+                            dataChunks.push(encoder.encode(paddedName + " "));
+                            if (isGiantQty) {
+                                applyStyle('double_hw');
+                                dataChunks.push(encoder.encode(rightCol + "\n"));
+                                applyStyle('normal');
+                            } else if (kQtyPx >= 14) {
+                                applyStyle('bold');
+                                dataChunks.push(encoder.encode(rightCol + "\n"));
+                                applyStyle('normal');
+                            } else {
+                                dataChunks.push(encoder.encode(rightCol + "\n"));
+                            }
                         } else {
+                            applyStyle(kotItemStyle);
                             dataChunks.push(encoder.encode("    " + lines[i] + "\n"));
                         }
                     }
+                    dataChunks.push(TEXT_NORMAL);
+                    dataChunks.push(BOLD_OFF);
+                    if (bt.showKOTVariants !== false && item.variants && item.variants.length > 0) {
+                        const varText = "  (" + item.variants.map((v: any) => v.name || v).join(", ") + ")";
+                        dataChunks.push(encoder.encode(varText + "\n"));
+                    }
+                    if (bt.showKOTInstructions !== false && item.notes) {
+                        dataChunks.push(BOLD_ON);
+                        dataChunks.push(encoder.encode("  * Note: " + devanagariToHinglish(item.notes) + "\n"));
+                        dataChunks.push(BOLD_OFF);
+                    }
+                    if (bt.showKOTItemDivider !== false) {
+                        dataChunks.push(encoder.encode("- ".repeat(Math.floor(WIDTH / 2)).trim() + "\n"));
+                    }
                 }
                 
-                dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
-                dataChunks.push(ALIGN_CENTER);
-                dataChunks.push(encoder.encode("END OF KOT\n"));
-                dataChunks.push(encoder.encode(fullDateStr + "\n"));
+                if (bt.showKOTFooter !== false) {
+                    dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
+                    dataChunks.push(ALIGN_CENTER);
+                    dataChunks.push(encoder.encode("END OF KOT\n"));
+                    if (bt.showKOTDateTime !== false) {
+                        dataChunks.push(encoder.encode(fullDateStr + "\n"));
+                    }
+                }
             } else {
                 // Bill Format
-                dataChunks.push(ALIGN_CENTER);
-                dataChunks.push(TEXT_DOUBLE_H);
-                dataChunks.push(BOLD_ON);
-                dataChunks.push(encoder.encode((business?.businessName || business?.name || "KRAVY POS") + "\n"));
-                dataChunks.push(BOLD_OFF);
-                dataChunks.push(TEXT_NORMAL);
+                if (bt.showBusinessName !== false) {
+                    dataChunks.push(ALIGN_CENTER);
+                    const bStyle = resolveStyle(bt.businessNameStyle, bt.businessNameSize, 'double_h');
+                    applyStyle(bStyle);
+                    dataChunks.push(encoder.encode((business?.businessName || business?.name || "KRAVY POS") + "\n"));
+                    dataChunks.push(BOLD_OFF);
+                    dataChunks.push(TEXT_NORMAL);
+                }
                 
-                if (business?.tagline) {
+                if (bt.showTagline !== false && business?.tagline) {
                     const paragraphs = business.tagline.split('\n');
                     paragraphs.forEach(p => {
                         const tLines = wrapText(p, WIDTH, WIDTH);
                         tLines.forEach(l => dataChunks.push(encoder.encode(padCenter(l, WIDTH) + "\n")));
                     });
                 }
-                const addrParts = [];
-                if (business?.businessAddress || business?.address) addrParts.push(business.businessAddress || business.address);
-                if (business?.district) addrParts.push(business.district);
-                if (business?.state) addrParts.push(business.state);
-                
-                let fullAddr = addrParts.join(", ");
-                if (business?.pinCode) fullAddr += " - " + business.pinCode;
 
-                if (fullAddr.trim()) {
-                    let addr = fullAddr;
-                    addr = addr.replace(/<br\s*[\/]?>/gi, '\n').replace(/\r\n/g, '\n');
-                    const paragraphs = addr.split('\n');
-                    paragraphs.forEach(p => {
-                        const aLines = wrapText(p, WIDTH, WIDTH);
-                        aLines.forEach(l => dataChunks.push(encoder.encode(padCenter(l, WIDTH) + "\n")));
-                    });
+                if (bt.showAddress !== false) {
+                    const addrParts = [];
+                    if (business?.businessAddress || business?.address) addrParts.push(business.businessAddress || business.address);
+                    if (business?.district) addrParts.push(business.district);
+                    if (business?.state) addrParts.push(business.state);
+                    
+                    let fullAddr = addrParts.join(", ");
+                    if (business?.pinCode) fullAddr += " - " + business.pinCode;
+
+                    if (fullAddr.trim()) {
+                        let addr = fullAddr;
+                        addr = addr.replace(/<br\s*[\/]?>/gi, '\n').replace(/\r\n/g, '\n');
+                        const paragraphs = addr.split('\n');
+                        paragraphs.forEach(p => {
+                            const aLines = wrapText(p, WIDTH, WIDTH);
+                            aLines.forEach(l => dataChunks.push(encoder.encode(padCenter(l, WIDTH) + "\n")));
+                        });
+                    }
                 }
+
                 const phoneStr = business?.contactPersonPhone || business?.contactPhone || business?.businessPhone || business?.phone;
-                if (phoneStr) dataChunks.push(encoder.encode(padCenter("Mob: " + phoneStr, WIDTH) + "\n"));
-                if (business?.gstNumber) dataChunks.push(encoder.encode(padCenter("GSTIN: " + business.gstNumber, WIDTH) + "\n"));
-                if (business?.fssaiNumber) dataChunks.push(encoder.encode(padCenter("FSSAI: " + business.fssaiNumber, WIDTH) + "\n"));
+                if (bt.showContact !== false && phoneStr) dataChunks.push(encoder.encode(padCenter("Mob: " + phoneStr, WIDTH) + "\n"));
+                if (bt.showGST !== false && business?.gstNumber) dataChunks.push(encoder.encode(padCenter("GSTIN: " + business.gstNumber, WIDTH) + "\n"));
+                if (bt.showFSSAI !== false && business?.fssaiNumber) dataChunks.push(encoder.encode(padCenter("FSSAI: " + business.fssaiNumber, WIDTH) + "\n"));
                 
                 dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
                 dataChunks.push(ALIGN_CENTER);
@@ -1403,10 +1737,32 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                 dataChunks.push(ALIGN_LEFT);
                 dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
                 
-                const billNoStr = "Bill No: " + (order?.billNumber || order?.orderNumber || "DRAFT");
+                const billNoStr = (bt.showInvoiceNumber !== false) ? ("Bill No: " + (order?.billNumber || order?.orderNumber || "DRAFT")) : "";
                 const tokenRaw = (order?.tokenNumber || order?.kotNumbers?.[0] || "");
-                const tokenStr = tokenRaw ? "Token: " + tokenRaw : "";
-                dataChunks.push(encoder.encode(pLR(billNoStr, tokenStr, WIDTH) + "\n"));
+                const tokenStr = (bt.showToken !== false && tokenRaw) ? ("Token: " + tokenRaw) : "";
+                if (billNoStr || tokenStr) {
+                    const tokenPx = bt.receiptTokenSize ?? 28;
+                    // When token is enlarged (e.g. >= 22px), print Token prominently on its own centered line
+                    // so it can expand to double/triple height & width cleanly!
+                    if (tokenStr && tokenPx >= 22) {
+                        if (billNoStr) {
+                            dataChunks.push(encoder.encode(billNoStr + "\n"));
+                        }
+                        dataChunks.push(ALIGN_CENTER);
+                        const tStyle = resolveStyle(bt.tokenStyle, tokenPx, 'double_hw');
+                        applyStyle(tStyle);
+                        dataChunks.push(encoder.encode(`TOKEN: ${tokenRaw}\n`));
+                        dataChunks.push(BOLD_OFF);
+                        dataChunks.push(TEXT_NORMAL);
+                        dataChunks.push(ALIGN_LEFT);
+                    } else {
+                        const tStyle = resolveStyle(bt.tokenStyle, tokenPx, 'double_h');
+                        applyStyle(tStyle);
+                        dataChunks.push(encoder.encode(pLR(billNoStr, tokenStr, WIDTH) + "\n"));
+                        dataChunks.push(TEXT_NORMAL);
+                        dataChunks.push(BOLD_OFF);
+                    }
+                }
                 
                 let dPart = "";
                 let fullDateStr = "";
@@ -1417,13 +1773,18 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                     const dPartFull = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
                     fullDateStr = dPartFull + " " + timeStr;
                 } catch(e){}
-                const tableStr = "Table: " + (order?.tableName || "POS");
-                dataChunks.push(encoder.encode(pLR("Date: " + dPart, tableStr, WIDTH) + "\n"));
+                const datePrint = (bt.showDate !== false) ? ("Date: " + dPart) : "";
+                const tableStr = (bt.showTableInfo !== false) ? ("Table: " + (order?.tableName || "POS")) : "";
+                if (datePrint || tableStr) {
+                    dataChunks.push(encoder.encode(pLR(datePrint, tableStr, WIDTH) + "\n"));
+                }
                 
-                dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
-                dataChunks.push(encoder.encode("Customer: " + (order?.customerName || "Walk-in Customer") + "\n"));
-                if (order?.customerPhone) dataChunks.push(encoder.encode("Phone: " + order.customerPhone + "\n"));
-                if (order?.customerAddress) dataChunks.push(encoder.encode("Addr: " + order.customerAddress + "\n"));
+                if (bt.showCustomerDetails !== false && (order?.customerName || order?.customerPhone || order?.customerAddress)) {
+                    dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
+                    dataChunks.push(encoder.encode("Customer: " + (order?.customerName || "Walk-in Customer") + "\n"));
+                    if (bt.showCustomerPhone !== false && order?.customerPhone) dataChunks.push(encoder.encode("Phone: " + order.customerPhone + "\n"));
+                    if (bt.showCustomerAddress !== false && order?.customerAddress) dataChunks.push(encoder.encode("Addr: " + order.customerAddress + "\n"));
+                }
                 dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
                 
                 dataChunks.push(BOLD_ON);
@@ -1446,20 +1807,26 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                     const maxNameWidth = WIDTH - hdrRight.length - 1;
                     const lines = wrapText(name, maxNameWidth, maxNameWidth); 
                     
-                    dataChunks.push(TEXT_NORMAL);
+                    const iPx = bt.itemsFontSize ?? 11;
+                    const itemStyle = iPx >= 14 ? 'bold' : 'normal';
+                    applyStyle(itemStyle);
                     for (let i = 0; i < lines.length; i++) {
                         dataChunks.push(encoder.encode(lines[i] + "\n"));
                     }
+                    dataChunks.push(TEXT_NORMAL);
+                    dataChunks.push(BOLD_OFF);
                     
-                    let variants = [];
-                    if (item.variant) variants.push(item.variant);
-                    if (item.foodType) variants.push(item.foodType);
-                    if (item.variants && Array.isArray(item.variants)) {
-                        item.variants.forEach((v: any) => variants.push(v.name || v));
-                    }
-                    if (variants.length > 0) {
-                        const varLines = wrapText(variants.join(" + "), maxNameWidth, maxNameWidth);
-                        varLines.forEach((l: string) => dataChunks.push(encoder.encode(l + "\n")));
+                    if (bt.showVariants !== false) {
+                        let variants = [];
+                        if (item.variant) variants.push(item.variant);
+                        if (bt.showFoodTypeSuffix !== false && item.foodType) variants.push(item.foodType);
+                        if (item.variants && Array.isArray(item.variants)) {
+                            item.variants.forEach((v: any) => variants.push(v.name || v));
+                        }
+                        if (variants.length > 0) {
+                            const varLines = wrapText(variants.join(" + "), maxNameWidth, maxNameWidth);
+                            varLines.forEach((l: string) => dataChunks.push(encoder.encode(l + "\n")));
+                        }
                     }
                     
                     const taxActive = (order?.tax || 0) > 0 || (order?.deliveryGst || 0) > 0 || (order?.packagingGst || 0) > 0 || (items.some((it: any) => it.gst !== undefined && it.gst !== null && Number(it.gst) > 0));
@@ -1479,59 +1846,79 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                 const total = order?.total || order?.finalTotal || (subtotal - discount + tax);
                 const taxActive = (tax > 0) || (order?.deliveryGst || 0) > 0 || (order?.packagingGst || 0) > 0 || (items.some((it: any) => it.gst !== undefined && it.gst !== null && Number(it.gst) > 0));
                 
-                dataChunks.push(encoder.encode(pLR("Subtotal", subtotal.toFixed(2), WIDTH) + "\n"));
-                if (discount > 0) dataChunks.push(encoder.encode(pLR("Discount", "-" + discount.toFixed(2), WIDTH) + "\n"));
-                
-                const delivery = order?.deliveryCharges || 0;
-                if (delivery > 0) dataChunks.push(encoder.encode(pLR("Delivery Charge", "+" + delivery.toFixed(2), WIDTH) + "\n"));
-                const packaging = order?.packagingCharges || 0;
-                if (packaging > 0) dataChunks.push(encoder.encode(pLR("Packaging", "+" + packaging.toFixed(2), WIDTH) + "\n"));
-                const service = order?.serviceCharge || 0;
-                const serviceLabel = order?.serviceChargeName || business?.serviceChargeName || "Service Charge";
-                if (service > 0) dataChunks.push(encoder.encode(pLR(serviceLabel, "+" + service.toFixed(2), WIDTH) + "\n"));
-                
-                if (taxActive) {
-                    const taxBreakup = calculateTaxBreakup(order, business);
-                    const totalTaxable = taxBreakup.reduce((a: any, b: any) => a + b.taxable, 0);
-                    if (totalTaxable > 0) {
-                        dataChunks.push(encoder.encode(pLR("Taxable Amt", totalTaxable.toFixed(2), WIDTH) + "\n"));
-                    }
-                    
-                    let hasBreakupPrinted = false;
-                    for (const t of taxBreakup) {
-                        if (t.cgst > 0 || t.sgst > 0) {
-                            hasBreakupPrinted = true;
-                            if (t.cgst > 0) dataChunks.push(encoder.encode(pLR(`CGST (${t.rate/2}%)`, t.cgst.toFixed(2), WIDTH) + "\n"));
-                            if (t.sgst > 0) dataChunks.push(encoder.encode(pLR(`SGST (${t.rate/2}%)`, t.sgst.toFixed(2), WIDTH) + "\n"));
-                        } else if (t.igst > 0) {
-                            hasBreakupPrinted = true;
-                            dataChunks.push(encoder.encode(pLR(`IGST (${t.rate}%)`, t.igst.toFixed(2), WIDTH) + "\n"));
-                        }
-                    }
-                    
-                    if (!hasBreakupPrinted && tax > 0) {
-                        dataChunks.push(encoder.encode(pLR("Tax/GST", "+" + tax.toFixed(2), WIDTH) + "\n"));
-                    }
-                } else if (tax > 0) {
-                    dataChunks.push(encoder.encode(pLR("Tax/GST", "+" + tax.toFixed(2), WIDTH) + "\n"));
+                if (bt.showSubtotal !== false) {
+                    dataChunks.push(encoder.encode(pLR("Subtotal", subtotal.toFixed(2), WIDTH) + "\n"));
+                }
+                if (bt.showDiscount !== false && discount > 0) {
+                    dataChunks.push(encoder.encode(pLR("Discount", "-" + discount.toFixed(2), WIDTH) + "\n"));
                 }
                 
-                dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
-                dataChunks.push(TEXT_DOUBLE_H);
-                dataChunks.push(BOLD_ON);
-                dataChunks.push(encoder.encode(pLR("GRAND TOTAL", `Rs.${total.toFixed(2)}`, WIDTH) + "\n"));
-                dataChunks.push(BOLD_OFF);
-                dataChunks.push(TEXT_NORMAL);
-                dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
+                const delivery = order?.deliveryCharges || 0;
+                if (bt.showDeliveryCharge !== false && delivery > 0) {
+                    dataChunks.push(encoder.encode(pLR("Delivery Charge", "+" + delivery.toFixed(2), WIDTH) + "\n"));
+                }
+                const packaging = order?.packagingCharges || 0;
+                if (bt.showPackagingCharge !== false && packaging > 0) {
+                    dataChunks.push(encoder.encode(pLR("Packaging", "+" + packaging.toFixed(2), WIDTH) + "\n"));
+                }
+                const service = order?.serviceCharge || 0;
+                const serviceLabel = order?.serviceChargeName || business?.serviceChargeName || "Service Charge";
+                if (bt.showServiceCharge !== false && service > 0) {
+                    dataChunks.push(encoder.encode(pLR(serviceLabel, "+" + service.toFixed(2), WIDTH) + "\n"));
+                }
                 
-                const amtWords = "Amount in Words: " + numToWords(total);
-                const awLines = wrapText(amtWords, WIDTH, WIDTH);
-                awLines.forEach((l: string) => dataChunks.push(encoder.encode(l + "\n")));
+                if (bt.showTaxBreakup !== false) {
+                    if (taxActive) {
+                        const taxBreakup = calculateTaxBreakup(order, business);
+                        const totalTaxable = taxBreakup.reduce((a: any, b: any) => a + b.taxable, 0);
+                        if (totalTaxable > 0) {
+                            dataChunks.push(encoder.encode(pLR("Taxable Amt", totalTaxable.toFixed(2), WIDTH) + "\n"));
+                        }
+                        
+                        let hasBreakupPrinted = false;
+                        for (const t of taxBreakup) {
+                            if (t.cgst > 0 || t.sgst > 0) {
+                                hasBreakupPrinted = true;
+                                if (t.cgst > 0) dataChunks.push(encoder.encode(pLR(`CGST (${t.rate/2}%)`, t.cgst.toFixed(2), WIDTH) + "\n"));
+                                if (t.sgst > 0) dataChunks.push(encoder.encode(pLR(`SGST (${t.rate/2}%)`, t.sgst.toFixed(2), WIDTH) + "\n"));
+                            } else if (t.igst > 0) {
+                                hasBreakupPrinted = true;
+                                dataChunks.push(encoder.encode(pLR(`IGST (${t.rate}%)`, t.igst.toFixed(2), WIDTH) + "\n"));
+                            }
+                        }
+                        
+                        if (!hasBreakupPrinted && tax > 0) {
+                            dataChunks.push(encoder.encode(pLR("Tax/GST", "+" + tax.toFixed(2), WIDTH) + "\n"));
+                        }
+                    } else if (tax > 0) {
+                        dataChunks.push(encoder.encode(pLR("Tax/GST", "+" + tax.toFixed(2), WIDTH) + "\n"));
+                    }
+                }
                 
-                dataChunks.push(encoder.encode("Payment Mode: " + (order?.paymentMode || "CASH") + "\n"));
-                dataChunks.push(encoder.encode("Status: " + (order?.paymentStatus || "Paid") + "\n"));
+                if (bt.showGrandTotal !== false) {
+                    dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
+                    const gtStyle = resolveStyle(bt.grandTotalStyle, bt.grandTotalFontSize, 'double_h');
+                    applyStyle(gtStyle);
+                    dataChunks.push(encoder.encode(pLR("GRAND TOTAL", `Rs.${total.toFixed(2)}`, WIDTH) + "\n"));
+                    dataChunks.push(BOLD_OFF);
+                    dataChunks.push(TEXT_NORMAL);
+                    dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
+                }
                 
-                if (order?.paymentStatus === "PARTIAL" || (order?.balanceDue !== undefined && order.balanceDue > 0)) {
+                if (bt.showAmountInWords !== false) {
+                    const amtWords = "Amount in Words: " + numToWords(total);
+                    const awLines = wrapText(amtWords, WIDTH, WIDTH);
+                    awLines.forEach((l: string) => dataChunks.push(encoder.encode(l + "\n")));
+                }
+                
+                if (bt.showPaymentMode !== false) {
+                    dataChunks.push(encoder.encode("Payment Mode: " + (order?.paymentMode || "CASH") + "\n"));
+                }
+                if (bt.showPaymentStatus !== false) {
+                    dataChunks.push(encoder.encode("Status: " + (order?.paymentStatus || "Paid") + "\n"));
+                }
+                
+                if (bt.showBalanceDue !== false && (order?.paymentStatus === "PARTIAL" || (order?.balanceDue !== undefined && order.balanceDue > 0))) {
                     const paid = order?.amountPaid || 0;
                     const due = order?.balanceDue || 0;
                     dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
@@ -1540,8 +1927,8 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                 }
                 dataChunks.push(LINE_FEED);
                 
-                // Payment UPI QR Code (Fast direct raster bitmap for instant, smooth printing on all thermal printers)
-                const showUpiQr = (business?.upi && business?.upiQrEnabled !== false) || order?.paymentMode === "UPI";
+                // Payment UPI QR Code
+                const showUpiQr = bt.showUpiQr !== false && ((business?.upi && business?.upiQrEnabled !== false) || order?.paymentMode === "UPI");
                 if (showUpiQr && business?.upi) {
                     try {
                         const upiUrl = `upi://pay?pa=${business.upi}&pn=${encodeURIComponent(business.name || "Store")}&am=${total.toFixed(2)}&cu=INR`;
@@ -1552,10 +1939,10 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                         dataChunks.push(BOLD_OFF);
                         dataChunks.push(LINE_FEED);
                         
-                        // Universal fast raster QR code (~2KB data, instant render, continuous print without motor stop)
-                        addFastRasterQr(upiUrl, 4);
+                        // Universal fast raster QR code with quiet zone & safe line separation
+                        addFastRasterQr(upiUrl, 3);
                         
-                        dataChunks.push(LINE_FEED);
+                        dataChunks.push(ALIGN_CENTER);
                         dataChunks.push(BOLD_ON);
                         dataChunks.push(encoder.encode("UPI: " + business.upi + "\n"));
                         dataChunks.push(BOLD_OFF);
@@ -1563,13 +1950,14 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                             dataChunks.push(encoder.encode("Txn Ref: " + order.upiTxnRef + "\n"));
                         }
                         dataChunks.push(ALIGN_LEFT);
+                        dataChunks.push(LINE_FEED);
                         dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
                         dataChunks.push(LINE_FEED);
                     } catch (e) { console.log("UPI QR error", e); }
                 }
 
-                // Menu QR Code Print (Fast direct raster bitmap)
-                if (business?.enableMenuQRInBill && business?.userId) {
+                // Menu QR Code Print
+                if (bt.showMenuQr !== false && business?.enableMenuQRInBill && business?.userId) {
                     try {
                         const menuUrl = (typeof window !== 'undefined' ? window.location.origin : "https://billing.kravy.in") + "/menu/" + business.userId;
                         dataChunks.push(ALIGN_CENTER);
@@ -1577,24 +1965,34 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                         dataChunks.push(encoder.encode("RATE YOUR EXPERIENCE\n"));
                         dataChunks.push(BOLD_OFF);
                         dataChunks.push(LINE_FEED);
-                        addFastRasterQr(menuUrl, 4);
+                        addFastRasterQr(menuUrl, 3);
                         dataChunks.push(LINE_FEED);
                     } catch (e) { console.log("QR error", e); }
                 }
                 
                 dataChunks.push(ALIGN_CENTER);
-                if (fullDateStr) {
+                if (bt.showDate !== false && fullDateStr) {
                     dataChunks.push(encoder.encode(fullDateStr + "\n"));
                 }
-                dataChunks.push(BOLD_ON);
-                dataChunks.push(encoder.encode("HARE KRISHNA\n"));
-                dataChunks.push(BOLD_OFF);
-                dataChunks.push(encoder.encode("Powered by Kravy POS\n"));
+                if (bt.showGreetings !== false) {
+                    dataChunks.push(BOLD_ON);
+                    dataChunks.push(encoder.encode("HARE KRISHNA\n"));
+                    dataChunks.push(BOLD_OFF);
+                }
+                if (bt.showPoweredBy !== false) {
+                    dataChunks.push(encoder.encode("Powered by Kravy POS\n"));
+                }
             }
         }
         
-        dataChunks.push(new Uint8Array([0x0A, 0x0A, 0x0A, 0x0A])); // Feeds
-        dataChunks.push(PAPER_CUT);
+        const feedCount = Math.max(1, Math.min(Number(business?.btPrintSettings?.bottomFeeds || business?.printSettings?.bluetooth?.bottomFeeds || 4), 10));
+        const feedBytes = new Uint8Array(feedCount).fill(0x0A);
+        dataChunks.push(feedBytes);
+        
+        const shouldCut = (business?.btPrintSettings?.cutPaper !== false && business?.printSettings?.bluetooth?.cutPaper !== false);
+        if (shouldCut) {
+            dataChunks.push(PAPER_CUT);
+        }
 
         // Flatten chunks for optimized transmission
         const totalLength = dataChunks.reduce((acc, val) => acc + val.length, 0);
@@ -1606,10 +2004,11 @@ export async function printReceiptData(order: any, business: any, elementToPrint
         }
 
         // High-Speed continuous streaming for Thermal POS Printers:
-        // When writeWithoutResponse is available, stream in 240-512 byte packets without blocking queue.
-        // Chrome prints fast because it writes directly to GATT buffer without queue overhead.
-        const CHUNK_SIZE = isCapacitor ? (activeState.capCanWriteWithoutResponse ? Math.min(activeState.capMtu || 244, 244) : 64) : 244; 
-        const CHUNK_DELAY = isCapacitor ? (activeState.capCanWriteWithoutResponse ? 0 : 5) : 0;
+        // Small portable 58mm/80mm Bluetooth printers have 64-128 byte RX buffers.
+        // Flooding at 244 bytes with 0ms delay overflows the printer hardware buffer during raster QR images.
+        // Using 100 bytes chunk size with 15ms pacing ensures 100% reliable QR printing without drops or garbling.
+        const CHUNK_SIZE = isCapacitor ? (activeState.capCanWriteWithoutResponse ? Math.min(activeState.capMtu || 244, 244) : 64) : 100; 
+        const CHUNK_DELAY = isCapacitor ? (activeState.capCanWriteWithoutResponse ? 0 : 5) : 15;
 
         for (let i = 0; i < printData.length; i += CHUNK_SIZE) {
             const slice = printData.slice(i, i + CHUNK_SIZE);
@@ -1681,6 +2080,206 @@ export async function printReceiptData(order: any, business: any, elementToPrint
     }
     });
 }
+
+/**
+ * Dedicated Independent Token Ticket Printer (ESC/POS over Bluetooth)
+ * Prints a clean, thermal-optimized separate order token ticket.
+ * Zero side-effects: does not alter bill, token sequence, inventory or status.
+ */
+export async function printTokenTicketData(ticketData: {
+    business: any;
+    billNumber?: string;
+    tokenNumber?: string | number;
+    createdAt?: string | Date;
+}, targetSlot: PrinterSlot = 'bill') {
+    return enqueuePrintTask(async () => {
+        const isCapacitor = Capacitor.isNativePlatform();
+        const slot: PrinterSlot = targetSlot;
+        const effectiveSlot: PrinterSlot = (slot === 'kot' && isSamePrinterForKot()) ? 'bill' : slot;
+
+        let activeState = printerSlots[effectiveSlot];
+        const isAlive = isCapacitor 
+            ? !!(activeState.capDevice && activeState.capChar)
+            : !!(activeState.char && activeState.device?.gatt?.connected);
+
+        if (!isAlive) {
+            activeState.status = 'RECONNECTING';
+            try {
+                await ensurePrinterConnected(false, effectiveSlot);
+                activeState = printerSlots[effectiveSlot];
+            } catch (reconErr: any) {
+                activeState.status = 'ERROR';
+                activeState.lastError = reconErr?.message || "Reconnection failed";
+            }
+        }
+
+        if (isCapacitor) {
+            if (!activeState.capDevice || !activeState.capChar) {
+                const altSlot: PrinterSlot = effectiveSlot === 'kot' ? 'bill' : 'kot';
+                if (printerSlots[altSlot].capDevice && printerSlots[altSlot].capChar) {
+                    activeState = printerSlots[altSlot];
+                }
+            }
+            if (!activeState.capDevice || !activeState.capChar) {
+                const err = `Bluetooth printer for ${slot.toUpperCase()} not connected. Please connect printer.`;
+                activeState.status = 'DISCONNECTED';
+                activeState.lastError = err;
+                triggerPrinterRecoveryModal({
+                    slot,
+                    error: err,
+                    printerName: getConnectedPrinterName(slot),
+                    onRetry: async () => { await ensurePrinterConnected(false, slot); },
+                    onScan: async () => { await ensurePrinterConnected(true, slot); }
+                });
+                throw new Error(err);
+            }
+        } else {
+            if (!activeState.char || !activeState.device?.gatt?.connected) {
+                const altSlot: PrinterSlot = effectiveSlot === 'kot' ? 'bill' : 'kot';
+                if (printerSlots[altSlot].char && printerSlots[altSlot].device?.gatt?.connected) {
+                    activeState = printerSlots[altSlot];
+                }
+            }
+            if (!activeState.char || !activeState.device?.gatt?.connected) {
+                const err = `Bluetooth printer for ${slot.toUpperCase()} not connected. Please connect printer.`;
+                activeState.status = 'DISCONNECTED';
+                activeState.lastError = err;
+                triggerPrinterRecoveryModal({
+                    slot,
+                    error: err,
+                    printerName: getConnectedPrinterName(slot),
+                    onRetry: async () => { await ensurePrinterConnected(false, slot); },
+                    onScan: async () => { await ensurePrinterConnected(true, slot); }
+                });
+                throw new Error(err);
+            }
+        }
+
+        const bt = getEffectiveBtSettings(ticketData.business);
+        const is80 = bt.paperWidth === "80mm";
+        const WIDTH = is80 ? 48 : 32;
+
+        try {
+            const dataChunks: Uint8Array[] = [];
+            const INIT = new Uint8Array([0x1B, 0x40]); // ESC @
+            const CODE_PAGE = new Uint8Array([0x1B, 0x74, 0x00]); // ESC t 0
+            const PAPER_CUT = new Uint8Array([0x1D, 0x56, 0x41, 0x10]); // GS V 65 16
+
+            const ALIGN_CENTER = new Uint8Array([0x1B, 0x61, 0x01]);
+            const ALIGN_LEFT = new Uint8Array([0x1B, 0x61, 0x00]);
+            const BOLD_ON = new Uint8Array([0x1B, 0x45, 0x01]);
+            const BOLD_OFF = new Uint8Array([0x1B, 0x45, 0x00]);
+            const LINE_FEED = new Uint8Array([0x0A]);
+            const TEXT_NORMAL = new Uint8Array([0x1D, 0x21, 0x00]);
+            const TEXT_DOUBLE_H = new Uint8Array([0x1D, 0x21, 0x01]);
+            const TEXT_DOUBLE_HW = new Uint8Array([0x1D, 0x21, 0x11]);
+
+            dataChunks.push(INIT);
+            dataChunks.push(CODE_PAGE);
+
+            // Divider
+            const divider = "-".repeat(WIDTH) + "\n";
+
+            // Header Section: Restaurant Name
+            dataChunks.push(ALIGN_CENTER);
+            dataChunks.push(divider ? encoder.encode(divider) : LINE_FEED);
+
+            const bName = ticketData.business?.businessName || ticketData.business?.name || "KRAVY RESTAURANT";
+            dataChunks.push(TEXT_DOUBLE_H);
+            dataChunks.push(BOLD_ON);
+            dataChunks.push(encoder.encode(bName + "\n"));
+            dataChunks.push(BOLD_OFF);
+            dataChunks.push(TEXT_NORMAL);
+            dataChunks.push(LINE_FEED);
+
+            // Title: ORDER TOKEN
+            dataChunks.push(BOLD_ON);
+            dataChunks.push(encoder.encode("ORDER TOKEN\n"));
+            dataChunks.push(BOLD_OFF);
+            dataChunks.push(LINE_FEED);
+
+            // Token Number (Largest & Most Prominent: Double Height + Double Width + Bold)
+            let rawToken = ticketData.tokenNumber != null ? String(ticketData.tokenNumber) : "001";
+            if (/^\d+$/.test(rawToken) && rawToken.length < 3) {
+                rawToken = rawToken.padStart(3, "0");
+            }
+            dataChunks.push(TEXT_DOUBLE_HW);
+            dataChunks.push(BOLD_ON);
+            dataChunks.push(encoder.encode(rawToken + "\n"));
+            dataChunks.push(BOLD_OFF);
+            dataChunks.push(TEXT_NORMAL);
+            dataChunks.push(LINE_FEED);
+
+            // Call to action
+            dataChunks.push(BOLD_ON);
+            dataChunks.push(encoder.encode("PLEASE COLLECT YOUR ORDER\n"));
+            dataChunks.push(BOLD_OFF);
+
+            // Divider
+            dataChunks.push(encoder.encode(divider));
+
+            // Metadata: Invoice / Date / Time (Left aligned or neat lines)
+            dataChunks.push(ALIGN_LEFT);
+            const billNo = ticketData.billNumber || "—";
+            dataChunks.push(encoder.encode(`Invoice: ${billNo}\n`));
+
+            const dObj = ticketData.createdAt ? new Date(ticketData.createdAt) : new Date();
+            const dateStr = dObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+            const timeStr = dObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+            dataChunks.push(encoder.encode(`Date: ${dateStr}\n`));
+            dataChunks.push(encoder.encode(`Time: ${timeStr}\n`));
+
+            // Footer
+            dataChunks.push(ALIGN_CENTER);
+            dataChunks.push(encoder.encode(divider));
+            dataChunks.push(BOLD_ON);
+            dataChunks.push(encoder.encode("THANK YOU!\n"));
+            dataChunks.push(BOLD_OFF);
+            dataChunks.push(encoder.encode(divider));
+
+            // Bottom Feed lines
+            const feedCount = Math.max(2, Math.min(Number(bt.bottomFeeds || 4), 8));
+            dataChunks.push(new Uint8Array(feedCount).fill(0x0A));
+
+            // Auto Paper Cut if enabled
+            if (bt.cutPaper !== false) {
+                dataChunks.push(PAPER_CUT);
+            }
+
+            // Merge chunks and send
+            const totalLength = dataChunks.reduce((acc, chunk) => acc + chunk.length, 0);
+            const merged = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const chunk of dataChunks) {
+                merged.set(chunk, offset);
+                offset += chunk.length;
+            }
+
+            if (isCapacitor) {
+                await sendCapacitorData(effectiveSlot, activeState, merged);
+            } else {
+                await sendWebBluetoothData(activeState, merged);
+            }
+
+            activeState.status = 'READY';
+            activeState.lastPrintedAt = Date.now();
+            return true;
+        } catch (error: any) {
+            console.error("Token Ticket Bluetooth Print Error:", error);
+            activeState.status = 'ERROR';
+            activeState.lastError = error?.message || "Failed to print Token Ticket";
+            triggerPrinterRecoveryModal({
+                slot,
+                error: error?.message || "Token Ticket write failed",
+                printerName: getConnectedPrinterName(slot),
+                onRetry: async () => { await printTokenTicketData(ticketData, targetSlot); },
+                onScan: async () => { await ensurePrinterConnected(true, slot); }
+            });
+            throw new Error(error?.message || "Failed to print Token Ticket over Bluetooth");
+        }
+    });
+}
+
 // Force HMR trigger
 const pLR: any = (l, r, w = 32) => {
     const len = l.length + r.length;
@@ -1745,7 +2344,8 @@ const padCenter: any = (str, w) => {
 
 export function generateTextReceiptPreview(order: any, business: any, isKot: boolean = false) {
     try {
-        const is80 = business?.printSettings?.paperWidth === '80mm';
+        const bt = getEffectiveBtSettings(business);
+        const is80 = bt.paperWidth === '80mm' || business?.printSettings?.paperWidth === '80mm';
         const WIDTH = is80 ? 48 : 32;
         let out = "";
         
@@ -1756,243 +2356,310 @@ export function generateTextReceiptPreview(order: any, business: any, isKot: boo
         };
 
         if (isKot) {
-        out += padCenter("K.O.T", WIDTH) + "\n";
-        out += "-".repeat(WIDTH) + "\n";
-        const tableStr = order?.tableName || "COUNTER";
-        const kotNum = order?.kotNumbers?.[order?.kotNumbers?.length - 1] 
-            || order?.tokenNumber 
-            || order?.reservedTokenNumber 
-            || order?.kotNumber 
-            || (Array.isArray(order?.items) && order.items.find((i: any) => i?.kotNumber)?.kotNumber) 
-            || (business?.lastTokenNumber ? String(business.lastTokenNumber) : "") 
-            || "1";
-        out += pLR("TABLE: " + tableStr, "KOT NO: " + kotNum, WIDTH) + "\n";
-        
-        const billNoStr = "Bill: " + (order?.billNumber || order?.orderNumber || "DRAFT");
-        let timeStr = "";
-        let fullDateStr = "";
-        try { 
-            const d = new Date();
-            timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-            const dPart = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            fullDateStr = dPart + " " + timeStr;
-        } catch(e){}
-        out += pLR(billNoStr, timeStr, WIDTH) + "\n";
-        out += "-".repeat(WIDTH) + "\n";
-        
-        out += pLR("ITEM DESCRIPTION", "QTY", WIDTH) + "\n";
-        
-        const allItems = order?.items || [];
-        const newItemsOnly = allItems.filter((i: any) => i?.isNew);
-        const items = newItemsOnly.length > 0 ? newItemsOnly : allItems;
-        for (const item of items) {
-            const name = (item.name || "Item").toUpperCase();
-            const fullQty = item.qty || item.quantity || 1;
-            const printedQty = item.printedQty || 0;
-            const qty = (item.isNew && printedQty) ? (fullQty - printedQty) : fullQty;
-            const rightCol = "x" + qty;
-            const maxNameWidth = WIDTH - rightCol.length - 1;
-            const lines = wrapText(name, maxNameWidth, maxNameWidth - 4);
-            
-            for (let i = 0; i < lines.length; i++) {
-                if (i === 0) {
-                    const paddedName = lines[i].padEnd(maxNameWidth, " ");
-                    out += paddedName + " " + rightCol + "\n";
-                } else {
-                    out += "    " + lines[i] + "\n";
-                }
+            if (bt.showKOTHeader !== false) {
+                out += padCenter("K.O.T", WIDTH) + "\n";
+                out += "-".repeat(WIDTH) + "\n";
             }
-        }
-        
-        out += "-".repeat(WIDTH) + "\n";
-        out += padCenter("END OF KOT", WIDTH) + "\n";
-        out += padCenter(fullDateStr, WIDTH) + "\n";
-    } else {
-        out += padCenter((business?.businessName || business?.name || "KRAVY POS"), WIDTH) + "\n";
-        
-        if (business?.tagline) {
-            const paragraphs = business.tagline.split('\n');
-            paragraphs.forEach(p => {
-                const tLines = wrapText(p, WIDTH, WIDTH);
-                tLines.forEach(l => out += padCenter(l, WIDTH) + "\n");
-            });
-        }
-        const addrParts = [];
-        if (business?.businessAddress || business?.address) addrParts.push(business.businessAddress || business.address);
-        if (business?.district) addrParts.push(business.district);
-        if (business?.state) addrParts.push(business.state);
-        
-        let fullAddr = addrParts.join(", ");
-        if (business?.pinCode) fullAddr += " - " + business.pinCode;
-
-        if (fullAddr.trim()) {
-            let addr = fullAddr;
-            addr = addr.replace(/<br\s*[\/]?>/gi, '\n').replace(/\r\n/g, '\n');
-            const paragraphs = addr.split('\n');
-            paragraphs.forEach(p => {
-                const aLines = wrapText(p, WIDTH, WIDTH);
-                aLines.forEach(l => out += padCenter(l, WIDTH) + "\n");
-            });
-        }
-        const phoneStr = business?.contactPersonPhone || business?.contactPhone || business?.businessPhone || business?.phone;
-        if (phoneStr) out += padCenter("Mob: " + phoneStr, WIDTH) + "\n";
-        if (business?.gstNumber) out += padCenter("GSTIN: " + business.gstNumber, WIDTH) + "\n";
-        if (business?.fssaiNumber) out += padCenter("FSSAI: " + business.fssaiNumber, WIDTH) + "\n";
-        
-        out += "-".repeat(WIDTH) + "\n";
-        out += padCenter(business?.gstNumber && order?.isTaxEnabled ? "TAX INVOICE" : "SALES RECEIPT", WIDTH) + "\n";
-        out += "-".repeat(WIDTH) + "\n";
-        
-        const billNoStr = "Bill No: " + (order?.billNumber || order?.orderNumber || "DRAFT");
-        const tokenRaw = (order?.tokenNumber || order?.kotNumbers?.[0] || "");
-        const tokenStr = tokenRaw ? "Token: " + tokenRaw : "";
-        out += pLR(billNoStr, tokenStr, WIDTH) + "\n";
-        
-        let dPart = "";
-        let fullDateStr = "";
-        try { 
-            const d = order?.createdAt ? new Date(order.createdAt) : new Date();
-            dPart = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' });
-            const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-            const dPartFull = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            fullDateStr = dPartFull + " " + timeStr;
-        } catch(e){}
-        const tableStr = "Table: " + (order?.tableName || "POS");
-        out += pLR("Date: " + dPart, tableStr, WIDTH) + "\n";
-        
-        out += "-".repeat(WIDTH) + "\n";
-        out += "Customer: " + (order?.customerName || "Walk-in Customer") + "\n";
-        if (order?.customerPhone) out += "Phone: " + order.customerPhone + "\n";
-        if (order?.customerAddress) out += "Addr: " + order.customerAddress + "\n";
-        out += "-".repeat(WIDTH) + "\n";
-        
-        const hdrRight = "AMOUNT";
-        const hdrMaxName = WIDTH - hdrRight.length - 1;
-        out += "ITEM".padEnd(hdrMaxName, " ") + " " + hdrRight + "\n";
-        
-        let subtotal = 0;
-        const items = order?.items || [];
-        for (const item of items) {
-            const name = (item.name || "Item").toUpperCase();
-            const qty = String(item.qty || item.quantity || 1);
-            const price = (item.price || item.rate || 0);
-            const totalLine = price * Number(qty);
-            subtotal += totalLine;
-            
-            const tot = totalLine.toFixed(2);
-            const hdrRight = "AMOUNT";
-            const maxNameWidth = WIDTH - hdrRight.length - 1;
-            const lines = wrapText(name, maxNameWidth, maxNameWidth); 
-            
-            for (let i = 0; i < lines.length; i++) {
-                out += lines[i] + "\n";
+            const tableStr = (bt.showKOTTable !== false) ? ("TABLE: " + (order?.tableName || "COUNTER")) : "";
+            const kotNum = order?.kotNumbers?.[order?.kotNumbers?.length - 1] 
+                || order?.tokenNumber 
+                || order?.reservedTokenNumber 
+                || order?.kotNumber 
+                || (Array.isArray(order?.items) && order.items.find((i: any) => i?.kotNumber)?.kotNumber) 
+                || (business?.lastTokenNumber ? String(business.lastTokenNumber) : "") 
+                || "1";
+            const kotNumStr = (bt.showKOTToken !== false) ? ("KOT NO: " + kotNum) : "";
+            if (tableStr || kotNumStr) {
+                out += pLR(tableStr, kotNumStr, WIDTH) + "\n";
             }
             
-            let variants = [];
-            if (item.variant) variants.push(item.variant);
-            if (item.foodType) variants.push(item.foodType);
-            if (item.variants && Array.isArray(item.variants)) {
-                item.variants.forEach((v: any) => variants.push(v.name || v));
+            const billNoStr = (bt.showKOTBillNo !== false) ? ("Bill: " + (order?.billNumber || order?.orderNumber || "DRAFT")) : "";
+            let timeStr = "";
+            let fullDateStr = "";
+            try { 
+                const d = new Date();
+                timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                const dPart = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                fullDateStr = dPart + " " + timeStr;
+            } catch(e){}
+            const datePrint = (bt.showKOTDateTime !== false) ? timeStr : "";
+            if (billNoStr || datePrint) {
+                out += pLR(billNoStr, datePrint, WIDTH) + "\n";
             }
-            if (variants.length > 0) {
-                const varLines = wrapText(variants.join(" + "), maxNameWidth, maxNameWidth);
-                varLines.forEach((l: string) => out += l + "\n");
+            
+            if (bt.showKOTCustomer !== false && (order?.customerName || order?.customerPhone)) {
+                out += "Customer: " + (order?.customerName || "Walk-in") + (order?.customerPhone ? ` (${order.customerPhone})` : "") + "\n";
             }
 
-            const taxActive = (order?.tax || 0) > 0 || (order?.deliveryGst || 0) > 0 || (order?.packagingGst || 0) > 0 || (items.some((it: any) => it.gst !== undefined && it.gst !== null && Number(it.gst) > 0));
-            let qtyStr = `${qty} x ${price.toFixed(2)}`;
-            if (taxActive && item.gst !== undefined && item.gst !== null && Number(item.gst) > 0) {
-                qtyStr += ` | GST ${item.gst}%`;
-            }
-            out += pLR(qtyStr, tot, WIDTH) + "\n";
-            out += "\n";
-        }
-        out += "-".repeat(WIDTH) + "\n";
-        
-        const discount = order?.discountAmount || order?.discountAmt || order?.discount || 0;
-        const tax = order?.tax || order?.gstAmount || order?.gst || 0;
-        const total = order?.total || order?.finalTotal || (subtotal - discount + tax);
-        const taxActive = (tax > 0) || (order?.deliveryGst || 0) > 0 || (order?.packagingGst || 0) > 0 || (items.some((it: any) => it.gst !== undefined && it.gst !== null && Number(it.gst) > 0));
-        
-        out += pLR("Subtotal", subtotal.toFixed(2), WIDTH) + "\n";
-        if (discount > 0) out += pLR("Discount", "-" + discount.toFixed(2), WIDTH) + "\n";
-        
-        const delivery = order?.deliveryCharges || 0;
-        if (delivery > 0) out += pLR("Delivery Charge", "+" + delivery.toFixed(2), WIDTH) + "\n";
-        const packaging = order?.packagingCharges || 0;
-        if (packaging > 0) out += pLR("Packaging", "+" + packaging.toFixed(2), WIDTH) + "\n";
-        const service = order?.serviceCharge || 0;
-        const serviceLabel = order?.serviceChargeName || business?.serviceChargeName || "Service Charge";
-        if (service > 0) out += pLR(serviceLabel, "+" + service.toFixed(2), WIDTH) + "\n";
-        
-        if (taxActive) {
-            const taxBreakup = calculateTaxBreakup(order, business);
-            const totalTaxable = taxBreakup.reduce((a: any, b: any) => a + b.taxable, 0);
-            if (totalTaxable > 0) {
-                out += pLR("Taxable Amt", totalTaxable.toFixed(2), WIDTH) + "\n";
-            }
-            let hasBreakupPrinted = false;
-            for (const t of taxBreakup) {
-                if (t.cgst > 0 || t.sgst > 0) {
-                    hasBreakupPrinted = true;
-                    if (t.cgst > 0) out += pLR(`CGST (${t.rate/2}%)`, t.cgst.toFixed(2), WIDTH) + "\n";
-                    if (t.sgst > 0) out += pLR(`SGST (${t.rate/2}%)`, t.sgst.toFixed(2), WIDTH) + "\n";
-                } else if (t.igst > 0) {
-                    hasBreakupPrinted = true;
-                    out += pLR(`IGST (${t.rate}%)`, t.igst.toFixed(2), WIDTH) + "\n";
-                }
-            }
-            if (!hasBreakupPrinted && tax > 0) {
-                out += pLR("Tax/GST", "+" + tax.toFixed(2), WIDTH) + "\n";
-            }
-        } else if (tax > 0) {
-            out += pLR("Tax/GST", "+" + tax.toFixed(2), WIDTH) + "\n";
-        }
-        
-        out += "-".repeat(WIDTH) + "\n";
-        out += pLR("GRAND TOTAL", `Rs.${total.toFixed(2)}`, WIDTH) + "\n";
-        out += "-".repeat(WIDTH) + "\n";
-        
-        const amtWords = "Amount in Words: " + numToWords(total);
-        const awLines = wrapText(amtWords, WIDTH, WIDTH);
-        awLines.forEach((l: string) => out += l + "\n");
-        
-        out += "Payment Mode: " + (order?.paymentMode || "CASH") + "\n";
-        out += "Status: " + (order?.paymentStatus || "Paid") + "\n";
-        
-        if (order?.paymentStatus === "PARTIAL" || (order?.balanceDue !== undefined && order.balanceDue > 0)) {
-            const paid = order?.amountPaid || 0;
-            const due = order?.balanceDue || 0;
             out += "-".repeat(WIDTH) + "\n";
-            out += pLR("Amount Paid:", `Rs.${paid.toFixed(2)}`, WIDTH) + "\n";
-            out += pLR("Balance Due:", `Rs.${due.toFixed(2)}`, WIDTH) + "\n";
-        }
-        out += "\n";
+            out += pLR("ITEM DESCRIPTION", "QTY", WIDTH) + "\n";
+            
+            const allItems = order?.items || [];
+            const newItemsOnly = allItems.filter((i: any) => i?.isNew);
+            const items = newItemsOnly.length > 0 ? newItemsOnly : allItems;
+            for (const item of items) {
+                const name = (item.name || "Item").toUpperCase();
+                const fullQty = item.qty || item.quantity || 1;
+                const printedQty = item.printedQty || 0;
+                const qty = (item.isNew && printedQty) ? (fullQty - printedQty) : fullQty;
+                const rightCol = "x" + qty;
+                const maxNameWidth = WIDTH - rightCol.length - 1;
+                const lines = wrapText(name, maxNameWidth, maxNameWidth - 4);
+                
+                for (let i = 0; i < lines.length; i++) {
+                    if (i === 0) {
+                        const paddedName = lines[i].padEnd(maxNameWidth, " ");
+                        out += paddedName + " " + rightCol + "\n";
+                    } else {
+                        out += "    " + lines[i] + "\n";
+                    }
+                }
+                if (bt.showKOTVariants !== false && item.variants && item.variants.length > 0) {
+                    out += "  (" + item.variants.map((v: any) => v.name || v).join(", ") + ")\n";
+                }
+                if (bt.showKOTInstructions !== false && item.notes) {
+                    out += "  * Note: " + devanagariToHinglish(item.notes) + "\n";
+                }
+                if (bt.showKOTItemDivider !== false) {
+                    out += "- ".repeat(Math.floor(WIDTH / 2)).trim() + "\n";
+                }
+            }
+            
+            if (bt.showKOTFooter !== false) {
+                out += "-".repeat(WIDTH) + "\n";
+                out += padCenter("END OF KOT", WIDTH) + "\n";
+                if (bt.showKOTDateTime !== false) {
+                    out += padCenter(fullDateStr, WIDTH) + "\n";
+                }
+            }
+        } else {
+            if (bt.showLogo !== false && (business?.logoUrl || business?.logo)) {
+                out += padCenter("[ LOGO ]", WIDTH) + "\n";
+            }
+            if (bt.showBusinessName !== false) {
+                out += padCenter((business?.businessName || business?.name || "KRAVY POS"), WIDTH) + "\n";
+            }
+            
+            if (bt.showTagline !== false && business?.tagline) {
+                const paragraphs = business.tagline.split('\n');
+                paragraphs.forEach(p => {
+                    const tLines = wrapText(p, WIDTH, WIDTH);
+                    tLines.forEach(l => out += padCenter(l, WIDTH) + "\n");
+                });
+            }
 
-        const showUpiQr = (business?.upi && business?.upiQrEnabled !== false) || order?.paymentMode === "UPI";
-        if (showUpiQr && business?.upi) {
-            out += padCenter("SCAN & PAY", WIDTH) + "\n";
-            out += padCenter("[ UPI QR CODE ]", WIDTH) + "\n";
-            out += padCenter("UPI: " + business.upi, WIDTH) + "\n";
-            if (order?.paymentMode === "UPI" && order?.upiTxnRef) {
-                out += padCenter("Txn Ref: " + order.upiTxnRef, WIDTH) + "\n";
+            if (bt.showAddress !== false) {
+                const addrParts = [];
+                if (business?.businessAddress || business?.address) addrParts.push(business.businessAddress || business.address);
+                if (business?.district) addrParts.push(business.district);
+                if (business?.state) addrParts.push(business.state);
+                
+                let fullAddr = addrParts.join(", ");
+                if (business?.pinCode) fullAddr += " - " + business.pinCode;
+
+                if (fullAddr.trim()) {
+                    let addr = fullAddr;
+                    addr = addr.replace(/<br\s*[\/]?>/gi, '\n').replace(/\r\n/g, '\n');
+                    const paragraphs = addr.split('\n');
+                    paragraphs.forEach(p => {
+                        const aLines = wrapText(p, WIDTH, WIDTH);
+                        aLines.forEach(l => out += padCenter(l, WIDTH) + "\n");
+                    });
+                }
+            }
+
+            const phoneStr = business?.contactPersonPhone || business?.contactPhone || business?.businessPhone || business?.phone;
+            if (bt.showContact !== false && phoneStr) out += padCenter("Mob: " + phoneStr, WIDTH) + "\n";
+            if (bt.showGST !== false && business?.gstNumber) out += padCenter("GSTIN: " + business.gstNumber, WIDTH) + "\n";
+            if (bt.showFSSAI !== false && business?.fssaiNumber) out += padCenter("FSSAI: " + business.fssaiNumber, WIDTH) + "\n";
+            
+            out += "-".repeat(WIDTH) + "\n";
+            out += padCenter(business?.gstNumber && order?.isTaxEnabled ? "TAX INVOICE" : "SALES RECEIPT", WIDTH) + "\n";
+            out += "-".repeat(WIDTH) + "\n";
+            
+            const billNoStr = (bt.showInvoiceNumber !== false) ? ("Bill No: " + (order?.billNumber || order?.orderNumber || "DRAFT")) : "";
+            const tokenRaw = (order?.tokenNumber || order?.kotNumbers?.[0] || "");
+            const tokenStr = (bt.showToken !== false && tokenRaw) ? ("Token: " + tokenRaw) : "";
+            if (billNoStr || tokenStr) {
+                out += pLR(billNoStr, tokenStr, WIDTH) + "\n";
+            }
+            
+            let dPart = "";
+            let fullDateStr = "";
+            try { 
+                const d = order?.createdAt ? new Date(order.createdAt) : new Date();
+                dPart = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' });
+                const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                const dPartFull = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                fullDateStr = dPartFull + " " + timeStr;
+            } catch(e){}
+            const datePrint = (bt.showDate !== false) ? ("Date: " + dPart) : "";
+            const tableStr = (bt.showTableInfo !== false) ? ("Table: " + (order?.tableName || "POS")) : "";
+            if (datePrint || tableStr) {
+                out += pLR(datePrint, tableStr, WIDTH) + "\n";
+            }
+            
+            if (bt.showCustomerDetails !== false && (order?.customerName || order?.customerPhone || order?.customerAddress)) {
+                out += "-".repeat(WIDTH) + "\n";
+                out += "Customer: " + (order?.customerName || "Walk-in Customer") + "\n";
+                if (bt.showCustomerPhone !== false && order?.customerPhone) out += "Phone: " + order.customerPhone + "\n";
+                if (bt.showCustomerAddress !== false && order?.customerAddress) out += "Addr: " + order.customerAddress + "\n";
+            }
+            out += "-".repeat(WIDTH) + "\n";
+            
+            const hdrRight = "AMOUNT";
+            const hdrMaxName = WIDTH - hdrRight.length - 1;
+            out += "ITEM".padEnd(hdrMaxName, " ") + " " + hdrRight + "\n";
+            
+            let subtotal = 0;
+            const items = order?.items || [];
+            for (const item of items) {
+                const name = (item.name || "Item").toUpperCase();
+                const qty = String(item.qty || item.quantity || 1);
+                const price = (item.price || item.rate || 0);
+                const totalLine = price * Number(qty);
+                subtotal += totalLine;
+                
+                const tot = totalLine.toFixed(2);
+                const hdrRight = "AMOUNT";
+                const maxNameWidth = WIDTH - hdrRight.length - 1;
+                const lines = wrapText(name, maxNameWidth, maxNameWidth); 
+                
+                for (let i = 0; i < lines.length; i++) {
+                    out += lines[i] + "\n";
+                }
+                
+                if (bt.showVariants !== false) {
+                    let variants = [];
+                    if (item.variant) variants.push(item.variant);
+                    if (bt.showFoodTypeSuffix !== false && item.foodType) variants.push(item.foodType);
+                    if (item.variants && Array.isArray(item.variants)) {
+                        item.variants.forEach((v: any) => variants.push(v.name || v));
+                    }
+                    if (variants.length > 0) {
+                        const varLines = wrapText(variants.join(" + "), maxNameWidth, maxNameWidth);
+                        varLines.forEach((l: string) => out += l + "\n");
+                    }
+                }
+
+                const taxActive = (order?.tax || 0) > 0 || (order?.deliveryGst || 0) > 0 || (order?.packagingGst || 0) > 0 || (items.some((it: any) => it.gst !== undefined && it.gst !== null && Number(it.gst) > 0));
+                let qtyStr = `${qty} x ${price.toFixed(2)}`;
+                if (taxActive && item.gst !== undefined && item.gst !== null && Number(item.gst) > 0) {
+                    qtyStr += ` | GST ${item.gst}%`;
+                }
+                out += pLR(qtyStr, tot, WIDTH) + "\n";
+                out += "\n";
+            }
+            out += "-".repeat(WIDTH) + "\n";
+            
+            const discount = order?.discountAmount || order?.discountAmt || order?.discount || 0;
+            const tax = order?.tax || order?.gstAmount || order?.gst || 0;
+            const total = order?.total || order?.finalTotal || (subtotal - discount + tax);
+            const taxActive = (tax > 0) || (order?.deliveryGst || 0) > 0 || (order?.packagingGst || 0) > 0 || (items.some((it: any) => it.gst !== undefined && it.gst !== null && Number(it.gst) > 0));
+            
+            if (bt.showSubtotal !== false) {
+                out += pLR("Subtotal", subtotal.toFixed(2), WIDTH) + "\n";
+            }
+            if (bt.showDiscount !== false && discount > 0) {
+                out += pLR("Discount", "-" + discount.toFixed(2), WIDTH) + "\n";
+            }
+            
+            const delivery = order?.deliveryCharges || 0;
+            if (bt.showDeliveryCharge !== false && delivery > 0) {
+                out += pLR("Delivery Charge", "+" + delivery.toFixed(2), WIDTH) + "\n";
+            }
+            const packaging = order?.packagingCharges || 0;
+            if (bt.showPackagingCharge !== false && packaging > 0) {
+                out += pLR("Packaging", "+" + packaging.toFixed(2), WIDTH) + "\n";
+            }
+            const service = order?.serviceCharge || 0;
+            const serviceLabel = order?.serviceChargeName || business?.serviceChargeName || "Service Charge";
+            if (bt.showServiceCharge !== false && service > 0) {
+                out += pLR(serviceLabel, "+" + service.toFixed(2), WIDTH) + "\n";
+            }
+            
+            if (bt.showTaxBreakup !== false) {
+                if (taxActive) {
+                    const taxBreakup = calculateTaxBreakup(order, business);
+                    const totalTaxable = taxBreakup.reduce((a: any, b: any) => a + b.taxable, 0);
+                    if (totalTaxable > 0) {
+                        out += pLR("Taxable Amt", totalTaxable.toFixed(2), WIDTH) + "\n";
+                    }
+                    let hasBreakupPrinted = false;
+                    for (const t of taxBreakup) {
+                        if (t.cgst > 0 || t.sgst > 0) {
+                            hasBreakupPrinted = true;
+                            if (t.cgst > 0) out += pLR(`CGST (${t.rate/2}%)`, t.cgst.toFixed(2), WIDTH) + "\n";
+                            if (t.sgst > 0) out += pLR(`SGST (${t.rate/2}%)`, t.sgst.toFixed(2), WIDTH) + "\n";
+                        } else if (t.igst > 0) {
+                            hasBreakupPrinted = true;
+                            out += pLR(`IGST (${t.rate}%)`, t.igst.toFixed(2), WIDTH) + "\n";
+                        }
+                    }
+                    if (!hasBreakupPrinted && tax > 0) {
+                        out += pLR("Tax/GST", "+" + tax.toFixed(2), WIDTH) + "\n";
+                    }
+                } else if (tax > 0) {
+                    out += pLR("Tax/GST", "+" + tax.toFixed(2), WIDTH) + "\n";
+                }
+            }
+            
+            if (bt.showGrandTotal !== false) {
+                out += "-".repeat(WIDTH) + "\n";
+                out += pLR("GRAND TOTAL", `Rs.${total.toFixed(2)}`, WIDTH) + "\n";
+                out += "-".repeat(WIDTH) + "\n";
+            }
+            
+            if (bt.showAmountInWords !== false) {
+                const amtWords = "Amount in Words: " + numToWords(total);
+                const awLines = wrapText(amtWords, WIDTH, WIDTH);
+                awLines.forEach((l: string) => out += l + "\n");
+            }
+            
+            if (bt.showPaymentMode !== false) {
+                out += "Payment Mode: " + (order?.paymentMode || "CASH") + "\n";
+            }
+            if (bt.showPaymentStatus !== false) {
+                out += "Status: " + (order?.paymentStatus || "Paid") + "\n";
+            }
+            
+            if (bt.showBalanceDue !== false && (order?.paymentStatus === "PARTIAL" || (order?.balanceDue !== undefined && order.balanceDue > 0))) {
+                const paid = order?.amountPaid || 0;
+                const due = order?.balanceDue || 0;
+                out += "-".repeat(WIDTH) + "\n";
+                out += pLR("Amount Paid:", `Rs.${paid.toFixed(2)}`, WIDTH) + "\n";
+                out += pLR("Balance Due:", `Rs.${due.toFixed(2)}`, WIDTH) + "\n";
             }
             out += "\n";
+
+            const showUpiQr = bt.showUpiQr !== false && ((business?.upi && business?.upiQrEnabled !== false) || order?.paymentMode === "UPI");
+            if (showUpiQr && business?.upi) {
+                out += padCenter("SCAN & PAY", WIDTH) + "\n";
+                out += padCenter("[ UPI QR CODE ]", WIDTH) + "\n";
+                out += padCenter("UPI: " + business.upi, WIDTH) + "\n";
+                if (order?.paymentMode === "UPI" && order?.upiTxnRef) {
+                    out += padCenter("Txn Ref: " + order.upiTxnRef, WIDTH) + "\n";
+                }
+                out += "\n";
+            }
+            
+            if (bt.showMenuQr !== false && business?.enableMenuQRInBill && business?.userId) {
+                out += padCenter("RATE YOUR EXPERIENCE", WIDTH) + "\n";
+                out += padCenter("[ QR CODE ]", WIDTH) + "\n";
+            }
+            
+            if (bt.showDate !== false && fullDateStr) {
+                out += padCenter(fullDateStr, WIDTH) + "\n";
+            }
+            if (bt.showGreetings !== false) {
+                out += padCenter("HARE KRISHNA", WIDTH) + "\n";
+            }
+            if (bt.showPoweredBy !== false) {
+                out += padCenter("Powered by Kravy POS", WIDTH) + "\n";
+            }
         }
         
-        if (business?.enableMenuQRInBill && business?.userId) {
-            out += padCenter("RATE YOUR EXPERIENCE", WIDTH) + "\n";
-            out += padCenter("[ QR CODE ]", WIDTH) + "\n";
-        }
-        
-        if (fullDateStr) {
-            out += padCenter(fullDateStr, WIDTH) + "\n";
-        }
-        out += padCenter("HARE KRISHNA", WIDTH) + "\n";
-        out += padCenter("Powered by Kravy POS", WIDTH) + "\n";
-    }
-    
-    return out;
+        return out;
     } catch(err: any) {
         console.error("Preview Generation Error:", err);
         throw new Error("Failed generating preview text: " + err.message);
