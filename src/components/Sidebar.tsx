@@ -208,6 +208,7 @@ const navGroups = [
       { icon: <UserCircle size={18} />, label: "Business Profile", href: "/dashboard/profile", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <Mail size={18} />, label: "Gmail Integration", href: "/dashboard/integration/gmail", roles: ["ADMIN", "SELLER"] },
       { icon: <Sliders size={18} />, label: "Sidebar Menu Layout", href: "/dashboard/settings/sidebar", roles: ["ADMIN", "SELLER", "STAFF"] },
+      { icon: <MessageSquare size={18} />, label: "WhatsApp Wallet", href: "/dashboard/settings/whatsapp", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <Printer size={18} />, label: "Printing Setup", href: "/dashboard/settings/printing", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <Smartphone size={18} />, label: "App Settings", href: "/dashboard/admin/app-settings", roles: ["ADMIN"] },
       { icon: <Database size={18} />, label: "Backups", href: "/dashboard/admin/backup", roles: ["ADMIN"] },

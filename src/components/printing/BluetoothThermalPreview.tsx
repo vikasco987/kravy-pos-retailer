@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { BluetoothPrintSettings } from "@/lib/web-bluetooth";
+import { QRCodeSVG } from "qrcode.react";
+import { BluetoothPrintSettings, formatBusinessName } from "@/lib/web-bluetooth";
 
 interface BluetoothThermalPreviewProps {
   settings: BluetoothPrintSettings;
@@ -256,19 +257,48 @@ export default function BluetoothThermalPreview({
               </div>
             )}
 
-            {/* Business Name */}
-            {settings.showBusinessName !== false && (
-              <div
-                className="text-center font-black uppercase tracking-tight break-words"
-                style={{
-                  fontSize: `${businessNameSize}px`,
-                  fontWeight: 900,
-                  lineHeight: 1.15
-                }}
-              >
-                {business?.businessName || business?.name || "KRAVY RESTAURANT"}
-              </div>
-            )}
+            {/* Business Name with Smart Auto-Fit & Balanced Multi-Line Wrap */}
+            {settings.showBusinessName !== false && (() => {
+              const rawBName = business?.businessName || business?.name || "KRAVY RESTAURANT";
+              const paperW = is80 ? "80mm" : "58mm";
+              const formattedLines = formatBusinessName(rawBName, paperW, "double_h");
+
+              return (
+                <div className="text-center font-black uppercase tracking-tight flex flex-col items-center">
+                  {formattedLines.map((lineItem, idx) => {
+                    // Match visual height/width with ESC/POS style:
+                    // double_hw: scaled font size
+                    // double_h: tall font with slightly tighter horizontal scale
+                    // bold/normal: standard font size
+                    let dynamicPx = businessNameSize;
+                    let fontScale = "scale-y-100";
+                    if (lineItem.style === "triple" || lineItem.style === "quad") {
+                      dynamicPx = Math.max(18, Math.min(36, businessNameSize * 1.3));
+                    } else if (lineItem.style === "double_hw") {
+                      dynamicPx = Math.max(16, businessNameSize);
+                    } else if (lineItem.style === "double_h") {
+                      dynamicPx = Math.max(14, businessNameSize * 0.95);
+                    } else {
+                      dynamicPx = Math.max(12, Math.min(18, businessNameSize * 0.8));
+                    }
+
+                    return (
+                      <div
+                        key={idx}
+                        className="w-full text-center whitespace-nowrap overflow-hidden text-ellipsis"
+                        style={{
+                          fontSize: `${dynamicPx}px`,
+                          fontWeight: 900,
+                          lineHeight: 1.15
+                        }}
+                      >
+                        {lineItem.text}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {/* Tagline */}
             {settings.showTagline !== false && (business?.businessTagLine || business?.tagline) && (
@@ -528,7 +558,7 @@ export default function BluetoothThermalPreview({
             </div>
 
             {/* UPI QR Code */}
-            {settings.showUpiQr !== false && (
+            {settings.showUpiQr !== false ? (
               <div className="pt-2 text-center">
                 <div className="text-slate-500 overflow-hidden text-ellipsis whitespace-nowrap text-[10px] leading-none mb-1">
                   {dashedDivider}
@@ -539,14 +569,34 @@ export default function BluetoothThermalPreview({
                 >
                   SCAN & PAY
                 </div>
-                <div className="inline-block p-1 bg-white border border-slate-400 mx-auto my-1">
-                  <img
-                    src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=upi://pay?pa=test@upi"
-                    alt="UPI QR"
-                    className="w-24 h-24 object-contain block mx-auto"
-                    style={{ imageRendering: "pixelated", filter: "contrast(200%) grayscale(100%)" }}
-                  />
-                </div>
+                {(() => {
+                  const previewQrPx = Math.min(220, Math.max(64, Math.round((settings.upiQrSize ?? 160) * 0.65)));
+                  const upiId = (business?.upi || "kravy@upi").trim();
+                  const upiData = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(business?.businessName || business?.name || "KRAVY POS")}&am=786.50&cu=INR`;
+                  return (
+                    <div className="inline-block p-1 bg-white border border-slate-400 mx-auto my-1">
+                      <div
+                        style={{
+                          width: `${previewQrPx}px`,
+                          height: `${previewQrPx}px`,
+                        }}
+                        className="flex items-center justify-center mx-auto transition-all duration-150 overflow-hidden"
+                      >
+                        <QRCodeSVG
+                          value={upiData}
+                          size={previewQrPx}
+                          level="M"
+                          includeMargin={false}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            imageRendering: "pixelated",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div
                   className="font-black text-slate-900 mt-1"
                   style={{ fontSize: `${detailsFontSize}px` }}
@@ -556,6 +606,12 @@ export default function BluetoothThermalPreview({
                 <div className="text-slate-500 overflow-hidden text-ellipsis whitespace-nowrap text-[10px] leading-none mt-1">
                   {dashedDivider}
                 </div>
+              </div>
+            ) : (
+              <div className="my-2 py-1.5 px-2 text-center border border-dashed border-slate-300 rounded bg-slate-50/50">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
+                  [UPI QR Code Disabled in Toggles]
+                </span>
               </div>
             )}
 
@@ -569,12 +625,18 @@ export default function BluetoothThermalPreview({
                   RATE YOUR EXPERIENCE
                 </div>
                 <div className="inline-block p-1 bg-white border border-slate-400 mx-auto my-1">
-                  <img
-                    src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://kravy.in"
-                    alt="Menu QR"
-                    className="w-20 h-20 object-contain block mx-auto"
-                    style={{ imageRendering: "pixelated", filter: "contrast(200%) grayscale(100%)" }}
-                  />
+                  <div
+                    style={{ width: "80px", height: "80px" }}
+                    className="flex items-center justify-center mx-auto overflow-hidden"
+                  >
+                    <QRCodeSVG
+                      value="https://kravy.in"
+                      size={80}
+                      level="M"
+                      includeMargin={false}
+                      style={{ width: "100%", height: "100%" }}
+                    />
+                  </div>
                 </div>
               </div>
             )}

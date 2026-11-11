@@ -3,6 +3,9 @@ import { Capacitor } from '@capacitor/core';
 import QRCode from 'qrcode';
 import { devanagariToHinglish } from './transliterate';
 
+// In-memory cache for fetched logo image elements to ensure instant, reliable thermal printing
+const logoImageCache = new Map<string, HTMLImageElement>();
+
 export interface BluetoothPrintSettings {
     // Bill Toggles
     showLogo?: boolean;
@@ -12,6 +15,7 @@ export interface BluetoothPrintSettings {
     showAddress?: boolean;
     showGST?: boolean;
     showFSSAI?: boolean;
+    showBillTypeHeader?: boolean; // TAX INVOICE / SALES RECEIPT title
     showInvoiceNumber?: boolean;
     showToken?: boolean;
     showDate?: boolean;
@@ -53,6 +57,7 @@ export interface BluetoothPrintSettings {
     // Element Sizing Sliders (Pixels - matching USB sizers)
     logoSize?: number;
     logoBottomSpace?: number;
+    upiQrSize?: number;
     businessNameSize?: number;
     addressSize?: number;
     taglineSize?: number;
@@ -78,6 +83,7 @@ export interface BluetoothPrintSettings {
     kotTokenStyle?: "normal" | "bold" | "double_h" | "double_hw";
     bottomFeeds?: number;
     cutPaper?: boolean;
+    customGreetingMessage?: string;
 }
 
 export const DEFAULT_BT_PRINT_SETTINGS: BluetoothPrintSettings = {
@@ -88,6 +94,7 @@ export const DEFAULT_BT_PRINT_SETTINGS: BluetoothPrintSettings = {
     showAddress: true,
     showGST: true,
     showFSSAI: true,
+    showBillTypeHeader: true,
     showInvoiceNumber: true,
     showToken: true,
     showDate: true,
@@ -128,6 +135,7 @@ export const DEFAULT_BT_PRINT_SETTINGS: BluetoothPrintSettings = {
     // Default Sliders (matching USB defaults)
     logoSize: 50,
     logoBottomSpace: 0,
+    upiQrSize: 160,
     businessNameSize: 18,
     addressSize: 11,
     taglineSize: 11,
@@ -150,12 +158,140 @@ export const DEFAULT_BT_PRINT_SETTINGS: BluetoothPrintSettings = {
     kotHeaderStyle: "bold",
     kotTokenStyle: "double_h",
     bottomFeeds: 4,
-    cutPaper: true
+    cutPaper: true,
+    customGreetingMessage: ""
 };
 
 export function getEffectiveBtSettings(business: any): BluetoothPrintSettings {
     const raw = business?.btPrintSettings || business?.printSettings?.bluetooth || {};
     return { ...DEFAULT_BT_PRINT_SETTINGS, ...raw };
+}
+
+/**
+ * Intelligent Business Name Auto-Fit & Multi-Line Layout Engine.
+ * 
+ * Handles 58mm (32 normal cols) and 80mm (48 normal cols) thermal printers.
+ * Ensures:
+ * 1. Complete business name fits on 1 line if possible by auto-scaling font style.
+ * 2. If wrapping is required, splits strictly at word boundaries into balanced lines.
+ * 3. Never splits in the middle of a word and NEVER leaves an orphan single character (e.g. 't').
+ * 4. Applies optimal ESC/POS styling (double_hw, double_h, bold, normal) to match preview and actual print.
+ */
+export interface FormattedBusinessNameLine {
+    text: string;
+    style: string;
+}
+
+export function formatBusinessName(
+    name: string,
+    paperWidth: "58mm" | "80mm" = "58mm",
+    requestedStyle: string = "double_h"
+): FormattedBusinessNameLine[] {
+    name = (name || "").trim();
+    if (!name) return [{ text: "", style: "normal" }];
+
+    const maxCols = paperWidth === "80mm" ? 48 : 32;
+
+    const styleWidthMultiplier: Record<string, number> = {
+        quad: 4,
+        triple: 3,
+        giant: 3,
+        double_hw: 2,
+        double_w: 2,
+        double_h: 1,
+        bold: 1,
+        normal: 1
+    };
+
+    const styleOrder = ["quad", "triple", "double_hw", "double_h", "bold", "normal"];
+    const startIdx = Math.max(0, styleOrder.indexOf(requestedStyle));
+
+    // 1. Check if name fits completely on 1 single line at requested style or downsized style
+    for (let i = startIdx; i < styleOrder.length; i++) {
+        const style = styleOrder[i];
+        const mult = styleWidthMultiplier[style] || 1;
+        const maxChars = Math.floor(maxCols / mult);
+        if (name.length <= maxChars) {
+            return [{ text: name, style }];
+        }
+    }
+
+    // 2. Unavoidable multi-line: wrap cleanly at word boundaries
+    const words = name.split(/\s+/);
+    let lines: string[] = [];
+
+    if (words.length <= 1) {
+        // Single very long word without spaces
+        lines = [name];
+    } else if (name.length <= maxCols * 2) {
+        // Split into 2 balanced lines
+        let bestIdx = 1;
+        let bestDiff = Infinity;
+        for (let i = 1; i < words.length; i++) {
+            const line1 = words.slice(0, i).join(" ");
+            const line2 = words.slice(i).join(" ");
+            if (line1.length <= maxCols && line2.length <= maxCols) {
+                const diff = Math.abs(line1.length - line2.length);
+                if (diff < bestDiff) {
+                    bestDiff = diff;
+                    bestIdx = i;
+                }
+            }
+        }
+        if (bestDiff !== Infinity) {
+            lines = [words.slice(0, bestIdx).join(" "), words.slice(bestIdx).join(" ")];
+        }
+    }
+
+    if (lines.length === 0) {
+        // Multi-line greedy wrap (for very long names >= 3 lines)
+        let cur = "";
+        for (const w of words) {
+            if (!cur) {
+                cur = w;
+            } else if ((cur + " " + w).length <= maxCols) {
+                cur += " " + w;
+            } else {
+                lines.push(cur);
+                cur = w;
+            }
+        }
+        if (cur) lines.push(cur);
+
+        // Prevent orphan single-word line at the end
+        if (lines.length >= 2) {
+            const last = lines[lines.length - 1];
+            if (last.split(/\s+/).length === 1) {
+                const prevWords = lines[lines.length - 2].split(/\s+/);
+                if (prevWords.length >= 2) {
+                    const moved = prevWords.pop()!;
+                    const newPrev = prevWords.join(" ");
+                    const newLast = moved + " " + last;
+                    if (newLast.length <= maxCols) {
+                        lines[lines.length - 2] = newPrev;
+                        lines[lines.length - 1] = newLast;
+                    }
+                }
+            }
+        }
+    }
+
+    // Determine font style for wrapped lines
+    const halfWidth = Math.floor(maxCols / 2);
+    const allFitDoubleHw = lines.every(l => l.length <= halfWidth);
+
+    let finalStyle = "double_h";
+    if (requestedStyle === "normal") {
+        finalStyle = "normal";
+    } else if (requestedStyle === "bold") {
+        finalStyle = "bold";
+    } else if (allFitDoubleHw && ["double_hw", "triple", "quad"].includes(requestedStyle)) {
+        finalStyle = "double_hw";
+    } else {
+        finalStyle = "double_h";
+    }
+
+    return lines.map(l => ({ text: l, style: finalStyle }));
 }
 
 // Lazy loader for Capacitor Native Bluetooth LE plugin (only used in Android/iOS native app)
@@ -264,9 +400,14 @@ export type RecoveryModalCallback = (details: {
 }) => void;
 
 let recoveryModalHandler: RecoveryModalCallback | null = null;
+let lastRecoveryDetails: any = null;
 
 export function registerPrinterRecoveryHandler(handler: RecoveryModalCallback | null) {
     recoveryModalHandler = handler;
+    // If a recovery was triggered before handler was registered, show it immediately
+    if (handler && lastRecoveryDetails) {
+        try { handler(lastRecoveryDetails); } catch (e) {}
+    }
 }
 
 export function isBluetoothPermissionError(errorMsg: string): boolean {
@@ -309,8 +450,15 @@ export function triggerPrinterRecoveryModal(details: {
     onOpenAppSettings?: () => Promise<void>;
     onOpenLocationSettings?: () => Promise<void>;
 }) {
+    lastRecoveryDetails = details;
     if (recoveryModalHandler) {
         recoveryModalHandler(details);
+    }
+    // Also dispatch custom DOM event as a universal fail-safe
+    if (typeof window !== "undefined") {
+        try {
+            window.dispatchEvent(new CustomEvent("kravy-trigger-printer-recovery", { detail: details }));
+        } catch (e) {}
     }
 }
 
@@ -545,17 +693,74 @@ export async function ensurePrinterConnected(forcePrompt: boolean = false, slot:
                     savedCapacitorId = localStorage.getItem("LAST_CONNECTED_PRINTER_ID");
                 }
 
+                // If connecting to a previously saved printer without forcePrompt,
+                // try connecting to it. If it fails (switched OFF / busy), notify with BLE error popup
+                // and IMMEDIATELY prompt device selection window to choose another printer!
                 if (!forcePrompt && !state.capDevice && savedCapacitorId) {
                     try {
                         state.capDevice = { deviceId: savedCapacitorId };
                     } catch(e) {}
                 }
 
+                if (state.capDevice && !state.capChar && !forcePrompt) {
+                    try {
+                        await BleClient.connect(state.capDevice.deviceId, (deviceId) => {
+                            if (state.capDevice?.deviceId === deviceId) {
+                                state.capChar = "";
+                                state.capMtu = 20;
+                                state.capCanWriteWithoutResponse = false;
+                            }
+                            if (isSamePrinterForKot() && printerSlots.kot.capDevice?.deviceId === deviceId) {
+                                printerSlots.kot.capChar = "";
+                            }
+                            console.log(`Capacitor Printer [${effectiveSlot}] disconnected`, deviceId);
+                        });
+                    } catch (reconError: any) {
+                        const savedName = getConnectedPrinterName(slot) || "Printer";
+                        console.warn(`Saved printer [${savedCapacitorId}] connect failed:`, reconError);
+                        // Clean up pending connection so scanner is NOT blocked
+                        try { await BleClient.disconnect(state.capDevice.deviceId); } catch (e) {}
+                        state.capDevice = null;
+                        state.capChar = "";
+
+                        // Show BLE error notification / recovery modal
+                        const bleErrorMsg = "Your printer may be switched OFF or connected to another device. Please check the printer and try again.";
+                        triggerPrinterRecoveryModal({
+                            slot,
+                            error: bleErrorMsg,
+                            printerName: savedName,
+                            onRetry: async () => { await ensurePrinterConnected(false, slot); },
+                            onScan: async () => { await ensurePrinterConnected(true, slot); },
+                            onOpenAppSettings: openNativeAppSettings,
+                            onOpenLocationSettings: openNativeLocationSettings,
+                        });
+
+                        // Automatically open Bluetooth scanning/selection window if user didn't dismiss
+                        try {
+                            state.capDevice = await BleClient.requestDevice({});
+                        } catch (scanErr: any) {
+                            state.status = 'ERROR';
+                            state.lastError = bleErrorMsg;
+                            // Re-trigger the Recovery Modal on cancellation/error so user can tap Retry or Scan again from modal
+                            triggerPrinterRecoveryModal({
+                                slot,
+                                error: bleErrorMsg,
+                                printerName: savedName,
+                                onRetry: async () => { await ensurePrinterConnected(false, slot); },
+                                onScan: async () => { await ensurePrinterConnected(true, slot); },
+                                onOpenAppSettings: openNativeAppSettings,
+                                onOpenLocationSettings: openNativeLocationSettings,
+                            });
+                            throw new Error(bleErrorMsg);
+                        }
+                    }
+                }
+
                 if (!state.capDevice) {
                     state.capDevice = await BleClient.requestDevice({});
                 }
 
-                // Connect with disconnect callback
+                // Connect to the selected device if not already connected
                 await BleClient.connect(state.capDevice.deviceId, (deviceId) => {
                     if (state.capDevice?.deviceId === deviceId) {
                         state.capChar = "";
@@ -657,6 +862,16 @@ export async function ensurePrinterConnected(forcePrompt: boolean = false, slot:
                 } else if (rawMsg.includes("133") || rawMsg.includes("status: 19") || rawMsg.includes("GATT") || rawMsg.includes("timeout") || rawMsg.includes("failed to connect")) {
                     actionableMsg = `Printer connect nahi ho paya. Yeh kisi doosre phone se connected ho sakta hai. Kripya doosre phone se disconnect karein ya printer ko restart karein. (${rawMsg})`;
                 }
+                triggerPrinterRecoveryModal({
+                    slot,
+                    error: actionableMsg,
+                    printerName: getConnectedPrinterName(slot) || "Bluetooth Thermal Printer",
+                    isPermissionError: isPermError,
+                    onRetry: async () => { await ensurePrinterConnected(false, slot); },
+                    onScan: async () => { await ensurePrinterConnected(true, slot); },
+                    onOpenAppSettings: openNativeAppSettings,
+                    onOpenLocationSettings: openNativeLocationSettings,
+                });
                 state.status = 'ERROR';
                 state.lastError = actionableMsg;
                 throw new Error("Capacitor BLE Error: " + actionableMsg);
@@ -718,6 +933,50 @@ export async function ensurePrinterConnected(forcePrompt: boolean = false, slot:
                     }
                 } catch(e) {
                     console.log(`Auto-reconnect getDevices failed for [${effectiveSlot}]:`, e);
+                }
+            }
+
+            // If an auto-reconnect targetDevice exists, attempt to connect to it.
+            // If that connection fails (switched off / busy / rejected), show the BLE Error popup
+            // AND immediately open the Bluetooth Device Selection dialog without blocking!
+            if (targetDevice && autoReconnected) {
+                let silentRetries = 2;
+                let silentErr: any = null;
+                while (silentRetries > 0) {
+                    try {
+                        if (targetDevice.gatt?.connected) {
+                            state.server = targetDevice.gatt;
+                            break;
+                        }
+                        state.server = await targetDevice.gatt?.connect() || null;
+                        if (state.server) break;
+                    } catch (err: any) {
+                        silentErr = err;
+                        silentRetries--;
+                        if (silentRetries > 0) {
+                            await new Promise(r => setTimeout(r, 300));
+                        }
+                    }
+                }
+
+                if (!state.server) {
+                    console.warn(`Saved printer [${targetDevice.name || targetDevice.id}] connect failed:`, silentErr);
+                    // Disconnect/cleanup failed pending connection so scanning is not blocked
+                    try { targetDevice.gatt?.disconnect(); } catch (e) {}
+                    const failedPrinterName = targetDevice.name || "Bluetooth Printer";
+                    targetDevice = null;
+                    autoReconnected = false;
+
+                    // Show BLE error message via Recovery Modal
+                    const bleErrorMsg = "Your printer may be switched OFF or connected to another device. Please check the printer and try again.";
+                    triggerPrinterRecoveryModal({
+                        slot,
+                        error: bleErrorMsg,
+                        printerName: failedPrinterName,
+                        onRetry: async () => { await ensurePrinterConnected(false, slot); },
+                        onScan: async () => { await ensurePrinterConnected(true, slot); }
+                    });
+                    // Fall-through: targetDevice is null now, so scanning window will open automatically below!
                 }
             }
 
@@ -1334,8 +1593,10 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                     const qr = QRCode.create(qrText, { errorCorrectionLevel: 'M' });
                     const modules = qr.modules;
                     const modCount = modules.size;
-                    // Scale 3 on 58mm printer (384 dots) produces ~100-115 dots width, which fits cleanly with ample margin and zero overflow
-                    const dotScale = Math.max(2, Math.min(scale, 4));
+                    // Auto-adjust scale safely to fit printable area (58mm ~368 dots, 80mm ~540 dots)
+                    // At ~37 modules: scale 2=74 dots, scale 3=111 dots, scale 4=148 dots, scale 5=185 dots, scale 6=222 dots, scale 7=259 dots
+                    const maxScale = is80 ? 8 : 7;
+                    const dotScale = Math.max(2, Math.min(scale, maxScale));
                     
                     // Add standard 4-module quiet zone around QR so phone cameras immediately recognize and scan it
                     const quietMargin = 4;
@@ -1443,58 +1704,77 @@ export async function printReceiptData(order: any, business: any, elementToPrint
             };
 
             // Logo Print (Only for Bill, standard practice)
-            if (!isKot && bt.showLogo !== false && business?.logoUrl) {
+            if (!isKot && bt.showLogo !== false && (business?.logoUrl || business?.logo)) {
                 try {
-                    const img = new Image();
-                    img.crossOrigin = 'Anonymous';
-                    
-                    const fetchImage = async () => {
-                        if (business.logoUrl.startsWith("data:")) {
-                            img.src = business.logoUrl;
-                            return true;
-                        }
-                        
-                        try {
-                            // Route through proxy to avoid CORS tainted canvas issues
-                            const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(business.logoUrl)}`;
-                            const res = await fetch(proxyUrl);
-                            if (res.ok) {
-                                const blob = await res.blob();
-                                img.src = URL.createObjectURL(blob);
+                    const logoSource = (business.logoUrl || business.logo || "").trim();
+                    let targetImg: HTMLImageElement | null = logoImageCache.get(logoSource) || null;
+
+                    if (!targetImg) {
+                        const img = new Image();
+                        img.crossOrigin = 'Anonymous';
+
+                        const fetchImage = async () => {
+                            if (logoSource.startsWith("data:")) {
+                                img.src = logoSource;
                                 return true;
                             }
-                        } catch(e) {
-                            console.error("Proxy fetch failed, falling back to direct", e);
-                        }
-                        
-                        // Fallback to direct src assignment
-                        img.src = business.logoUrl;
-                        return true;
-                    };
-
-                    const imgLoaded = new Promise(async (resolve) => {
-                        img.onload = () => resolve(true);
-                        img.onerror = () => {
-                            console.warn("Logo image failed to load via onerror, skipping logo print.");
-                            resolve(false);
+                            
+                            try {
+                                // Route through proxy to avoid CORS tainted canvas issues
+                                const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(logoSource)}`;
+                                const res = await fetch(proxyUrl);
+                                if (res.ok) {
+                                    const blob = await res.blob();
+                                    img.src = URL.createObjectURL(blob);
+                                    return true;
+                                }
+                            } catch(e) {
+                                console.error("Proxy fetch failed, falling back to direct", e);
+                            }
+                            
+                            // Fallback to direct src assignment
+                            img.src = logoSource;
+                            return true;
                         };
-                        const started = await fetchImage().catch(() => false);
-                        if (!started) resolve(false);
-                    });
+
+                        const imgLoaded = new Promise<boolean>(async (resolve) => {
+                            if (img.complete && img.naturalWidth > 0) {
+                                return resolve(true);
+                            }
+                            img.onload = () => resolve(true);
+                            img.onerror = () => {
+                                console.warn("Logo image failed to load via onerror, skipping logo print.");
+                                resolve(false);
+                            };
+                            const started = await fetchImage().catch(() => false);
+                            if (!started) resolve(false);
+                        });
+                        
+                        // Generous 4000ms timeout for slow network or high-res images
+                        const success = await Promise.race([ 
+                            imgLoaded, 
+                            new Promise<boolean>(r => setTimeout(() => {
+                                console.warn("Logo loading timed out after 4s");
+                                r(false);
+                            }, 4000)) 
+                        ]);
+
+                        if (success && img.naturalWidth > 0) {
+                            targetImg = img;
+                            logoImageCache.set(logoSource, img);
+                        }
+                    }
                     
-                    const success = await Promise.race([ imgLoaded, new Promise(r => setTimeout(() => {
-                        console.warn("Logo loading timed out after 1s");
-                        r(false);
-                    }, 1000)) ]);
-                    
-                    if (success) {
-                        // Slider ranges from 20 to 90. Map directly to printable pixels:
-                        // 20 -> ~100px, 50 -> ~240px, 90 -> up to 380px (for 58mm) or 450px (for 80mm)
-                        const maxPaperWidth = is80 ? 520 : 360;
-                        const targetLogoWidth = bt.logoSize 
-                            ? Math.min(maxPaperWidth, Math.max(60, Math.round(bt.logoSize * 4.6))) 
-                            : (is80 ? 320 : 220);
-                        printImageToChunks(img, targetLogoWidth);
+                    if (targetImg) {
+                        // Slider ranges from 20mm to 90mm.
+                        // On 58mm printer (384 dots width, ~48mm printable area): ~8 dots per mm.
+                        // On 80mm printer (576 dots width, ~72mm printable area): ~8 dots per mm.
+                        // We map mm directly to printer thermal dots:
+                        // 20mm -> 160 dots, 30mm -> 240 dots, 45mm -> 360 dots (max for 58mm), 65mm -> 520 dots (for 80mm)
+                        const maxPaperWidth = is80 ? 540 : 368;
+                        const mm = Math.max(15, Math.min(90, bt.logoSize ?? 50));
+                        const targetLogoWidth = Math.min(maxPaperWidth, Math.max(80, Math.round(mm * 6.5)));
+                        printImageToChunks(targetImg, targetLogoWidth);
                         if (bt.logoBottomSpace !== undefined && bt.logoBottomSpace !== 0) {
                             // Convert logo bottom space into ESC J micro-feeds (0 to 255 dots)
                             const feedDots = Math.max(0, Math.min(255, Math.round((bt.logoBottomSpace + 10) * 3)));
@@ -1502,6 +1782,8 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                                 dataChunks.push(new Uint8Array([0x1B, 0x4A, feedDots]));
                             }
                         }
+                    } else {
+                        console.warn("Logo skipped: image could not be loaded within timeout.");
                     }
                 } catch (e) {
                     console.error("Logo thermal conversion failed:", e);
@@ -1517,26 +1799,45 @@ export async function printReceiptData(order: any, business: any, elementToPrint
             const TEXT_DOUBLE_H = new Uint8Array([0x1D, 0x21, 0x01]);
             const TEXT_DOUBLE_W = new Uint8Array([0x1D, 0x21, 0x10]);
             const TEXT_DOUBLE_HW = new Uint8Array([0x1D, 0x21, 0x11]);
+            const TEXT_TRIPLE = new Uint8Array([0x1D, 0x21, 0x22]); // 3x height, 3x width
+            const TEXT_QUAD = new Uint8Array([0x1D, 0x21, 0x33]);   // 4x height, 4x width
+
+            // Secondary legacy ESC ! modes for maximum compatibility with portable 58mm/80mm Bluetooth printers
+            const ESC_MODE_NORMAL = new Uint8Array([0x1B, 0x21, 0x00]);
+            const ESC_MODE_DOUBLE_H = new Uint8Array([0x1B, 0x21, 0x10]);
+            const ESC_MODE_DOUBLE_W = new Uint8Array([0x1B, 0x21, 0x20]);
+            const ESC_MODE_DOUBLE_HW = new Uint8Array([0x1B, 0x21, 0x30]);
+            const ESC_MODE_EMPHASIZED = new Uint8Array([0x1B, 0x21, 0x08]);
 
             const applyStyle = (style?: string) => {
-                if (style === 'triple' || style === 'giant') {
-                    // 3x height, 3x width (0x22 = 34)
-                    dataChunks.push(new Uint8Array([0x1D, 0x21, 0x22]));
+                if (style === 'quad') {
+                    dataChunks.push(TEXT_QUAD);
+                    dataChunks.push(ESC_MODE_DOUBLE_HW);
+                    dataChunks.push(BOLD_ON);
+                } else if (style === 'triple' || style === 'giant') {
+                    // Send GS ! 0x22 AND ESC ! 0x30 so all printer firmware variants zoom reliably
+                    dataChunks.push(TEXT_TRIPLE);
+                    dataChunks.push(ESC_MODE_DOUBLE_HW);
                     dataChunks.push(BOLD_ON);
                 } else if (style === 'double_hw') {
                     dataChunks.push(TEXT_DOUBLE_HW);
+                    dataChunks.push(ESC_MODE_DOUBLE_HW);
                     dataChunks.push(BOLD_ON);
                 } else if (style === 'double_h') {
                     dataChunks.push(TEXT_DOUBLE_H);
+                    dataChunks.push(ESC_MODE_DOUBLE_H);
                     dataChunks.push(BOLD_ON);
                 } else if (style === 'double_w') {
                     dataChunks.push(TEXT_DOUBLE_W);
+                    dataChunks.push(ESC_MODE_DOUBLE_W);
                     dataChunks.push(BOLD_ON);
                 } else if (style === 'bold') {
                     dataChunks.push(TEXT_NORMAL);
+                    dataChunks.push(ESC_MODE_NORMAL);
                     dataChunks.push(BOLD_ON);
                 } else {
                     dataChunks.push(TEXT_NORMAL);
+                    dataChunks.push(ESC_MODE_NORMAL);
                     dataChunks.push(BOLD_OFF);
                 }
             };
@@ -1544,10 +1845,10 @@ export async function printReceiptData(order: any, business: any, elementToPrint
             const resolveStyle = (explicitStyle?: string, pxSize?: number, defaultStyle: string = "normal") => {
                 if (explicitStyle && explicitStyle !== 'normal') return explicitStyle;
                 if (!pxSize) return defaultStyle;
-                if (pxSize >= 30) return "triple";
-                if (pxSize >= 20) return "double_hw";
-                if (pxSize >= 15) return "double_h";
-                if (pxSize >= 12) return "bold";
+                if (pxSize >= 40) return "triple";
+                if (pxSize >= 28) return "double_hw";
+                if (pxSize >= 20) return "double_h";
+                if (pxSize >= 13) return "bold";
                 return "normal";
             };
             
@@ -1581,18 +1882,21 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                             dataChunks.push(encoder.encode(tableStr + "\n"));
                         }
                         dataChunks.push(ALIGN_CENTER);
-                        const ktStyle = resolveStyle(bt.kotTokenStyle, kotPx, 'double_hw');
+                        const ktStyle = resolveStyle(undefined, kotPx, 'double_hw');
                         applyStyle(ktStyle);
                         dataChunks.push(encoder.encode(`KOT NO: #${kotNum}\n`));
-                        dataChunks.push(BOLD_OFF);
-                        dataChunks.push(TEXT_NORMAL);
+                        applyStyle('normal');
                         dataChunks.push(ALIGN_LEFT);
-                    } else {
-                        const ktStyle = resolveStyle(bt.kotTokenStyle, kotPx, 'double_h');
+                    } else if (kotNumStr) {
+                        const ktStyle = resolveStyle(undefined, kotPx, 'double_h');
+                        if (tableStr) {
+                            dataChunks.push(encoder.encode(tableStr + "  "));
+                        }
                         applyStyle(ktStyle);
-                        dataChunks.push(encoder.encode(pLR(tableStr, kotNumStr, WIDTH) + "\n"));
-                        dataChunks.push(TEXT_NORMAL);
-                        dataChunks.push(BOLD_OFF);
+                        dataChunks.push(encoder.encode(kotNumStr + "\n"));
+                        applyStyle('normal');
+                    } else if (tableStr) {
+                        dataChunks.push(encoder.encode(tableStr + "\n"));
                     }
                 }
                 
@@ -1689,11 +1993,15 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                 // Bill Format
                 if (bt.showBusinessName !== false) {
                     dataChunks.push(ALIGN_CENTER);
-                    const bStyle = resolveStyle(bt.businessNameStyle, bt.businessNameSize, 'double_h');
-                    applyStyle(bStyle);
-                    dataChunks.push(encoder.encode((business?.businessName || business?.name || "KRAVY POS") + "\n"));
-                    dataChunks.push(BOLD_OFF);
-                    dataChunks.push(TEXT_NORMAL);
+                    const requestedBStyle = resolveStyle(undefined, bt.businessNameSize, 'double_h');
+                    const rawBName = business?.businessName || business?.name || "KRAVY POS";
+                    const formattedLines = formatBusinessName(rawBName, is80 ? '80mm' : '58mm', requestedBStyle);
+                    
+                    formattedLines.forEach(lineItem => {
+                        applyStyle(lineItem.style);
+                        dataChunks.push(encoder.encode(lineItem.text + "\n"));
+                    });
+                    applyStyle('normal');
                 }
                 
                 if (bt.showTagline !== false && business?.tagline) {
@@ -1729,38 +2037,45 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                 if (bt.showGST !== false && business?.gstNumber) dataChunks.push(encoder.encode(padCenter("GSTIN: " + business.gstNumber, WIDTH) + "\n"));
                 if (bt.showFSSAI !== false && business?.fssaiNumber) dataChunks.push(encoder.encode(padCenter("FSSAI: " + business.fssaiNumber, WIDTH) + "\n"));
                 
-                dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
-                dataChunks.push(ALIGN_CENTER);
-                dataChunks.push(BOLD_ON);
-                dataChunks.push(encoder.encode(business?.gstNumber && order?.isTaxEnabled ? "TAX INVOICE\n" : "SALES RECEIPT\n"));
-                dataChunks.push(BOLD_OFF);
-                dataChunks.push(ALIGN_LEFT);
-                dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
+                if (bt.showBillTypeHeader !== false) {
+                    dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
+                    dataChunks.push(ALIGN_CENTER);
+                    dataChunks.push(BOLD_ON);
+                    dataChunks.push(encoder.encode(business?.gstNumber && order?.isTaxEnabled ? "TAX INVOICE\n" : "SALES RECEIPT\n"));
+                    dataChunks.push(BOLD_OFF);
+                    dataChunks.push(ALIGN_LEFT);
+                    dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
+                } else {
+                    dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
+                }
                 
                 const billNoStr = (bt.showInvoiceNumber !== false) ? ("Bill No: " + (order?.billNumber || order?.orderNumber || "DRAFT")) : "";
                 const tokenRaw = (order?.tokenNumber || order?.kotNumbers?.[0] || "");
                 const tokenStr = (bt.showToken !== false && tokenRaw) ? ("Token: " + tokenRaw) : "";
                 if (billNoStr || tokenStr) {
                     const tokenPx = bt.receiptTokenSize ?? 28;
-                    // When token is enlarged (e.g. >= 22px), print Token prominently on its own centered line
+                    // When token is enlarged (>= 22px), print Token prominently on its own centered line
                     // so it can expand to double/triple height & width cleanly!
                     if (tokenStr && tokenPx >= 22) {
                         if (billNoStr) {
                             dataChunks.push(encoder.encode(billNoStr + "\n"));
                         }
                         dataChunks.push(ALIGN_CENTER);
-                        const tStyle = resolveStyle(bt.tokenStyle, tokenPx, 'double_hw');
+                        const tStyle = resolveStyle(undefined, tokenPx, tokenPx >= 36 ? 'triple' : 'double_hw');
                         applyStyle(tStyle);
                         dataChunks.push(encoder.encode(`TOKEN: ${tokenRaw}\n`));
-                        dataChunks.push(BOLD_OFF);
-                        dataChunks.push(TEXT_NORMAL);
+                        applyStyle('normal');
                         dataChunks.push(ALIGN_LEFT);
-                    } else {
-                        const tStyle = resolveStyle(bt.tokenStyle, tokenPx, 'double_h');
+                    } else if (tokenStr) {
+                        const tStyle = resolveStyle(undefined, tokenPx, 'double_h');
+                        if (billNoStr) {
+                            dataChunks.push(encoder.encode(billNoStr + "  "));
+                        }
                         applyStyle(tStyle);
-                        dataChunks.push(encoder.encode(pLR(billNoStr, tokenStr, WIDTH) + "\n"));
-                        dataChunks.push(TEXT_NORMAL);
-                        dataChunks.push(BOLD_OFF);
+                        dataChunks.push(encoder.encode(`TOKEN: ${tokenRaw}\n`));
+                        applyStyle('normal');
+                    } else if (billNoStr) {
+                        dataChunks.push(encoder.encode(billNoStr + "\n"));
                     }
                 }
                 
@@ -1808,7 +2123,7 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                     const lines = wrapText(name, maxNameWidth, maxNameWidth); 
                     
                     const iPx = bt.itemsFontSize ?? 11;
-                    const itemStyle = iPx >= 14 ? 'bold' : 'normal';
+                    const itemStyle = iPx >= 16 ? 'double_h' : (iPx >= 13 ? 'bold' : 'normal');
                     applyStyle(itemStyle);
                     for (let i = 0; i < lines.length; i++) {
                         dataChunks.push(encoder.encode(lines[i] + "\n"));
@@ -1897,11 +2212,10 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                 
                 if (bt.showGrandTotal !== false) {
                     dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
-                    const gtStyle = resolveStyle(bt.grandTotalStyle, bt.grandTotalFontSize, 'double_h');
+                    const gtStyle = resolveStyle(undefined, bt.grandTotalFontSize, bt.grandTotalFontSize && bt.grandTotalFontSize >= 24 ? 'triple' : 'double_h');
                     applyStyle(gtStyle);
                     dataChunks.push(encoder.encode(pLR("GRAND TOTAL", `Rs.${total.toFixed(2)}`, WIDTH) + "\n"));
-                    dataChunks.push(BOLD_OFF);
-                    dataChunks.push(TEXT_NORMAL);
+                    applyStyle('normal');
                     dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
                 }
                 
@@ -1928,10 +2242,13 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                 dataChunks.push(LINE_FEED);
                 
                 // Payment UPI QR Code
-                const showUpiQr = bt.showUpiQr !== false && ((business?.upi && business?.upiQrEnabled !== false) || order?.paymentMode === "UPI");
-                if (showUpiQr && business?.upi) {
+                const effectiveUpi = (business?.upi || business?.upiId || bt?.upiId || "").trim();
+                const showUpiQr = bt.showUpiQr !== false && (Boolean(effectiveUpi) || order?.paymentMode === "UPI");
+                if (showUpiQr) {
                     try {
-                        const upiUrl = `upi://pay?pa=${business.upi}&pn=${encodeURIComponent(business.name || "Store")}&am=${total.toFixed(2)}&cu=INR`;
+                        const upiPa = effectiveUpi || "kravy@upi";
+                        const upiPn = business?.businessName || business?.name || "KRAVY POS";
+                        const upiUrl = `upi://pay?pa=${upiPa}&pn=${encodeURIComponent(upiPn)}&am=${total.toFixed(2)}&cu=INR`;
                         dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
                         dataChunks.push(ALIGN_CENTER);
                         dataChunks.push(BOLD_ON);
@@ -1940,11 +2257,21 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                         dataChunks.push(LINE_FEED);
                         
                         // Universal fast raster QR code with quiet zone & safe line separation
-                        addFastRasterQr(upiUrl, 3);
+                        // Map user-configured bt.upiQrSize (100 - 300) to thermal raster dotScale (2 - 7)
+                        const rawQrSize = bt.upiQrSize ?? 160;
+                        let qrScale = 3;
+                        if (rawQrSize >= 280) qrScale = 7;
+                        else if (rawQrSize >= 240) qrScale = 6;
+                        else if (rawQrSize >= 200) qrScale = 5;
+                        else if (rawQrSize >= 160) qrScale = 4;
+                        else if (rawQrSize <= 120) qrScale = 2;
+                        else qrScale = 3;
+
+                        addFastRasterQr(upiUrl, qrScale);
                         
                         dataChunks.push(ALIGN_CENTER);
                         dataChunks.push(BOLD_ON);
-                        dataChunks.push(encoder.encode("UPI: " + business.upi + "\n"));
+                        dataChunks.push(encoder.encode("UPI: " + upiPa + "\n"));
                         dataChunks.push(BOLD_OFF);
                         if (order?.paymentMode === "UPI" && order?.upiTxnRef) {
                             dataChunks.push(encoder.encode("Txn Ref: " + order.upiTxnRef + "\n"));
@@ -1975,9 +2302,15 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                     dataChunks.push(encoder.encode(fullDateStr + "\n"));
                 }
                 if (bt.showGreetings !== false) {
-                    dataChunks.push(BOLD_ON);
-                    dataChunks.push(encoder.encode("HARE KRISHNA\n"));
-                    dataChunks.push(BOLD_OFF);
+                    const greetingText = (bt.customGreetingMessage && bt.customGreetingMessage.trim()) 
+                        ? bt.customGreetingMessage.trim() 
+                        : (business?.greetingMessage && business.greetingMessage.trim()) 
+                            ? business.greetingMessage.trim() 
+                            : "HARE KRISHNA";
+                    const gStyle = resolveStyle(undefined, bt.greetingsFooterSize, 'bold');
+                    applyStyle(gStyle);
+                    dataChunks.push(encoder.encode(greetingText + "\n"));
+                    applyStyle('normal');
                 }
                 if (bt.showPoweredBy !== false) {
                     dataChunks.push(encoder.encode("Powered by Kravy POS\n"));
@@ -2160,6 +2493,7 @@ export async function printTokenTicketData(ticketData: {
         const WIDTH = is80 ? 48 : 32;
 
         try {
+            const encoder = new TextEncoder();
             const dataChunks: Uint8Array[] = [];
             const INIT = new Uint8Array([0x1B, 0x40]); // ESC @
             const CODE_PAGE = new Uint8Array([0x1B, 0x74, 0x00]); // ESC t 0
@@ -2255,10 +2589,53 @@ export async function printTokenTicketData(ticketData: {
                 offset += chunk.length;
             }
 
-            if (isCapacitor) {
-                await sendCapacitorData(effectiveSlot, activeState, merged);
-            } else {
-                await sendWebBluetoothData(activeState, merged);
+            // Send binary print stream (Capacitor BLE or Web Bluetooth)
+            const CHUNK_SIZE = isCapacitor ? (activeState.capCanWriteWithoutResponse ? Math.min(activeState.capMtu || 244, 244) : 64) : 100;
+            const CHUNK_DELAY = isCapacitor ? (activeState.capCanWriteWithoutResponse ? 0 : 5) : 15;
+
+            for (let i = 0; i < merged.length; i += CHUNK_SIZE) {
+                const slice = merged.slice(i, i + CHUNK_SIZE);
+                if (isCapacitor) {
+                    const ble = await getCapacitorBle();
+                    const BleClient = ble?.BleClient;
+                    const BluetoothLe = ble?.BluetoothLe;
+                    const dataViewToHexString = ble?.dataViewToHexString;
+
+                    const dataView = new DataView(slice.buffer, slice.byteOffset, slice.byteLength);
+                    if (activeState.capCanWriteWithoutResponse && BluetoothLe && dataViewToHexString) {
+                        try {
+                            const hexVal = dataViewToHexString(dataView);
+                            await BluetoothLe.writeWithoutResponse({
+                                deviceId: activeState.capDevice.deviceId,
+                                service: activeState.capService,
+                                characteristic: activeState.capChar,
+                                value: hexVal
+                            });
+                        } catch(e) {
+                            if (BleClient) await BleClient.write(activeState.capDevice.deviceId, activeState.capService, activeState.capChar, dataView);
+                        }
+                    } else if (BleClient) {
+                        await BleClient.write(activeState.capDevice.deviceId, activeState.capService, activeState.capChar, dataView);
+                    }
+                    if (CHUNK_DELAY > 0) {
+                        await new Promise(r => setTimeout(r, CHUNK_DELAY));
+                    }
+                } else {
+                    const targetChar = activeState.char;
+                    if (!targetChar) throw new Error("Printer connection lost during print");
+                    if (targetChar.writeValueWithoutResponse && targetChar.properties?.writeWithoutResponse) {
+                        try {
+                            await targetChar.writeValueWithoutResponse(slice);
+                        } catch (e) {
+                            await targetChar.writeValue(slice);
+                        }
+                    } else {
+                        await targetChar.writeValue(slice);
+                    }
+                    if (CHUNK_DELAY > 0) {
+                        await new Promise(r => setTimeout(r, CHUNK_DELAY));
+                    }
+                }
             }
 
             activeState.status = 'READY';
@@ -2437,7 +2814,11 @@ export function generateTextReceiptPreview(order: any, business: any, isKot: boo
                 out += padCenter("[ LOGO ]", WIDTH) + "\n";
             }
             if (bt.showBusinessName !== false) {
-                out += padCenter((business?.businessName || business?.name || "KRAVY POS"), WIDTH) + "\n";
+                const rawBName = business?.businessName || business?.name || "KRAVY POS";
+                const formattedLines = formatBusinessName(rawBName, is80 ? '80mm' : '58mm', 'double_h');
+                formattedLines.forEach(lineItem => {
+                    out += padCenter(lineItem.text, WIDTH) + "\n";
+                });
             }
             
             if (bt.showTagline !== false && business?.tagline) {
@@ -2632,11 +3013,13 @@ export function generateTextReceiptPreview(order: any, business: any, isKot: boo
             }
             out += "\n";
 
-            const showUpiQr = bt.showUpiQr !== false && ((business?.upi && business?.upiQrEnabled !== false) || order?.paymentMode === "UPI");
-            if (showUpiQr && business?.upi) {
+            const effectiveUpi = (business?.upi || business?.upiId || bt?.upiId || "").trim();
+            const showUpiQr = bt.showUpiQr !== false && (Boolean(effectiveUpi) || order?.paymentMode === "UPI");
+            if (showUpiQr) {
+                const upiPa = effectiveUpi || "kravy@upi";
                 out += padCenter("SCAN & PAY", WIDTH) + "\n";
                 out += padCenter("[ UPI QR CODE ]", WIDTH) + "\n";
-                out += padCenter("UPI: " + business.upi, WIDTH) + "\n";
+                out += padCenter("UPI: " + upiPa, WIDTH) + "\n";
                 if (order?.paymentMode === "UPI" && order?.upiTxnRef) {
                     out += padCenter("Txn Ref: " + order.upiTxnRef, WIDTH) + "\n";
                 }

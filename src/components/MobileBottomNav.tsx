@@ -5,9 +5,12 @@ import {
     LayoutDashboard, 
     ShoppingCart, 
     Receipt, 
+    ReceiptText,
     Utensils, 
+    Armchair,
     Fuel, 
     MoreHorizontal, 
+    Grid2X2,
     X, 
     ChevronRight,
     Settings,
@@ -23,9 +26,12 @@ import {
     IndianRupee,
     Percent,
     Plus,
-    Bluetooth
+    Youtube,
+    Video,
+    Bluetooth,
+    MessageSquare
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useAuthContext } from "@/components/AuthContext";
 import { useProfileCache } from "@/hooks/useProfileCache";
 import { kravy } from "@/lib/sounds";
@@ -37,6 +43,39 @@ export default function MobileBottomNav({ profile }: any) {
     const { profile: cachedProfile } = useProfileCache();
     const [hiddenSidebarItems, setHiddenSidebarItems] = useState<string[]>([]);
     const [isMoreOpen, setIsMoreOpen] = useState(false);
+    const [poppingKey, setPoppingKey] = useState<string | null>(null);
+    const [effects, setEffects] = useState<{ id: number; key: string; sparks: { x: number; y: number; color: string }[] }[]>([]);
+    const nextEffectId = useRef(0);
+
+    const triggerGameFx = (key: string) => {
+        setPoppingKey(key);
+        setTimeout(() => {
+            setPoppingKey(prev => (prev === key ? null : prev));
+        }, 750);
+
+        const colors = ["#ff6b9d", "#ffc24b", "#4cd9a8", "#60a5fa", "#a78bfa"];
+        const sparks: { x: number; y: number; color: string }[] = [];
+        for (let i = 0; i < 10; i++) {
+            const angle = (i / 10) * 2 * Math.PI;
+            const dist = 32 + Math.random() * 18;
+            sparks.push({
+                x: Math.cos(angle) * dist,
+                y: Math.sin(angle) * dist,
+                color: colors[i % colors.length]
+            });
+        }
+        const effId = ++nextEffectId.current;
+        setEffects(prev => [...prev, { id: effId, key, sparks }]);
+        setTimeout(() => {
+            setEffects(prev => prev.filter(e => e.id !== effId));
+        }, 700);
+
+        if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+            try {
+                navigator.vibrate(15);
+            } catch (e) {}
+        }
+    };
 
     const activeProfile = profile || cachedProfile;
 
@@ -61,29 +100,179 @@ export default function MobileBottomNav({ profile }: any) {
     const allowedPaths = Array.isArray(authUser?.permissions) ? authUser.permissions : [];
 
     const rawNavItems = [
-        { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard size={24} /> },
-        { label: "POS", href: "/dashboard/billing/checkout", icon: <ShoppingCart size={24} /> },
-        { label: "History", href: "/dashboard/billing", icon: <Receipt size={24} /> },
-        ...(activeProfile?.enableFuelBilling ? [{ label: "Fuel", href: "/dashboard/fuel", icon: <Fuel size={24} /> }] : [])
+        { label: "Dashboard", href: "/dashboard", IconComponent: LayoutDashboard, imageSrc: "/images/bottom-nav/dashboard.png" },
+        { label: "POS", href: "/dashboard/billing/checkout", IconComponent: ShoppingCart, imageSrc: "/images/bottom-nav/pos.png" },
+        { label: "Tables", href: "/dashboard/terminal", IconComponent: Armchair, imageSrc: "/images/bottom-nav/floor.png" },
+        { label: "Bills", href: "/dashboard/billing", IconComponent: ReceiptText, imageSrc: "/images/bottom-nav/history.png" },
+        { label: "Menu", href: "/dashboard/menu/view", IconComponent: Utensils, tabletOnly: true }
     ];
 
-    const visibleNavItems = rawNavItems.filter((item) => {
+    const filterAllowed = (item: any) => {
         if (Array.isArray(hiddenSidebarItems)) {
             if (hiddenSidebarItems.includes(item.href) || hiddenSidebarItems.includes(item.label)) {
                 return false;
             }
         }
         if (userRole === "ADMIN") return true;
+
+        if (userRole === "STAFF") {
+            if (allowedPaths.includes("*")) return true;
+            if (allowedPaths.length === 0) return false;
+            const baseHref = item.href.split("?")[0];
+            const isAllowed = allowedPaths.includes(item.href) || 
+                              allowedPaths.includes(baseHref) ||
+                              (allowedPaths.includes("/dashboard/workflow") && (baseHref === "/dashboard/terminal" || baseHref === "/dashboard/kitchen" || baseHref === "/dashboard/kds")) ||
+                              (allowedPaths.includes("/dashboard/settings") && baseHref.startsWith("/dashboard/settings")) ||
+                              (allowedPaths.includes("/dashboard/help") && baseHref.startsWith("/dashboard/help")) ||
+                              (allowedPaths.includes("/dashboard/menu") && baseHref.startsWith("/dashboard/menu")) ||
+                              (allowedPaths.includes("/dashboard/inventory") && baseHref.startsWith("/dashboard/inventory")) ||
+                              (item.href === "/dashboard/fuel" && activeProfile?.enableFuelBilling);
+            return !!isAllowed;
+        }
+
         if (allowedPaths.length > 0) {
             if (allowedPaths.includes("*")) return true;
             const baseHref = item.href.split("?")[0];
             const isAllowed = allowedPaths.includes(item.href) || 
                               allowedPaths.includes(baseHref) ||
+                              (allowedPaths.includes("/dashboard/workflow") && (baseHref === "/dashboard/terminal" || baseHref === "/dashboard/kitchen" || baseHref === "/dashboard/kds")) ||
+                              (allowedPaths.includes("/dashboard/settings") && baseHref.startsWith("/dashboard/settings")) ||
+                              (allowedPaths.includes("/dashboard/help") && baseHref.startsWith("/dashboard/help")) ||
+                              (allowedPaths.includes("/dashboard/menu") && baseHref.startsWith("/dashboard/menu")) ||
+                              (allowedPaths.includes("/dashboard/inventory") && baseHref.startsWith("/dashboard/inventory")) ||
                               (item.href === "/dashboard/fuel" && activeProfile?.enableFuelBilling);
             if (!isAllowed) return false;
         }
         return true;
-    });
+    };
+
+    const visibleNavItems = rawNavItems.filter(filterAllowed);
+    // On mobile (<640px / sm), show 4 primary tabs + More (total 5 tabs). Menu is kept in More.
+    // On tablet (sm to lg), show all 5 primary tabs (including Menu) + More (total 6 tabs).
+    const mobileNavItems = visibleNavItems.filter((item) => !item.tabletOnly);
+
+    // Top 3 Featured Cards (Filtered by staff permissions)
+    const featuredCards = [
+        {
+            label: "Add Single\nItem",
+            href: "/dashboard/menu/upload",
+            imageSrc: "/images/quick-actions/add_item.png",
+            icon: <Plus size={20} className="sm:w-6 sm:h-6" strokeWidth={2.8} />,
+            bg: "bg-gradient-to-br from-indigo-500 via-purple-500 to-orange-400 text-white shadow-xs",
+            iconClass: "w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center mb-0.5",
+            textClass: "text-[10px] sm:text-xs font-bold leading-tight drop-shadow-xs"
+        },
+        {
+            label: "Settings",
+            href: "/dashboard/settings",
+            imageSrc: "/images/quick-actions/settings.png",
+            icon: <Settings size={18} className="sm:w-[22px] sm:h-[22px] fill-[#B8561B] dark:fill-orange-300 stroke-[#B8561B] dark:stroke-orange-300" />,
+            bg: "bg-[#FFEAD7] dark:bg-orange-950/40 text-[#B8561B] dark:text-orange-300 shadow-2xs",
+            iconClass: "w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center mb-0.5",
+            textClass: "text-[10px] sm:text-xs font-bold leading-tight mt-0.5"
+        },
+        {
+            label: "Table Status",
+            href: "/dashboard/tables",
+            imageSrc: "/images/quick-actions/tables_status.png",
+            icon: <LayoutGrid size={18} className="sm:w-[22px] sm:h-[22px]" strokeWidth={2.2} />,
+            bg: "bg-[#DDF4FF] dark:bg-sky-950/40 text-[#0284C7] dark:text-sky-300 shadow-2xs",
+            iconClass: "w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center mb-0.5 text-[#0284C7] dark:text-sky-400",
+            textClass: "text-[10px] sm:text-xs font-bold leading-tight mt-0.5"
+        }
+    ].filter(filterAllowed);
+
+    // 2-Column Action Pills (Filtered by staff permissions)
+    const actionPills = [
+        {
+            label: "Kitchen\nWorkflow",
+            href: "/dashboard/kitchen",
+            imageSrc: "/images/quick-actions/kitchen.png",
+            icon: <Activity size={18} className="text-[#E11D48]" />,
+            iconBg: "bg-[#FFE4E6] dark:bg-rose-950/50",
+            border: "border-rose-200 dark:border-rose-900/50"
+        },
+        {
+            label: "Browse Products",
+            href: "/dashboard/menu/view",
+            imageSrc: "/images/quick-actions/menu.png",
+            icon: <UtensilsCrossed size={18} className="text-[#D97706]" />,
+            iconBg: "bg-[#FEF3C7] dark:bg-amber-950/50",
+            border: "border-amber-200 dark:border-amber-900/50"
+        },
+        {
+            label: "Customer Parties",
+            href: "/dashboard/parties",
+            imageSrc: "/images/quick-actions/customers.png",
+            icon: <Users size={18} className="text-[#EA580C]" />,
+            iconBg: "bg-[#FFEDD5] dark:bg-orange-950/50",
+            border: "border-orange-200 dark:border-orange-900/50"
+        },
+        {
+            label: "Staff\nManagement",
+            href: "/dashboard/staff",
+            imageSrc: "/images/quick-actions/staff.png",
+            icon: <UserPlus size={18} className="text-[#2563EB]" />,
+            iconBg: "bg-[#DBEAFE] dark:bg-blue-950/50",
+            border: "border-blue-200 dark:border-blue-900/50"
+        },
+        {
+            label: "Inventory Stock",
+            href: "/dashboard/inventory",
+            imageSrc: "/images/quick-actions/inventory.png",
+            icon: <Package size={18} className="text-[#D97706]" />,
+            iconBg: "bg-[#FEF3C7] dark:bg-amber-950/50",
+            border: "border-amber-200 dark:border-amber-900/50"
+        },
+        {
+            label: "Restaurant\nExpenses",
+            href: "/dashboard/expenses",
+            imageSrc: "/images/quick-actions/expenses.png",
+            icon: <IndianRupee size={18} className="text-[#9333EA]" />,
+            iconBg: "bg-[#F3E8FF] dark:bg-purple-950/50",
+            border: "border-purple-200 dark:border-purple-900/50"
+        },
+        {
+            label: "Business Profile",
+            href: "/dashboard/profile",
+            imageSrc: "/images/quick-actions/profile.png",
+            icon: <UserCircle size={18} className="text-[#0D9488]" />,
+            iconBg: "bg-[#CCFBF1] dark:bg-teal-950/50",
+            border: "border-teal-200 dark:border-teal-900/50"
+        },
+        {
+            label: "Connect Printer",
+            href: "/dashboard/settings/connect-printer",
+            imageSrc: "/images/quick-actions/printer.png",
+            icon: <Bluetooth size={18} className="text-[#4F46E5]" />,
+            iconBg: "bg-[#EEF2FF] dark:bg-indigo-950/50",
+            border: "border-indigo-200 dark:border-indigo-900/50"
+        },
+        {
+            label: "WhatsApp Wallet",
+            href: "/dashboard/settings/whatsapp",
+            icon: <MessageSquare size={18} className="text-[#25D366]" />,
+            iconBg: "bg-[#DCFCE7] dark:bg-emerald-950/50",
+            border: "border-emerald-200 dark:border-emerald-900/50"
+        },
+        {
+            label: "Tax Management",
+            href: "/dashboard/settings/tax",
+            imageSrc: "/images/quick-actions/tax.png",
+            icon: <Percent size={18} className="text-[#0D9488]" />,
+            iconBg: "bg-[#CCFBF1] dark:bg-teal-950/50",
+            border: "border-teal-200 dark:border-teal-900/50"
+        },
+        ...(activeProfile?.enableFuelBilling ? [{
+            label: "Fuel Billing",
+            href: "/dashboard/fuel",
+            icon: <Fuel size={18} className="text-[#0284C7]" />,
+            iconBg: "bg-[#DDF4FF] dark:bg-sky-950/50",
+            border: "border-sky-200 dark:border-sky-900/50"
+        }] : [])
+    ].filter(filterAllowed);
+
+    const isVideoBannerAllowed = filterAllowed({ href: "/dashboard/help/videos", label: "Tutorial Videos" });
 
     return (
         <div className="print:hidden" data-mobile-bottom-nav="true">
@@ -117,198 +306,308 @@ export default function MobileBottomNav({ profile }: any) {
 
                 {/* Scrollable Container */}
                 <div className="space-y-4 max-h-[62vh] overflow-y-auto px-1 py-1 scrollbar-none">
-                    {/* Top 3 Featured Cards (Compact & Responsive) */}
-                    <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
-                        {/* 1. Add Single Item (Purple-Orange Gradient) */}
-                        <button
-                            onClick={() => {
-                                kravy.click();
-                                setIsMoreOpen(false);
-                                router.push("/dashboard/menu/upload");
-                            }}
-                            className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-orange-400 text-white shadow-xs active:scale-95 transition-all text-center min-h-[76px] sm:min-h-[88px]"
-                        >
-                            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center mb-0.5">
-                                <Plus size={20} className="sm:w-6 sm:h-6" strokeWidth={2.8} />
-                            </div>
-                            <span className="text-[10px] sm:text-xs font-bold leading-tight drop-shadow-xs">
-                                Add Single<br />Item
-                            </span>
-                        </button>
-
-                        {/* 2. Settings (Soft Peach/Orange) */}
-                        <button
-                            onClick={() => {
-                                kravy.click();
-                                setIsMoreOpen(false);
-                                router.push("/dashboard/settings");
-                            }}
-                            className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-[#FFEAD7] dark:bg-orange-950/40 text-[#B8561B] dark:text-orange-300 shadow-2xs active:scale-95 transition-all text-center min-h-[76px] sm:min-h-[88px]"
-                        >
-                            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center mb-0.5">
-                                <Settings size={18} className="sm:w-[22px] sm:h-[22px] fill-[#B8561B] dark:fill-orange-300 stroke-[#B8561B] dark:stroke-orange-300" />
-                            </div>
-                            <span className="text-[10px] sm:text-xs font-bold leading-tight mt-0.5">
-                                Settings
-                            </span>
-                        </button>
-
-                        {/* 3. Inventory Stock (Soft Amber) */}
-                        <button
-                            onClick={() => {
-                                kravy.click();
-                                setIsMoreOpen(false);
-                                router.push("/dashboard/inventory");
-                            }}
-                            className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-[#FEF3C7] dark:bg-amber-950/40 text-[#D97706] dark:text-amber-300 shadow-2xs active:scale-95 transition-all text-center min-h-[76px] sm:min-h-[88px]"
-                        >
-                            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center mb-0.5 text-[#D97706] dark:text-amber-400">
-                                <Package size={18} className="sm:w-[22px] sm:h-[22px]" strokeWidth={2.2} />
-                            </div>
-                            <span className="text-[10px] sm:text-xs font-bold leading-tight mt-0.5">
-                                Inventory
-                            </span>
-                        </button>
-                    </div>
-
-                    {/* 2-Column Rounded Action Pills Grid */}
-                    <div className="grid grid-cols-2 gap-2.5 pt-1">
-                        {[
-                            {
-                                label: "Past Bills /\nHistory",
-                                href: "/dashboard/billing",
-                                icon: <Receipt size={18} className="text-[#6366F1]" />,
-                                iconBg: "bg-[#EEF2FF] dark:bg-indigo-950/50",
-                                border: "border-indigo-200 dark:border-indigo-900/50"
-                            },
-                            {
-                                label: "Browse Products",
-                                href: "/dashboard/menu/view",
-                                icon: <UtensilsCrossed size={18} className="text-[#D97706]" />,
-                                iconBg: "bg-[#FEF3C7] dark:bg-amber-950/50",
-                                border: "border-amber-200 dark:border-amber-900/50"
-                            },
-                            {
-                                label: "Customer Parties",
-                                href: "/dashboard/parties",
-                                icon: <Users size={18} className="text-[#EA580C]" />,
-                                iconBg: "bg-[#FFEDD5] dark:bg-orange-950/50",
-                                border: "border-orange-200 dark:border-orange-900/50"
-                            },
-                            {
-                                label: "Staff\nManagement",
-                                href: "/dashboard/staff",
-                                icon: <UserPlus size={18} className="text-[#2563EB]" />,
-                                iconBg: "bg-[#DBEAFE] dark:bg-blue-950/50",
-                                border: "border-blue-200 dark:border-blue-900/50"
-                            },
-                            {
-                                label: "Inventory Stock",
-                                href: "/dashboard/inventory",
-                                icon: <Package size={18} className="text-[#D97706]" />,
-                                iconBg: "bg-[#FEF3C7] dark:bg-amber-950/50",
-                                border: "border-amber-200 dark:border-amber-900/50"
-                            },
-                            {
-                                label: "Business\nExpenses",
-                                href: "/dashboard/expenses",
-                                icon: <IndianRupee size={18} className="text-[#9333EA]" />,
-                                iconBg: "bg-[#F3E8FF] dark:bg-purple-950/50",
-                                border: "border-purple-200 dark:border-purple-900/50"
-                            },
-                            {
-                                label: "Business Profile",
-                                href: "/dashboard/profile",
-                                icon: <UserCircle size={18} className="text-[#0D9488]" />,
-                                iconBg: "bg-[#CCFBF1] dark:bg-teal-950/50",
-                                border: "border-teal-200 dark:border-teal-900/50"
-                            },
-                            {
-                                label: "Connect Printer",
-                                href: "/dashboard/settings/connect-printer",
-                                icon: <Bluetooth size={18} className="text-[#4F46E5]" />,
-                                iconBg: "bg-[#EEF2FF] dark:bg-indigo-950/50",
-                                border: "border-indigo-200 dark:border-indigo-900/50"
-                            },
-                            {
-                                label: "POS Settings",
-                                href: "/dashboard/settings",
-                                icon: <Settings size={18} className="text-[#7C3AED]" />,
-                                iconBg: "bg-[#EDE9FE] dark:bg-violet-950/50",
-                                border: "border-violet-200 dark:border-violet-900/50"
-                            },
-                            {
-                                label: "Tax Management",
-                                href: "/dashboard/settings/tax",
-                                icon: <Percent size={18} className="text-[#0D9488]" />,
-                                iconBg: "bg-[#CCFBF1] dark:bg-teal-950/50",
-                                border: "border-teal-200 dark:border-teal-900/50"
-                            },
-                        ].map((btn, idx) => (
-                            <button
-                                key={btn.href + idx}
-                                onClick={() => {
-                                    kravy.click();
-                                    setIsMoreOpen(false);
-                                    router.push(btn.href);
-                                }}
-                                className={`flex items-center justify-between p-2.5 rounded-2xl bg-white dark:bg-slate-800/80 border ${btn.border} shadow-2xs hover:shadow-xs active:scale-[0.98] transition-all text-left`}
-                            >
-                                <div className="flex items-center space-x-2.5 min-w-0">
-                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${btn.iconBg}`}>
-                                        {btn.icon}
+                    {/* Top Featured Cards (Filtered by staff permissions) */}
+                    {featuredCards.length > 0 && (
+                        <div className={`grid gap-2 sm:gap-2.5 ${
+                            featuredCards.length === 3 ? "grid-cols-3" : featuredCards.length === 2 ? "grid-cols-2" : "grid-cols-1"
+                        }`}>
+                            {featuredCards.map((card) => (
+                                <button
+                                    key={card.href + card.label}
+                                    onClick={() => {
+                                        kravy.click();
+                                        setIsMoreOpen(false);
+                                        router.push(card.href);
+                                    }}
+                                    className={`flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl sm:rounded-2xl ${card.bg} active:scale-95 transition-all text-center min-h-[76px] sm:min-h-[88px]`}
+                                >
+                                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center mb-0.5">
+                                        {(card as any).imageSrc ? (
+                                            <img 
+                                                src={(card as any).imageSrc} 
+                                                alt={card.label} 
+                                                className="w-full h-full object-contain drop-shadow-sm" 
+                                            />
+                                        ) : card.icon}
                                     </div>
-                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-100 leading-tight whitespace-pre-line truncate">
-                                        {btn.label}
+                                    <span className={card.textClass}>
+                                        {card.label}
                                     </span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* 2-Column Rounded Action Pills Grid (Filtered by staff permissions) */}
+                    {actionPills.length > 0 && (
+                        <div className={`grid gap-2.5 pt-1 ${actionPills.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+                            {actionPills.map((btn, idx) => (
+                                <button
+                                    key={btn.href + idx}
+                                    onClick={() => {
+                                        kravy.click();
+                                        setIsMoreOpen(false);
+                                        router.push(btn.href);
+                                    }}
+                                    className={`flex items-center justify-between p-2.5 rounded-2xl bg-white dark:bg-slate-800/80 border ${btn.border} shadow-2xs hover:shadow-xs active:scale-[0.98] transition-all text-left`}
+                                >
+                                    <div className="flex items-center space-x-2.5 min-w-0">
+                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 overflow-hidden p-0.5">
+                                            {(btn as any).imageSrc ? (
+                                                <img 
+                                                    src={(btn as any).imageSrc} 
+                                                    alt={btn.label} 
+                                                    className="w-full h-full object-contain drop-shadow-sm transition-transform group-hover:scale-105" 
+                                                />
+                                            ) : (
+                                                <div className={`w-full h-full rounded-xl flex items-center justify-center ${btn.iconBg}`}>
+                                                    {btn.icon}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <span className="text-xs font-bold text-slate-800 dark:text-slate-100 leading-tight whitespace-pre-line truncate">
+                                            {btn.label}
+                                        </span>
+                                    </div>
+                                    <ChevronRight size={14} className="text-slate-400 shrink-0 ml-1" />
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Empty State when no extra action is allowed */}
+                    {featuredCards.length === 0 && actionPills.length === 0 && !isVideoBannerAllowed && (
+                        <div className="text-center py-8 px-4 text-slate-400 dark:text-slate-500 text-sm font-medium">
+                            No additional actions available for your access.
+                        </div>
+                    )}
+
+                    {/* Tutorial Video Direct Highlight Banner (Filtered by staff permissions) */}
+                    {isVideoBannerAllowed && (
+                        <button
+                            onClick={() => {
+                                kravy.click();
+                                setIsMoreOpen(false);
+                                router.push("/dashboard/help/videos");
+                            }}
+                            className="w-full mt-2 flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-orange-500 text-white shadow-md active:scale-[0.98] transition-all text-left"
+                        >
+                            <div className="flex items-center space-x-3 min-w-0">
+                                <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 p-1 shadow-inner">
+                                    <img 
+                                        src="/images/quick-actions/youtube_3d.png" 
+                                        alt="Tutorial Videos" 
+                                        className="w-full h-full object-contain drop-shadow-md" 
+                                    />
                                 </div>
-                                <ChevronRight size={14} className="text-slate-400 shrink-0 ml-1" />
-                            </button>
-                        ))}
-                    </div>
+                                <div className="min-w-0">
+                                    <div className="text-xs font-black leading-tight flex items-center gap-1.5">
+                                        <span>Watch POS Video Tutorials</span>
+                                        <span className="text-[9px] bg-white/25 px-1.5 py-0.2 rounded font-extrabold uppercase">Official</span>
+                                    </div>
+                                    <p className="text-[10px] text-white/90 leading-tight mt-0.5 truncate">
+                                        Learn Billing, Tables, Menu & Printer setup step-by-step
+                                    </p>
+                                </div>
+                            </div>
+                            <ChevronRight size={16} className="text-white/80 shrink-0 ml-2" />
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* ── Bottom Nav Bar ── */}
-            <div className="block lg:hidden fixed bottom-0 left-0 right-0 h-[65px] bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-around px-2 z-[9999] pb-safe" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-                {visibleNavItems.map((item) => {
-                    const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
-                    return (
-                        <button
-                            key={item.href}
-                            onClick={() => {
-                                kravy.click();
-                                setIsMoreOpen(false);
-                                router.push(item.href);
-                            }}
-                            className={`flex flex-col items-center justify-center flex-1 h-full space-y-1 transition-colors ${
-                                isActive 
-                                ? "text-indigo-600 dark:text-indigo-400" 
-                                : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-200"
-                            }`}
-                        >
-                            {item.icon}
-                            <span className="text-[12px] font-bold mt-0.5">{item.label}</span>
-                        </button>
-                    );
-                })}
+            {/* ── Premium Polish Bottom Nav Bar with 3D Game Animations ── */}
+            <nav 
+                aria-label="Mobile Navigation"
+                className="block lg:hidden fixed bottom-0 left-0 right-0 h-[68px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-white/10 shadow-[0_-4px_25px_rgba(124,58,237,0.08)] dark:shadow-[0_-8px_30px_rgba(0,0,0,0.5)] z-[9999] px-1 pb-safe [perspective:600px]" 
+                style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+            >
+                <div className="h-full flex items-center justify-between w-full px-1 sm:px-3">
+                    {/* Render Navigation Items */}
+                    {visibleNavItems.map((item) => {
+                        const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                        const isTabletOnly = item.tabletOnly;
+                        const isPopping = poppingKey === item.href;
+                        const itemEffects = effects.filter(e => e.key === item.href);
 
-                {/* 🚀 Replace Settings with MORE button */}
-                <button
-                    onClick={() => {
-                        kravy.click();
-                        setIsMoreOpen(prev => !prev);
-                    }}
-                    className={`flex flex-col items-center justify-center flex-1 h-full space-y-1 transition-colors ${
-                        isMoreOpen 
-                        ? "text-indigo-600 dark:text-indigo-400" 
-                        : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-200"
-                    }`}
-                >
-                    <MoreHorizontal size={24} />
-                    <span className="text-[12px] font-bold mt-0.5">More</span>
-                </button>
-            </div>
+                        const isOperationalRoute = 
+                            item.href === "/dashboard/billing/checkout" ||
+                            item.href === "/dashboard/terminal" || 
+                            item.href === "/dashboard/tables" || 
+                            item.href === "/dashboard/kitchen" || 
+                            item.href === "/dashboard/workflow";
+                        return (
+                            <button
+                                key={item.href}
+                                type="button"
+                                onClick={() => {
+                                    kravy.click();
+                                    triggerGameFx(item.href);
+                                    setIsMoreOpen(false);
+                                    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+                                    if (isOffline && isOperationalRoute) {
+                                        window.history.pushState({ kravyOfflineRoute: item.href }, "", item.href);
+                                        window.dispatchEvent(new CustomEvent("kravy:offline-navigate", { detail: { path: item.href } }));
+                                        return;
+                                    }
+                                    router.push(item.href);
+                                }}
+                                className={`relative flex-col items-center justify-center flex-1 h-full py-1 outline-none border-none focus:outline-none select-none transition-all duration-200 active:scale-90 ${
+                                    isTabletOnly ? "hidden sm:flex" : "flex"
+                                } ${
+                                    isActive 
+                                    ? "text-[#7C3AED] dark:text-[#A78BFA]" 
+                                    : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
+                                }`}
+                            >
+                                {/* Glowing Pill Backdrop on Active Tab */}
+                                <div className={`relative flex items-center justify-center px-2.5 sm:px-3 py-1 rounded-2xl transition-all duration-300 ${
+                                    isActive 
+                                    ? "bg-purple-100/90 dark:bg-purple-900/40 shadow-[0_0_20px_rgba(124,58,237,0.35)] scale-100" 
+                                    : "bg-transparent scale-95"
+                                }`}>
+                                    {/* 3D Animated Icon Wrapper */}
+                                    <div 
+                                        className={`relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 [transform-style:preserve-3d] ${
+                                            isPopping 
+                                                ? "animate-kravy-jump" 
+                                                : isActive 
+                                                    ? "animate-kravy-float" 
+                                                    : ""
+                                        }`}
+                                    >
+                                        {item.imageSrc ? (
+                                            <img 
+                                                src={item.imageSrc} 
+                                                alt={item.label} 
+                                                className={`w-8 h-8 sm:w-9 sm:h-9 object-contain transition-all duration-200 ${
+                                                    isActive 
+                                                        ? "scale-105 drop-shadow-[0_8px_8px_rgba(124,58,237,0.45)]" 
+                                                        : "opacity-90 hover:opacity-100 drop-shadow-[0_4px_4px_rgba(0,0,0,0.18)]"
+                                                }`} 
+                                            />
+                                        ) : item.IconComponent ? (
+                                            <item.IconComponent size={26} strokeWidth={2.0} />
+                                        ) : null}
+
+                                        {/* Light Sweep Sheen when active */}
+                                        {isActive && (
+                                            <span className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none">
+                                                <span className="absolute -top-1/4 -left-3/4 w-1/2 h-[150%] bg-gradient-to-r from-transparent via-white/70 dark:via-white/40 to-transparent -skew-x-[20deg] animate-kravy-shine" />
+                                            </span>
+                                        )}
+
+                                        {/* Sparkles and Shockwave Ring on Click */}
+                                        {itemEffects.map(eff => (
+                                            <React.Fragment key={eff.id}>
+                                                <i className="absolute left-1/2 top-1/2 w-8 h-8 -ml-4 -mt-4 rounded-full border-2 border-purple-500 dark:border-purple-400 pointer-events-none animate-kravy-ring" />
+                                                {eff.sparks.map((s, sIdx) => (
+                                                    <i 
+                                                        key={sIdx}
+                                                        className="absolute left-1/2 top-1/2 w-2 h-2 -ml-1 -mt-1 rounded-full pointer-events-none animate-kravy-spark"
+                                                        style={{
+                                                            backgroundColor: s.color,
+                                                            // @ts-ignore
+                                                            "--x": `${s.x}px`,
+                                                            "--y": `${s.y}px`
+                                                        }}
+                                                    />
+                                                ))}
+                                            </React.Fragment>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <span className={`text-[12px] sm:text-[13px] tracking-tight mt-0.5 leading-tight whitespace-nowrap transition-all duration-200 ${
+                                    isActive 
+                                    ? "font-extrabold text-[#7C3AED] dark:text-[#A78BFA] translate-y-0.5 drop-shadow-xs" 
+                                    : "font-semibold text-slate-500 dark:text-slate-400"
+                                }`}>
+                                    {item.label}
+                                </span>
+                            </button>
+                        );
+                    })}
+
+                    {/* 🚀 MORE BUTTON (Using 4-Tile App Launcher Logo) */}
+                    {(() => {
+                        const isPopping = poppingKey === "more";
+                        const moreEffects = effects.filter(e => e.key === "more");
+                        return (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    kravy.click();
+                                    triggerGameFx("more");
+                                    setIsMoreOpen(prev => !prev);
+                                }}
+                                className={`relative flex flex-col items-center justify-center flex-1 h-full py-1 outline-none border-none focus:outline-none select-none transition-all duration-200 active:scale-90 ${
+                                    isMoreOpen 
+                                    ? "text-[#7C3AED] dark:text-[#A78BFA]" 
+                                    : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
+                                }`}
+                            >
+                                <div className={`relative flex items-center justify-center px-2.5 sm:px-3 py-1 rounded-2xl transition-all duration-300 ${
+                                    isMoreOpen 
+                                    ? "bg-purple-100/90 dark:bg-purple-900/40 shadow-[0_0_20px_rgba(124,58,237,0.35)] scale-100" 
+                                    : "bg-transparent scale-95"
+                                }`}>
+                                    <div 
+                                        className={`relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 [transform-style:preserve-3d] ${
+                                            isPopping 
+                                                ? "animate-kravy-jump" 
+                                                : isMoreOpen 
+                                                    ? "animate-kravy-float" 
+                                                    : ""
+                                        }`}
+                                    >
+                                        <img 
+                                            src="/images/bottom-nav/more.png" 
+                                            alt="More" 
+                                            className={`w-8 h-8 sm:w-9 sm:h-9 object-contain transition-all duration-200 ${
+                                                isMoreOpen 
+                                                    ? "scale-105 drop-shadow-[0_8px_8px_rgba(124,58,237,0.45)]" 
+                                                    : "opacity-90 hover:opacity-100 drop-shadow-[0_4px_4px_rgba(0,0,0,0.18)]"
+                                            }`} 
+                                        />
+
+                                        {isMoreOpen && (
+                                            <span className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none">
+                                                <span className="absolute -top-1/4 -left-3/4 w-1/2 h-[150%] bg-gradient-to-r from-transparent via-white/70 dark:via-white/40 to-transparent -skew-x-[20deg] animate-kravy-shine" />
+                                            </span>
+                                        )}
+
+                                        {moreEffects.map(eff => (
+                                            <React.Fragment key={eff.id}>
+                                                <i className="absolute left-1/2 top-1/2 w-8 h-8 -ml-4 -mt-4 rounded-full border-2 border-purple-500 dark:border-purple-400 pointer-events-none animate-kravy-ring" />
+                                                {eff.sparks.map((s, sIdx) => (
+                                                    <i 
+                                                        key={sIdx}
+                                                        className="absolute left-1/2 top-1/2 w-2 h-2 -ml-1 -mt-1 rounded-full pointer-events-none animate-kravy-spark"
+                                                        style={{
+                                                            backgroundColor: s.color,
+                                                            // @ts-ignore
+                                                            "--x": `${s.x}px`,
+                                                            "--y": `${s.y}px`
+                                                        }}
+                                                    />
+                                                ))}
+                                            </React.Fragment>
+                                        ))}
+                                    </div>
+                                </div>
+                                <span className={`text-[12px] sm:text-[13px] tracking-tight mt-0.5 leading-tight whitespace-nowrap transition-all duration-200 ${
+                                    isMoreOpen 
+                                    ? "font-extrabold text-[#7C3AED] dark:text-[#A78BFA] translate-y-0.5 drop-shadow-xs" 
+                                    : "font-semibold text-slate-500 dark:text-slate-400"
+                                }`}>
+                                    More
+                                </span>
+                            </button>
+                        );
+                    })()}
+                </div>
+            </nav>
         </div>
     );
 }

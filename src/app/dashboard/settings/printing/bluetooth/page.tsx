@@ -31,11 +31,14 @@ export default function BluetoothPrintingSettingsPage() {
     const [previewGst, setPreviewGst] = useState(true);
     const [previewZoom, setPreviewZoom] = useState(0.95);
     const [isPrintingTest, setIsPrintingTest] = useState(false);
+    const [testPrintType, setTestPrintType] = useState<"current" | "bill" | "kot">("current");
 
     // State for Bluetooth print settings
     const [settings, setSettings] = useState<BluetoothPrintSettings>(DEFAULT_BT_PRINT_SETTINGS);
     const [originalSettings, setOriginalSettings] = useState<BluetoothPrintSettings>(DEFAULT_BT_PRINT_SETTINGS);
     const [business, setBusiness] = useState<any>(null);
+    const [upiId, setUpiId] = useState<string>("");
+    const [originalUpiId, setOriginalUpiId] = useState<string>("");
 
     const receiptRef = useRef<HTMLDivElement>(null);
     const kotRef = useRef<HTMLDivElement>(null);
@@ -43,6 +46,9 @@ export default function BluetoothPrintingSettingsPage() {
     useEffect(() => {
         if (profile) {
             setBusiness(profile);
+            const currentUpi = profile?.upi || "";
+            setUpiId(currentUpi);
+            setOriginalUpiId(currentUpi);
             const savedBt = profile?.btPrintSettings || profile?.printSettings?.bluetooth || {};
             const merged = {
                 ...DEFAULT_BT_PRINT_SETTINGS,
@@ -53,7 +59,7 @@ export default function BluetoothPrintingSettingsPage() {
         }
     }, [profile]);
 
-    const isDirty = JSON.stringify(settings) !== JSON.stringify(originalSettings);
+    const isDirty = JSON.stringify(settings) !== JSON.stringify(originalSettings) || upiId !== originalUpiId;
 
     const toggle = (key: keyof BluetoothPrintSettings) => {
         kravy.click();
@@ -61,6 +67,52 @@ export default function BluetoothPrintingSettingsPage() {
             ...prev,
             [key]: !prev[key]
         }));
+    };
+
+    const resetReceiptStyle = () => {
+        kravy.success();
+        setSettings(prev => ({
+            ...prev,
+            logoSize: DEFAULT_BT_PRINT_SETTINGS.logoSize,
+            logoBottomSpace: DEFAULT_BT_PRINT_SETTINGS.logoBottomSpace,
+            upiQrSize: DEFAULT_BT_PRINT_SETTINGS.upiQrSize,
+            businessNameSize: DEFAULT_BT_PRINT_SETTINGS.businessNameSize,
+            addressSize: DEFAULT_BT_PRINT_SETTINGS.addressSize,
+            taglineSize: DEFAULT_BT_PRINT_SETTINGS.taglineSize,
+            receiptTokenSize: DEFAULT_BT_PRINT_SETTINGS.receiptTokenSize,
+            itemsFontSize: DEFAULT_BT_PRINT_SETTINGS.itemsFontSize,
+            grandTotalFontSize: DEFAULT_BT_PRINT_SETTINGS.grandTotalFontSize,
+            customerDetailsFontSize: DEFAULT_BT_PRINT_SETTINGS.customerDetailsFontSize,
+            detailsFontSize: DEFAULT_BT_PRINT_SETTINGS.detailsFontSize,
+            greetingsFooterSize: DEFAULT_BT_PRINT_SETTINGS.greetingsFooterSize,
+            businessNameStyle: DEFAULT_BT_PRINT_SETTINGS.businessNameStyle,
+            tokenStyle: DEFAULT_BT_PRINT_SETTINGS.tokenStyle,
+            grandTotalStyle: DEFAULT_BT_PRINT_SETTINGS.grandTotalStyle
+        }));
+        toast.success("Receipt styling reset to defaults!");
+    };
+
+    const resetKotStyle = () => {
+        kravy.success();
+        setSettings(prev => ({
+            ...prev,
+            kotTokenSize: DEFAULT_BT_PRINT_SETTINGS.kotTokenSize,
+            kotHeaderDetailsSize: DEFAULT_BT_PRINT_SETTINGS.kotHeaderDetailsSize,
+            kotItemsFontSize: DEFAULT_BT_PRINT_SETTINGS.kotItemsFontSize,
+            kotQuantityFontSize: DEFAULT_BT_PRINT_SETTINGS.kotQuantityFontSize,
+            kotHeaderStyle: DEFAULT_BT_PRINT_SETTINGS.kotHeaderStyle,
+            kotTokenStyle: DEFAULT_BT_PRINT_SETTINGS.kotTokenStyle
+        }));
+        toast.success("KOT styling reset to defaults!");
+    };
+
+    const resetAllToDefaults = () => {
+        kravy.success();
+        setSettings({
+            ...DEFAULT_BT_PRINT_SETTINGS,
+            paperWidth: settings.paperWidth || DEFAULT_BT_PRINT_SETTINGS.paperWidth
+        });
+        toast.success("All Bluetooth print styles reset to defaults!");
     };
 
     const handleSave = async () => {
@@ -73,11 +125,15 @@ export default function BluetoothPrintingSettingsPage() {
                 bluetooth: settings
             };
 
+            const trimmedUpi = upiId.trim();
+
             const res = await fetch("/api/profile", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     id: profile?.id,
+                    upi: trimmedUpi || null,
+                    upiQrEnabled: settings.showUpiQr !== false,
                     printSettings: updatedPrintSettings,
                     btPrintSettings: settings
                 })
@@ -90,11 +146,14 @@ export default function BluetoothPrintingSettingsPage() {
 
             const updatedData = await res.json().catch(() => null);
             setOriginalSettings(settings);
+            setOriginalUpiId(trimmedUpi);
             if (updatedData) {
                 updateProfile(updatedData, false);
                 setBusiness(updatedData);
+            } else {
+                setBusiness((prev: any) => ({ ...prev, upi: trimmedUpi }));
             }
-            toast.success("Bluetooth print preferences saved!");
+            toast.success("Bluetooth print preferences & UPI ID saved!");
             kravy.success();
             if (invalidateCache) await invalidateCache();
         } catch (err: any) {
@@ -115,6 +174,7 @@ export default function BluetoothPrintingSettingsPage() {
         showAddress: settings.showAddress !== false,
         showGST: settings.showGST !== false,
         showFSSAI: settings.showFSSAI !== false,
+        showBillTypeHeader: settings.showBillTypeHeader !== false,
         showInvoiceNumber: settings.showInvoiceNumber !== false,
         showToken: settings.showToken !== false,
         showTableInfo: settings.showTableInfo !== false,
@@ -154,6 +214,7 @@ export default function BluetoothPrintingSettingsPage() {
         // Sizers
         logoHeight: settings.logoSize ?? 50,
         logoBottomMargin: settings.logoBottomSpace ?? 0,
+        upiQrSize: settings.upiQrSize ?? 160,
         businessNameSize: settings.businessNameSize ?? 18,
         businessAddressSize: settings.addressSize ?? 11,
         taglineSize: settings.taglineSize ?? 11,
@@ -179,7 +240,10 @@ export default function BluetoothPrintingSettingsPage() {
         kotRef,
         business: {
             ...business,
-            greetingMessage: settings.showGreetings !== false ? (business?.greetingMessage || "Thank You 🙏 Visit Again!") : "",
+            upi: upiId || business?.upi,
+            greetingMessage: settings.showGreetings !== false 
+                ? (settings.customGreetingMessage?.trim() || business?.greetingMessage || "Thank You 🙏 Visit Again!") 
+                : "",
             printSettings: simulatedPrintSettings,
             btPrintSettings: settings
         },
@@ -226,8 +290,9 @@ export default function BluetoothPrintingSettingsPage() {
         numberToWords: (num: number) => "Seven Hundred Eighty Seven Rupees Only"
     };
 
-    const handleTestPrint = async () => {
+    const handleTestPrint = async (overrideMode?: "bill" | "kot") => {
         kravy.click();
+        const modeToPrint = overrideMode || previewMode;
         setIsPrintingTest(true);
         try {
             const dummyOrder = {
@@ -261,6 +326,7 @@ export default function BluetoothPrintingSettingsPage() {
 
             const effectiveBusiness = {
                 ...business,
+                upi: upiId || business?.upi,
                 btPrintSettings: settings,
                 printSettings: {
                     ...(business?.printSettings || {}),
@@ -269,8 +335,8 @@ export default function BluetoothPrintingSettingsPage() {
                 }
             };
 
-            await printReceiptData(dummyOrder, effectiveBusiness, null, previewMode);
-            toast.success(`Sent test ${previewMode.toUpperCase()} print over Bluetooth!`);
+            await printReceiptData(dummyOrder, effectiveBusiness, null, modeToPrint);
+            toast.success(`Sent test ${modeToPrint.toUpperCase()} print over Bluetooth!`);
         } catch (err: any) {
             console.error("Test print error:", err);
             toast.error(err.message || "Bluetooth printer not connected. Please connect printer first.");
@@ -403,7 +469,17 @@ export default function BluetoothPrintingSettingsPage() {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2.5 self-start sm:self-auto">
+                    <div className="flex items-center gap-2.5 self-start sm:self-auto flex-wrap">
+                        <button
+                            type="button"
+                            onClick={resetAllToDefaults}
+                            className="h-10 px-3.5 sm:px-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 shrink-0 shadow-xs cursor-pointer"
+                            title="Reset all Bluetooth layout & font styles to standard defaults"
+                        >
+                            <RefreshCw size={13} className="text-slate-400" />
+                            <span>Reset Style</span>
+                        </button>
+
                         <Link
                             href="/dashboard/settings/connect-printer"
                             className="h-10 px-4 rounded-xl border border-blue-200 dark:border-blue-500/30 bg-blue-50/50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center gap-1.5 hover:bg-blue-100/60 dark:hover:bg-blue-500/20 transition-all shrink-0"
@@ -563,6 +639,7 @@ export default function BluetoothPrintingSettingsPage() {
                                     <SettingToggle icon={Phone} label="Contact Phone" sKey="showContact" desc="Store contact phone number" color="bg-blue-600" />
                                     <SettingToggle icon={FileText} label="GSTIN Number" sKey="showGST" desc="Government tax ID" color="bg-blue-600" />
                                     <SettingToggle icon={FileText} label="FSSAI Number" sKey="showFSSAI" desc="Food safety license ID" color="bg-blue-600" />
+                                    <SettingToggle icon={FileText} label="TAX INVOICE / Header Title" sKey="showBillTypeHeader" desc="Show 'TAX INVOICE' / 'SALES RECEIPT' title" color="bg-blue-600" />
                                 </div>
                             </div>
 
@@ -639,8 +716,135 @@ export default function BluetoothPrintingSettingsPage() {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <SettingToggle icon={QrCode} label="Dynamic UPI QR" sKey="showUpiQr" desc="Scan & Pay exact bill total" color="bg-amber-600" />
                                     <SettingToggle icon={QrCode} label="Menu / Review QR" sKey="showMenuQr" desc="Rate experience & digital menu" color="bg-amber-600" />
-                                    <SettingToggle icon={Sparkles} label="Hare Krishna Greeting" sKey="showGreetings" desc="Blessing / Footer greeting" color="bg-amber-600" />
+                                    <SettingToggle 
+                                        icon={Sparkles} 
+                                        label={settings.customGreetingMessage?.trim() || business?.greetingMessage?.trim() || "Hare Krishna Greeting"} 
+                                        sKey="showGreetings" 
+                                        desc="Blessing / Footer greeting line" 
+                                        color="bg-amber-600" 
+                                    />
                                     <SettingToggle icon={Receipt} label="Powered by Kravy POS" sKey="showPoweredBy" desc="Software branding line" color="bg-amber-600" />
+                                </div>
+
+                                {/* UPI Payment ID Configuration Card */}
+                                <div className="p-4 rounded-2xl bg-blue-500/5 border border-blue-500/20 space-y-3 mt-2">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <QrCode size={15} className="text-blue-600" />
+                                            <label className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-white">
+                                                UPI Payment ID (VPA)
+                                            </label>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {settings.showUpiQr === false && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        kravy.click();
+                                                        setSettings(prev => ({ ...prev, showUpiQr: true }));
+                                                    }}
+                                                    className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 border border-rose-500/20 hover:bg-rose-500/20 transition-all cursor-pointer"
+                                                >
+                                                    Enable QR
+                                                </button>
+                                            )}
+                                            <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold bg-blue-500/10 px-2 py-0.5 rounded-full">
+                                                Instant Preview Sync
+                                            </span>
+                                        </div>
+                                    </div>
+                                    {settings.showUpiQr === false && (
+                                        <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-700 dark:text-amber-300 font-medium flex items-center justify-between gap-2">
+                                            <span>Dynamic UPI QR toggle is currently <strong>OFF</strong>. Turn it on to display the QR in bills & preview.</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    kravy.success();
+                                                    setSettings(prev => ({ ...prev, showUpiQr: true }));
+                                                }}
+                                                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg shrink-0 text-[10px] cursor-pointer"
+                                            >
+                                                Turn ON
+                                            </button>
+                                        </div>
+                                    )}
+                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                        <div className="relative flex-1">
+                                            <input
+                                                type="text"
+                                                value={upiId}
+                                                placeholder="e.g. yourname@okaxis, merchant@paytm"
+                                                onChange={(e) => {
+                                                    const val = e.target.value.trim().toLowerCase();
+                                                    setUpiId(val);
+                                                    setBusiness((prev: any) => ({ ...prev, upi: val }));
+                                                    if (settings.showUpiQr === false) {
+                                                        setSettings(prev => ({ ...prev, showUpiQr: true }));
+                                                    }
+                                                }}
+                                                className="w-full pl-3.5 pr-20 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs font-mono font-bold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all placeholder:text-slate-400 placeholder:font-sans"
+                                            />
+                                            {upiId && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setUpiId("");
+                                                        setBusiness((prev: any) => ({ ...prev, upi: "" }));
+                                                    }}
+                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 hover:text-rose-500 px-1.5 py-0.5 rounded cursor-pointer"
+                                                >
+                                                    Clear
+                                                </button>
+                                            )}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={handleSave}
+                                            disabled={saving}
+                                            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase tracking-wider transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0 shadow-sm shadow-blue-600/30 cursor-pointer"
+                                        >
+                                            <Save size={13} />
+                                            <span>{saving ? "Saving..." : "Save UPI"}</span>
+                                        </button>
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                                        All customer payments through the printed thermal QR code will be directly credited to this UPI ID.
+                                    </p>
+                                </div>
+
+                                {/* Custom Greeting Text Input */}
+                                <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20 space-y-2 mt-2">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Sparkles size={15} className="text-amber-600" />
+                                            <label className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-white">
+                                                Custom Greeting / Footer Text
+                                            </label>
+                                        </div>
+                                        <span className="text-[10px] text-slate-400 font-bold">Printed above Powered by</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="text"
+                                            value={settings.customGreetingMessage ?? business?.greetingMessage ?? ""}
+                                            placeholder="e.g. THANK YOU 🙏 VISIT AGAIN or HARE KRISHNA"
+                                            onChange={(e) => setSettings(prev => ({ ...prev, customGreetingMessage: e.target.value }))}
+                                            className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/30 transition-all placeholder:text-slate-400"
+                                        />
+                                        {(settings.customGreetingMessage || business?.greetingMessage) && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setSettings(prev => ({ ...prev, customGreetingMessage: "HARE KRISHNA" }))}
+                                                className="px-3 py-2.5 rounded-xl border border-amber-300 dark:border-amber-500/30 bg-amber-100/50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11px] font-bold hover:bg-amber-100 transition-all cursor-pointer whitespace-nowrap"
+                                                title="Reset to Hare Krishna"
+                                            >
+                                                Default
+                                            </button>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] text-slate-400">
+                                        Type any custom greeting or message to print at the bottom of thermal receipts.
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -649,16 +853,27 @@ export default function BluetoothPrintingSettingsPage() {
                     {/* ════ KOT SECTION ════ */}
                     {sectionTab === "kot" && (
                         <div className="p-5 rounded-3xl bg-white dark:bg-white/5 border border-slate-200/80 dark:border-white/10 space-y-4">
-                            <div className="flex items-center gap-2 border-b border-slate-100 dark:border-white/5 pb-3">
-                                <div className="w-8 h-8 rounded-xl bg-orange-500/10 text-orange-600 flex items-center justify-center">
-                                    <ChefHat size={16} />
+                            <div className="flex items-center gap-2 border-b border-slate-100 dark:border-white/5 pb-3 justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-xl bg-orange-500/10 text-orange-600 flex items-center justify-center">
+                                        <ChefHat size={16} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-sm font-black uppercase tracking-wider text-slate-800 dark:text-white">
+                                            Kitchen Order Ticket (K.O.T) Customizer
+                                        </h2>
+                                        <p className="text-[11px] text-slate-400">Select what is printed for your kitchen & cook staff</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h2 className="text-sm font-black uppercase tracking-wider text-slate-800 dark:text-white">
-                                        Kitchen Order Ticket (K.O.T) Customizer
-                                    </h2>
-                                    <p className="text-[11px] text-slate-400">Select what is printed for your kitchen & cook staff</p>
-                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => handleTestPrint("kot")}
+                                    disabled={isPrintingTest}
+                                    className="px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-black tracking-wider uppercase flex items-center gap-1.5 shadow-md shadow-orange-600/20 active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
+                                >
+                                    <Printer size={13} />
+                                    <span>{isPrintingTest ? "Printing..." : "Print KOT Test"}</span>
+                                </button>
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -691,15 +906,16 @@ export default function BluetoothPrintingSettingsPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <Sizer label="Logo Size / Height" icon={ImageIcon} sKey="logoSize" min={20} max={90} descMap={{ 20: "20mm (Small)", 50: "50mm (Large)", 80: "80mm (Huge)" }} />
                                     <Sizer label="Logo Bottom Space" icon={ImageIcon} sKey="logoBottomSpace" min={-20} max={20} descMap={{ [-10]: "Tighter", 0: "0 (Default)", 10: "Spaced" }} />
-                                    <Sizer label="Business Name Font Size" icon={Type} sKey="businessNameSize" min={14} max={32} descMap={{ 14: "Compact", 18: "Medium", 24: "Large", 30: "Giant" }} />
-                                    <Sizer label="Address Font Size" icon={MapPin} sKey="addressSize" min={8} max={16} descMap={{ 8: "Tiny", 11: "Standard", 14: "Large" }} />
-                                    <Sizer label="Tagline Font Size" icon={Type} sKey="taglineSize" min={8} max={14} descMap={{ 8: "Tiny", 11: "Standard", 13: "Large" }} />
-                                    <Sizer label="Receipt Token Size" icon={Clock} sKey="receiptTokenSize" min={18} max={40} descMap={{ 18: "Small", 28: "Bold Standout", 36: "Giant" }} />
-                                    <Sizer label="Items List Font Size" icon={Receipt} sKey="itemsFontSize" min={9} max={18} descMap={{ 9: "Compact", 11: "Standard", 15: "Readable" }} />
-                                    <Sizer label="Grand Total Font Size" icon={Receipt} sKey="grandTotalFontSize" min={11} max={24} descMap={{ 11: "Compact", 13: "Standard Highlight", 18: "Bold Standout", 22: "Giant" }} />
+                                    <Sizer label="UPI QR Code Size" icon={QrCode} sKey="upiQrSize" min={100} max={300} descMap={{ 100: "100px (Compact)", 160: "160px (Standard)", 220: "220px (Large)", 280: "280px (Giant)" }} />
+                                    <Sizer label="Business Name Font Size" icon={Type} sKey="businessNameSize" min={14} max={50} descMap={{ 14: "Compact", 18: "Medium", 24: "Large", 32: "Extra Large", 42: "Huge (3x)" }} />
+                                    <Sizer label="Address Font Size" icon={MapPin} sKey="addressSize" min={8} max={18} descMap={{ 8: "Tiny", 11: "Standard", 14: "Large" }} />
+                                    <Sizer label="Tagline Font Size" icon={Type} sKey="taglineSize" min={8} max={16} descMap={{ 8: "Tiny", 11: "Standard", 13: "Large" }} />
+                                    <Sizer label="Receipt Token Size" icon={Clock} sKey="receiptTokenSize" min={18} max={50} descMap={{ 18: "Small", 24: "Double Height", 32: "Double Size", 42: "Huge Standout" }} />
+                                    <Sizer label="Items List Font Size" icon={Receipt} sKey="itemsFontSize" min={9} max={22} descMap={{ 9: "Compact", 11: "Standard", 15: "Bold", 18: "Large" }} />
+                                    <Sizer label="Grand Total Font Size" icon={Receipt} sKey="grandTotalFontSize" min={11} max={36} descMap={{ 11: "Compact", 13: "Standard Highlight", 18: "Bold Standout", 24: "Double Size", 32: "Giant" }} />
                                     <Sizer label="Customer Details Size" icon={User} sKey="customerDetailsFontSize" min={8} max={24} descMap={{ 8: "Compact", 10: "Standard", 14: "Prominent" }} />
-                                    <Sizer label="Details & Metadata Size" icon={FileText} sKey="detailsFontSize" min={8} max={14} descMap={{ 8: "Compact", 10: "Standard", 12: "Large" }} />
-                                    <Sizer label="Greetings Footer Size" icon={MessageSquare} sKey="greetingsFooterSize" min={9} max={18} descMap={{ 9: "Compact", 12: "Standard", 15: "Prominent" }} />
+                                    <Sizer label="Details & Metadata Size" icon={FileText} sKey="detailsFontSize" min={8} max={16} descMap={{ 8: "Compact", 10: "Standard", 12: "Large" }} />
+                                    <Sizer label="Greetings Footer Size" icon={MessageSquare} sKey="greetingsFooterSize" min={9} max={26} descMap={{ 9: "Compact", 12: "Standard", 16: "Large", 22: "Giant" }} />
                                 </div>
                             </div>
 
@@ -717,6 +933,31 @@ export default function BluetoothPrintingSettingsPage() {
                                     <Sizer label="KOT Header Details Size" icon={FileText} sKey="kotHeaderDetailsSize" min={8} max={32} descMap={{ 8: "Compact", 11: "Standard", 16: "Large" }} />
                                     <Sizer label="KOT Items Font Size" icon={ChefHat} sKey="kotItemsFontSize" min={9} max={40} descMap={{ 9: "Compact", 11: "Standard Mono", 18: "Large" }} />
                                     <Sizer label="KOT Quantity Font Size" icon={ChefHat} sKey="kotQuantityFontSize" min={10} max={40} descMap={{ 10: "Standard", 14: "Bold Standout", 20: "Huge" }} />
+                                </div>
+                            </div>
+
+                            {/* Reset Styling Buttons */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-slate-200 dark:border-white/10">
+                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                    * Reset typography sizing to Bluetooth thermal standard defaults.
+                                </div>
+                                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={resetReceiptStyle}
+                                        className="h-9 px-3.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-[11px] font-black text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/10 transition-all flex items-center justify-center gap-1.5 shadow-xs active:scale-95 cursor-pointer"
+                                    >
+                                        <RefreshCw size={12} className="text-slate-400" />
+                                        <span>Reset Receipt Styling</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={resetKotStyle}
+                                        className="h-9 px-3.5 rounded-xl border border-orange-200 dark:border-orange-500/20 bg-orange-50/50 dark:bg-orange-500/10 text-[11px] font-black text-orange-600 dark:text-orange-400 hover:bg-orange-100/60 dark:hover:bg-orange-500/20 transition-all flex items-center justify-center gap-1.5 shadow-xs active:scale-95 cursor-pointer"
+                                    >
+                                        <RefreshCw size={12} className="text-orange-500" />
+                                        <span>Reset KOT Styling</span>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -918,16 +1159,33 @@ export default function BluetoothPrintingSettingsPage() {
                             {/* Realistic metallic dispenser cut slot */}
                             <div className="w-16 h-1 bg-slate-800 rounded-full border border-slate-700 shadow-inner opacity-60" />
                             
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 sm:gap-2">
                                 <button
                                     type="button"
-                                    onClick={handleTestPrint}
+                                    onClick={() => handleTestPrint(previewMode)}
                                     disabled={isPrintingTest}
-                                    className="px-2.5 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-[8px] font-black tracking-wider uppercase flex items-center gap-1 active:scale-95 disabled:opacity-50 cursor-pointer"
+                                    className={`px-2 sm:px-2.5 py-0.5 rounded text-white text-[8px] font-black tracking-wider uppercase flex items-center gap-1 active:scale-95 disabled:opacity-50 cursor-pointer shadow-xs transition-colors ${
+                                        previewMode === "kot" 
+                                            ? "bg-orange-600 hover:bg-orange-500" 
+                                            : "bg-blue-600 hover:bg-blue-500"
+                                    }`}
+                                    title={previewMode === "kot" ? "Print Test KOT to Bluetooth printer" : "Print Test Bill to Bluetooth printer"}
                                 >
                                     <Printer size={10} />
-                                    <span>{isPrintingTest ? "Printing..." : "Test Print"}</span>
+                                    <span>{isPrintingTest ? "Printing..." : previewMode === "kot" ? "Test KOT" : "Test Bill"}</span>
                                 </button>
+                                {previewMode !== "kot" && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleTestPrint("kot")}
+                                        disabled={isPrintingTest}
+                                        className="px-2 py-0.5 rounded bg-orange-600/90 hover:bg-orange-500 text-white text-[8px] font-black tracking-wider uppercase flex items-center gap-1 active:scale-95 disabled:opacity-50 cursor-pointer shadow-xs transition-colors"
+                                        title="Print Test KOT to Bluetooth printer"
+                                    >
+                                        <ChefHat size={9} />
+                                        <span>KOT Test</span>
+                                    </button>
+                                )}
                                 <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-[8px] font-black tracking-wider text-slate-400 uppercase">
                                     {settings.paperWidth === '80mm' ? '80MM / 3"' : '58MM / 2"'}
                                 </span>
@@ -949,7 +1207,7 @@ export default function BluetoothPrintingSettingsPage() {
                                 <div className="w-full origin-top transition-transform duration-200" style={{ transform: `scale(${previewZoom})` }}>
                                    <BluetoothThermalPreview 
                                        settings={settings} 
-                                       business={business} 
+                                       business={{ ...business, upi: upiId || business?.upi }} 
                                        previewMode={previewMode} 
                                        previewGst={previewGst} 
                                    />

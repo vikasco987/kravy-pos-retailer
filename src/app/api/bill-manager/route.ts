@@ -899,6 +899,105 @@ export async function POST(req: NextRequest) {
       console.log(`[BILL_MANAGER_DEBUG] Bill ${bill.billNumber} created. Inventory deduction skipped by caller.`);
     }
 
+    // ✅ AUTO-SEND WHATSAPP BILL IN BACKGROUND (NON-BLOCKING WITH WALLET CREDITS)
+    if (bill && !bill.isHeld && bill.customerPhone) {
+      (async () => {
+        try {
+          // 1. Check if merchant has enabled WhatsApp auto-bill
+          if (profile?.whatsappAutoBillEnabled === false) {
+            console.log(`[AUTO_WHATSAPP_BILL] ⏸️ Skipped: Auto-bill disabled in merchant settings for Bill ${bill.billNumber}`);
+            return;
+          }
+
+          // 2. Check if merchant has remaining wallet message credits (No free messages for regular customers, Admin exempt)
+          const isAdmin = authUser?.role === "ADMIN" || authUser?.type === "ADMIN";
+          const currentCredits = isAdmin ? 9999 : (profile?.whatsappCredits ?? 0);
+          if (currentCredits <= 0) {
+            console.warn(`[AUTO_WHATSAPP_BILL] ⚠️ Paused: Insufficient WhatsApp credits (Credits: 0). Auto-send stopped for Bill ${bill.billNumber}. Merchant must recharge wallet.`);
+            return;
+          }
+
+          const { sendWhatsAppBill } = await import("@/lib/whatsapp-bill");
+          const itemsRaw = typeof bill.items === "string" ? JSON.parse(bill.items) : (bill.items as any[]);
+          const printSettings = (profile?.printSettings as any) || {};
+          const selectedTemplate = printSettings.whatsappSelectedTemplate || "delivery_confirmation_1";
+
+          const waResult = await sendWhatsAppBill({
+            billId: bill.id,
+            templateId: selectedTemplate,
+            invoiceNo: bill.billNumber,
+            date: new Date(bill.createdAt).toLocaleString("en-IN"),
+            restaurantName: profile?.businessName || "Store",
+            restaurantAddress: profile?.businessAddress || "",
+            gstin: profile?.gstNumber || "",
+            customerPhone: bill.customerPhone,
+            customerName: bill.customerName || undefined,
+            items: (itemsRaw || []).map((it: any) => ({
+              name: it.name || "Item",
+              qty: it.qty || it.quantity || 1,
+              price: it.rate || it.price || 0,
+              gstRate: it.gst || 0,
+            })),
+            subtotal: bill.subtotal,
+            discountCode: bill.discountCode || undefined,
+            discountAmount: bill.discountAmount || 0,
+            taxableAmount: bill.subtotal,
+            cgst: (bill.tax || 0) / 2,
+            sgst: (bill.tax || 0) / 2,
+            grandTotal: bill.total,
+            paymentMode: bill.paymentMode || "Cash",
+            fssai: (profile?.fssaiEnabled && profile?.fssaiNumber) ? profile.fssaiNumber : undefined,
+            currencySymbol: bill.currencySymbol || profile?.currencySymbol || "₹"
+          });
+
+          if (waResult.success) {
+            // Deduct 1 credit & balance atomically
+            const remaining = Math.max(0, currentCredits - 1);
+            const costPerMsg = profile?.whatsappCostPerMessage || 0.50;
+            const newBal = Math.max(0, (profile?.whatsappBalance || 0) - costPerMsg);
+
+            if (profile?.id) {
+              await prisma.businessProfile.update({
+                where: { id: profile.id },
+                data: {
+                  whatsappCredits: remaining,
+                  whatsappBalance: newBal,
+                  whatsappTotalSent: { increment: 1 }
+                }
+              });
+
+              await prisma.whatsAppWalletTransaction.create({
+                data: {
+                  clerkUserId: effectiveId || "Unknown",
+                  type: "DEBIT",
+                  amount: costPerMsg,
+                  credits: -1,
+                  balanceAfter: remaining,
+                  description: `Auto-Bill ${bill.billNumber} sent to ${bill.customerPhone}`,
+                  billNumber: bill.billNumber,
+                  customerPhone: bill.customerPhone,
+                }
+              });
+            }
+
+            await prisma.billManager.update({
+              where: { id: bill.id },
+              data: {
+                whatsappSent: true,
+                whatsappSentAt: new Date(),
+                whatsappSid: waResult.messageSid,
+              }
+            });
+            console.log(`[AUTO_WHATSAPP_BILL] ✅ Bill ${bill.billNumber} sent to ${bill.customerPhone} (Remaining Credits: ${remaining})`);
+          } else {
+            console.warn(`[AUTO_WHATSAPP_BILL] ⚠️ Failed for Bill ${bill.billNumber}:`, waResult.error);
+          }
+        } catch (waErr: any) {
+          console.error("[AUTO_WHATSAPP_BILL] Error:", waErr.message || waErr);
+        }
+      })();
+    }
+
     return responseJson;
   } catch (err: any) {
     console.error("BILL MANAGER CREATE ERROR:", err);

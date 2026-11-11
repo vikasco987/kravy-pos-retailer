@@ -1262,3 +1262,116 @@ section {
     justify-content: space-between;
   }
 }
+/* ── 3D Game Navigation Animations (Kravy Bottom Nav) ── */
+@keyframes kravy-float {
+  0%, 100% {
+    transform: translateY(-2px) rotateY(-12deg) rotateX(4deg);
+  }
+  50% {
+    transform: translateY(-7px) rotateY(12deg) rotateX(-4deg);
+  }
+}
+
+@keyframes kravy-jump {
+  0% {
+    transform: scale(1, 1);
+  }
+  15% {
+    transform: scale(1.25, 0.7) translateY(4px);
+  }
+  40% {
+    transform: scale(0.88, 1.25) translateY(-20px) rotateY(180deg);
+  }
+  65% {
+    transform: scale(1.08, 0.92) translateY(2px) rotateY(360deg);
+  }
+  82% {
+    transform: scale(0.97, 1.04) translateY(-3px) rotateY(360deg);
+  }
+  100% {
+    transform: scale(1, 1) rotateY(360deg);
+  }
+}
+
+@keyframes kravy-shine {
+  0%, 55% {
+    left: -75%;
+  }
+  100% {
+    left: 140%;
+  }
+}
+
+@keyframes kravy-spark {
+  to {
+    transform: translate(var(--x, 0px), var(--y, 0px)) scale(0);
+    opacity: 0;
+  }
+}
+
+@keyframes kravy-ring {
+  from {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* Badge pop-in and pulse animations from Wow Demo */
+@keyframes kravy-badge-pop {
+  0% {
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.45);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes kravy-badge-pulse {
+  0%, 100% {
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4), 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  50% {
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4), 0 0 0 5px rgba(239, 68, 68, 0);
+  }
+}
+
+.animate-kravy-badge {
+  animation: kravy-badge-pop 0.6s cubic-bezier(0.3, 1.9, 0.5, 1), kravy-badge-pulse 1.8s ease-in-out 0.6s infinite;
+}
+
+.animate-kravy-float {
+  animation: kravy-float 2.2s ease-in-out infinite;
+}
+
+.animate-kravy-jump {
+  animation: kravy-jump 0.7s cubic-bezier(0.3, 0.7, 0.4, 1) 1, kravy-float 2.2s ease-in-out 0.7s infinite;
+}
+
+.animate-kravy-shine {
+  animation: kravy-shine 2.8s ease-in-out infinite;
+}
+
+.animate-kravy-spark {
+  animation: kravy-spark 0.65s ease-out forwards;
+}
+
+.animate-kravy-ring {
+  animation: kravy-ring 0.6s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-kravy-float,
+  .animate-kravy-jump,
+  .animate-kravy-shine,
+  .animate-kravy-spark,
+  .animate-kravy-ring {
+    animation: none !important;
+  }
+}

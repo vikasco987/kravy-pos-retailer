@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   UserCircle, Activity, Users, BarChart3,
-  ChevronRight, Shield, Bell, Palette, HelpCircle, Database, Percent, Book, Award, Zap, LayoutDashboard, Printer, Sliders, Package, Bluetooth
+  ChevronRight, Shield, Bell, Palette, HelpCircle, Database, Percent, Book, Award, Zap, LayoutDashboard, Printer, Sliders, Package, Bluetooth, MessageSquare
 } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 
@@ -31,6 +31,20 @@ export default function SettingsPage() {
           color: "#8B5CF6",
           label: "Business Profile",
           desc: "Update your store name, address and branding"
+        },
+        {
+          href: "/dashboard/settings/whatsapp",
+          icon: <MessageSquare size={20} />,
+          color: "#25D366",
+          label: "WhatsApp Automation & Wallet",
+          desc: "Control auto-bill sending, recharge message credits & view balance"
+        },
+        {
+          href: "/dashboard/settings/whatsapp/templates",
+          icon: <MessageSquare size={20} />,
+          color: "#10B981",
+          label: "WhatsApp Message Templates",
+          desc: "Choose auto-bill templates, preview interactive buttons & customize delivery"
         },
         {
           href: "/dashboard/settings/activity",

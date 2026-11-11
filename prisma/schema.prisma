@@ -584,7 +584,37 @@ model BusinessProfile {
 
   customUnits String[] @default([])
 
+  // ✅ WhatsApp Automation & Wallet System
+  whatsappAutoBillEnabled Boolean  @default(true)
+  whatsappBalance         Float    @default(0.0)
+  whatsappCredits         Int      @default(50) // Free 50 trial messages for starter
+  whatsappCostPerMessage  Float    @default(0.50)
+  whatsappTotalSent       Int      @default(0)
+
   updatedAt DateTime @updatedAt
+}
+
+//////////////////////////////////////////////////
+// WHATSAPP WALLET TRANSACTIONS
+//////////////////////////////////////////////////
+
+model WhatsAppWalletTransaction {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  clerkUserId   String
+  type          String   // "CREDIT" | "DEBIT"
+  amount        Float    @default(0.0) // Money amount (₹)
+  credits       Int      // Message count (+500, -1, etc.)
+  balanceAfter  Int?     // Remaining messages after txn
+  description   String   // e.g. "Recharge ₹500 (1000 msgs)" or "Bill #INV-102"
+  billNumber    String?
+  customerPhone String?
+  referenceId   String?  // Payment or Gateway ref
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([clerkUserId])
+  @@index([type])
+  @@index([createdAt])
 }
 
 //////////////////////////////////////////////////
