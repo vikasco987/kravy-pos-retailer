@@ -299,7 +299,7 @@ export default function ClientLayout({
                 pointerEvents: sidebarOpen ? 'auto' : 'none',
               }}
             >
-              <Sidebar profile={profile} isMobile={true} />
+              <Sidebar profile={profile} isMobile={true} onClose={() => setSidebarOpen(false)} />
             </div>
           </div>
         )}

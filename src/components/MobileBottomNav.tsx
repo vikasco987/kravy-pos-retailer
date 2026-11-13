@@ -102,7 +102,6 @@ export default function MobileBottomNav({ profile }: any) {
     const rawNavItems = [
         { label: "Dashboard", href: "/dashboard", IconComponent: LayoutDashboard, imageSrc: "/images/bottom-nav/dashboard.png" },
         { label: "POS", href: "/dashboard/billing/checkout", IconComponent: ShoppingCart, imageSrc: "/images/bottom-nav/pos.png" },
-        { label: "Tables", href: "/dashboard/terminal", IconComponent: Armchair, imageSrc: "/images/bottom-nav/floor.png" },
         { label: "Bills", href: "/dashboard/billing", IconComponent: ReceiptText, imageSrc: "/images/bottom-nav/history.png" },
         { label: "Menu", href: "/dashboard/menu/view", IconComponent: Utensils, tabletOnly: true }
     ];
@@ -163,6 +162,15 @@ export default function MobileBottomNav({ profile }: any) {
             textClass: "text-[10px] sm:text-xs font-bold leading-tight drop-shadow-xs"
         },
         {
+            label: "Inventory Stock",
+            href: "/dashboard/inventory",
+            imageSrc: "/images/quick-actions/inventory.png",
+            icon: <Package size={18} className="sm:w-[22px] sm:h-[22px] text-[#D97706]" />,
+            bg: "bg-[#FEF3C7] dark:bg-amber-950/40 text-[#D97706] dark:text-amber-300 shadow-2xs",
+            iconClass: "w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center mb-0.5",
+            textClass: "text-[10px] sm:text-xs font-bold leading-tight mt-0.5"
+        },
+        {
             label: "Settings",
             href: "/dashboard/settings",
             imageSrc: "/images/quick-actions/settings.png",
@@ -170,28 +178,11 @@ export default function MobileBottomNav({ profile }: any) {
             bg: "bg-[#FFEAD7] dark:bg-orange-950/40 text-[#B8561B] dark:text-orange-300 shadow-2xs",
             iconClass: "w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center mb-0.5",
             textClass: "text-[10px] sm:text-xs font-bold leading-tight mt-0.5"
-        },
-        {
-            label: "Table Status",
-            href: "/dashboard/tables",
-            imageSrc: "/images/quick-actions/tables_status.png",
-            icon: <LayoutGrid size={18} className="sm:w-[22px] sm:h-[22px]" strokeWidth={2.2} />,
-            bg: "bg-[#DDF4FF] dark:bg-sky-950/40 text-[#0284C7] dark:text-sky-300 shadow-2xs",
-            iconClass: "w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center mb-0.5 text-[#0284C7] dark:text-sky-400",
-            textClass: "text-[10px] sm:text-xs font-bold leading-tight mt-0.5"
         }
     ].filter(filterAllowed);
 
     // 2-Column Action Pills (Filtered by staff permissions)
     const actionPills = [
-        {
-            label: "Kitchen\nWorkflow",
-            href: "/dashboard/kitchen",
-            imageSrc: "/images/quick-actions/kitchen.png",
-            icon: <Activity size={18} className="text-[#E11D48]" />,
-            iconBg: "bg-[#FFE4E6] dark:bg-rose-950/50",
-            border: "border-rose-200 dark:border-rose-900/50"
-        },
         {
             label: "Browse Products",
             href: "/dashboard/menu/view",
@@ -217,15 +208,7 @@ export default function MobileBottomNav({ profile }: any) {
             border: "border-blue-200 dark:border-blue-900/50"
         },
         {
-            label: "Inventory Stock",
-            href: "/dashboard/inventory",
-            imageSrc: "/images/quick-actions/inventory.png",
-            icon: <Package size={18} className="text-[#D97706]" />,
-            iconBg: "bg-[#FEF3C7] dark:bg-amber-950/50",
-            border: "border-amber-200 dark:border-amber-900/50"
-        },
-        {
-            label: "Restaurant\nExpenses",
+            label: "Store Expenses",
             href: "/dashboard/expenses",
             imageSrc: "/images/quick-actions/expenses.png",
             icon: <IndianRupee size={18} className="text-[#9333EA]" />,

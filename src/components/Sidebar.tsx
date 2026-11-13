@@ -535,7 +535,7 @@ function SidebarItem({ item, index, isActive, collapsed, isDark, pathname }: any
   );
 }
 
-export default function Sidebar({ profile, isMobile = false }: { profile?: any; isMobile?: boolean }) {
+export default function Sidebar({ profile, isMobile = false, onClose }: { profile?: any; isMobile?: boolean; onClose?: () => void }) {
   const { collapsed, setCollapsed } = useSidebar();
   const { resolvedTheme } = useTheme();
   const pathname = usePathname();
@@ -851,7 +851,11 @@ export default function Sidebar({ profile, isMobile = false }: { profile?: any; 
           onClick={() => {
             kravy.toggle();
             if (isMobile) {
-              window.dispatchEvent(new CustomEvent("kravy-toggle-sidebar"));
+              if (onClose) {
+                onClose();
+              } else {
+                window.dispatchEvent(new CustomEvent("kravy-toggle-sidebar"));
+              }
             } else {
               setCollapsed(!collapsed);
             }
