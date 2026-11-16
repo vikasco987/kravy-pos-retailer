@@ -341,7 +341,7 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Search, ChevronDown, Trash2, Pencil, RotateCcw, Check, X, Sparkles, Image as ImageIcon, Loader2, Globe, Zap, Printer, File, Heart, Copy, GripVertical, IndianRupee, Layers, LayoutGrid, ListFilter, Edit2, MonitorSmartphone } from "lucide-react";
+import { Plus, Search, ChevronDown, Trash2, Pencil, RotateCcw, Check, X, Sparkles, Image as ImageIcon, Loader2, Globe, Zap, Printer, File, Heart, Copy, GripVertical, IndianRupee, Layers, LayoutGrid, ListFilter, Edit2, MonitorSmartphone, Code, FileText, CheckCircle2 } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useRouter, useSearchParams } from "next/navigation";
 import ItemModal from "@/components/MenuEditor/ItemModal";
@@ -559,6 +559,9 @@ export default function ViewMenuPage() {
 
   // Upload New Menu States
   const [showUploadMenuModal, setShowUploadMenuModal] = useState(false);
+  const [menuUploadTab, setMenuUploadTab] = useState<"file" | "json">("file");
+  const [manualMenuJson, setManualMenuJson] = useState("");
+  const [isPromptCopied, setIsPromptCopied] = useState(false);
   const [aiLanguagePref, setAiLanguagePref] = useState("english");
   const [chunkingMode, setChunkingMode] = useState<"batch" | "single" | "stream">("batch");
   const [menuFileQueue, setMenuFileQueue] = useState<File[]>([]);
@@ -733,6 +736,278 @@ export default function ViewMenuPage() {
     const nextProvider = searchProvider === "foodsnap" ? "global" : "foodsnap";
     setSearchProvider(nextProvider);
     handleSearchImages(searchImageQuery, nextProvider);
+  };
+
+  const GEMINI_PROMPT_TEMPLATE = `You are an expert restaurant menu digitizer and data extraction engine for Kravy POS.
+I will provide a restaurant menu PDF, image, Excel sheet, or raw text.
+Your task is to extract EVERY SINGLE menu item with 100% precision into the EXACT JSON structure specified below.
+
+CRITICAL EXTRACTION RULES:
+1. EXTRACT ALL ITEMS: Do not skip any item or category. Extract every single item present in the menu.
+2. ITEM SHORTCODE / SHORTCUT ("sc"):
+   - If an item has an item code, shortcut, or number (e.g., "PBM", "101", "B-05", "CH-02"), extract it into "sc" exactly as printed.
+   - If NO shortcut/code is printed on the menu for that item, set "sc": null. NEVER invent or fabricate shortcuts.
+3. FOOD TYPE CLASSIFICATION ("t"):
+   - Inspect green veg dots, red/brown non-veg dots, headings (NON-VEG GRAVY, VEG GRAVY, BIRYANI, etc.), or ingredients.
+   - For vegetarian items, set "t": "Pure Veg"
+   - For non-vegetarian items (chicken, mutton, fish, meat), set "t": "Non Veg"
+   - For egg items, set "t": "Contains Egg"
+   - If classification cannot be identified from the source, set "t": null.
+4. VARIANTS & SIZES (CRITICAL - NESTED "v" ARRAY):
+   - Whenever a dish/item has multiple portions, sizes, or quantities (e.g., Half / Full, Small / Medium / Large, 2 Pc / 4 Pc / 8 Pc, Quarter / Half / Full, 250ml / 500ml / 1000ml):
+     * DO NOT create multiple separate items!
+     * DO NOT append "Half", "Full", "(2 Pc)", "(4 Pc)" into the base item name "n"!
+     * "n": KEEP THE ITEM NAME CLEAN (e.g. "Chicken Patiala Leg", "Chicken Dum Biryani", "Veg Chowmein", "Paneer Tikka Butter Masala").
+     * "v": Add all portion sizes inside the nested array "v" with portion name and numeric price:
+       Example:
+       "v": [
+         {"n": "Half (2 Pc)", "p": 180},
+         {"n": "Full (4 Pc)", "p": 340}
+       ]
+     * "p": Set the base price "p" to the lowest variant price (e.g. 180).
+   - If an item has ONLY ONE fixed price (no half/full or multiple sizes):
+     * "n": The clean item name (e.g. "Mutton Seekh Kabab", "Mughlai Paratha").
+     * "p": The exact numeric price (e.g. 350).
+     * "v": Omit or pass empty array [].
+5. PRICES ("p"): Numeric values only (e.g. 180, not "₹180").
+6. DESCRIPTIONS ("d"): Write a short, appetizing, professional culinary description for each item.
+7. NO MARKDOWN: Return ONLY valid JSON. Do not wrap the JSON in \`\`\`json code fences or add conversational text. It must be directly parseable.
+
+Example Input from Menu Table:
+Item                        Half             Full
+Chicken Patiala Leg         (2 Pc) ₹180      (4 Pc) ₹340
+Chicken Al-faham                             ₹320
+Chicken Dum Biryani         ₹90              ₹140
+
+Expected Output JSON:
+{
+  "r": "Restaurant Name",
+  "a": "Address",
+  "ti": "Timings",
+  "ph": "Phone",
+  "m": [
+    {
+      "c": "KABAB",
+      "n": "Chicken Patiala Leg",
+      "p": 180,
+      "sc": null,
+      "t": "Non Veg",
+      "d": "Tender chicken leg pieces marinated in rich spices and roasted to perfection.",
+      "v": [
+        {"n": "Half (2 Pc)", "p": 180},
+        {"n": "Full (4 Pc)", "p": 340}
+      ]
+    },
+    {
+      "c": "KABAB",
+      "n": "Chicken Al-faham",
+      "p": 320,
+      "sc": null,
+      "t": "Non Veg",
+      "d": "Authentic Arabian style grilled chicken infused with distinct aromatic herbs and spices.",
+      "v": []
+    },
+    {
+      "c": "BIRYANI",
+      "n": "Chicken Dum Biryani",
+      "p": 90,
+      "sc": null,
+      "t": "Non Veg",
+      "d": "Slow-cooked fragrant basmati rice layered with succulent spiced chicken.",
+      "v": [
+        {"n": "Half", "p": 90},
+        {"n": "Full", "p": 140}
+      ]
+    }
+  ]
+}`;
+
+  const copyGeminiPrompt = () => {
+    navigator.clipboard.writeText(GEMINI_PROMPT_TEMPLATE);
+    setIsPromptCopied(true);
+    setToast("Gemini prompt copied! Now paste into Gemini, attach menu, and copy output JSON.");
+    setTimeout(() => setIsPromptCopied(false), 2500);
+  };
+
+  const handleProcessManualJson = async () => {
+    const rawText = manualMenuJson.trim();
+    if (!rawText) {
+      setToast("Please paste the Gemini JSON output first.");
+      return;
+    }
+
+    setExtractingMenu(true);
+    setExtractedMenuProgress({ completed: 0, total: 0 });
+    setExtractedMenuItems([]);
+
+    try {
+      let parsed: any = null;
+
+      // Clean markdown code blocks if user copied them
+      let clean = rawText;
+      if (clean.startsWith("```json")) clean = clean.substring(7);
+      if (clean.startsWith("```")) clean = clean.substring(3);
+      if (clean.endsWith("```")) clean = clean.substring(0, clean.length - 3);
+      clean = clean.trim();
+
+      try {
+        parsed = JSON.parse(clean);
+      } catch (directErr) {
+        // Fallback: try finding outermost { ... } or [ ... ]
+        const firstBrace = clean.indexOf("{");
+        const lastBrace = clean.lastIndexOf("}");
+        const firstBracket = clean.indexOf("[");
+        const lastBracket = clean.lastIndexOf("]");
+
+        let found = false;
+
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          try {
+            parsed = JSON.parse(clean.substring(firstBrace, lastBrace + 1));
+            found = true;
+          } catch {}
+        }
+
+        if (!found && firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+          try {
+            parsed = JSON.parse(clean.substring(firstBracket, lastBracket + 1));
+            found = true;
+          } catch {}
+        }
+
+        // More aggressive: find key "m": or "menu":
+        if (!found) {
+          const mIdx = clean.search(/"(?:m|menu|items)"\s*:\s*\[/);
+          if (mIdx !== -1) {
+            const arrStart = clean.indexOf("[", mIdx);
+            if (arrStart !== -1) {
+              const arrEnd = clean.lastIndexOf("]");
+              if (arrEnd > arrStart) {
+                try {
+                  const arr = JSON.parse(clean.substring(arrStart, arrEnd + 1));
+                  if (Array.isArray(arr)) {
+                    parsed = { m: arr };
+                    found = true;
+                  }
+                } catch {}
+              }
+            }
+          }
+        }
+
+        if (!found || !parsed) {
+          throw new Error("Could not find a valid JSON object or array in the pasted text.");
+        }
+      }
+
+      // Extract raw items array
+      const rawItems = parsed.m || parsed.menu || parsed.items || (Array.isArray(parsed) ? parsed : []);
+      if (!Array.isArray(rawItems) || rawItems.length === 0) {
+        throw new Error("JSON parsed successfully but contains no menu items array (keys: 'm' or 'menu').");
+      }
+
+      // Normalize items to standard structure
+      const normalizedItems = rawItems.map((item: any) => {
+        const cat = String(item.c || item.category || item.category_name || "General").trim();
+        const itemName = String(item.n || item.name || item.item_name || "Unnamed Item").trim();
+        const shortCode = item.sc || item.shortCode || item.code || null;
+        const desc = item.d || item.description || "";
+
+        // Raw food type
+        const rawType = String(item.t || item.type || item.foodType || "").toLowerCase();
+        let isVeg = true;
+        let isEgg = false;
+        let foodTypeStr = "Pure Veg";
+
+        if (rawType.includes("egg")) {
+          isVeg = false;
+          isEgg = true;
+          foodTypeStr = "Contains Egg";
+        } else if (rawType.includes("non")) {
+          isVeg = false;
+          isEgg = false;
+          foodTypeStr = "Non-Veg";
+        } else {
+          isVeg = true;
+          isEgg = false;
+          foodTypeStr = "Pure Veg";
+        }
+
+        // Process variants if any
+        const rawVariants = item.v || item.variants || [];
+        let formattedVariants: any[] | undefined = undefined;
+
+        if (Array.isArray(rawVariants) && rawVariants.length > 0) {
+          // Check if already in groups format
+          if (rawVariants[0]?.groupName || rawVariants[0]?.options) {
+            formattedVariants = rawVariants.map((g: any) => ({
+              id: g.id || Math.random().toString(36).substr(2, 9),
+              groupName: g.groupName || g.name || "Portion / Size",
+              type: g.type || "radio",
+              required: g.required !== undefined ? Boolean(g.required) : true,
+              options: (g.options || []).map((opt: any) => ({
+                id: opt.id || Math.random().toString(36).substr(2, 9),
+                name: String(opt.name || opt.n || "Option").trim(),
+                price: parseFloat(opt.price ?? opt.p) || 0
+              }))
+            }));
+          } else {
+            // Flat variants array [{ n: "Half", p: 180 }, { n: "Full", p: 340 }]
+            const opts = rawVariants.map((v: any) => ({
+              id: Math.random().toString(36).substr(2, 9),
+              name: String(v.n || v.name || "Option").trim(),
+              price: parseFloat(v.p ?? v.price) || 0
+            }));
+            if (opts.length > 0) {
+              formattedVariants = [
+                {
+                  id: Math.random().toString(36).substr(2, 9),
+                  groupName: "Portion / Size",
+                  type: "radio",
+                  required: true,
+                  options: opts
+                }
+              ];
+            }
+          }
+        }
+
+        // Resolve price
+        let finalPrice = parseFloat(item.p ?? item.price ?? 0);
+        if ((!finalPrice || isNaN(finalPrice) || finalPrice === 0) && formattedVariants && formattedVariants.length > 0) {
+          const allPrices = formattedVariants.flatMap((g: any) => (g.options || []).map((o: any) => o.price)).filter((p: number) => p > 0);
+          if (allPrices.length > 0) {
+            finalPrice = Math.min(...allPrices);
+          }
+        }
+
+        return {
+          _tempId: Math.random().toString(36).substr(2, 9),
+          category: cat,
+          name: itemName,
+          price: isNaN(finalPrice) ? 0 : finalPrice,
+          type: foodTypeStr,
+          isVeg,
+          isEgg,
+          shortCode,
+          description: desc,
+          variants: formattedVariants,
+          checked: true,
+          imageUrl: null,
+          img_status: "loading"
+        };
+      });
+
+      setExtractedMenuItems(normalizedItems);
+      setToast(`Parsed ${normalizedItems.length} items from JSON! Matching images...`);
+
+      // Automatically search and apply images
+      autoApplyExtractedImages(normalizedItems, false);
+    } catch (err: any) {
+      console.error("Manual JSON Parse Error:", err);
+      setToast(`Failed to parse JSON: ${err.message}`);
+      setExtractingMenu(false);
+    }
   };
 
   const startParsingMenuFiles = async () => {
@@ -1041,6 +1316,7 @@ export default function ViewMenuPage() {
             imageUrl: item.imageUrl || null,
             isVeg: isVegVal,
             isEgg: isEggVal,
+            shortCode: item.shortCode || null,
             zones: selectedAiZone ? [selectedAiZone] : [],
             description: item.description || "",
             variants: item.variants || undefined
@@ -3524,9 +3800,37 @@ export default function ViewMenuPage() {
                   </select>
                 )}
               </div>
-              
-              {/* Drag and Drop Zone */}
+
+              {/* Method Switcher Tabs (Upload Files vs Upload by JSON) */}
               {extractedMenuItems.length === 0 && (
+                <div className="flex items-center gap-2 p-1.5 bg-[var(--kravy-surface-hover)] border border-[var(--kravy-border)] rounded-2xl w-fit">
+                  <button
+                    type="button"
+                    onClick={() => setMenuUploadTab("file")}
+                    className={`px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-2 transition-all ${
+                      menuUploadTab === "file"
+                        ? "bg-orange-500 text-white shadow-md shadow-orange-500/20"
+                        : "text-[var(--kravy-text-muted)] hover:text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-surface)]"
+                    }`}
+                  >
+                    <FileText size={14} /> Upload PDF / Images
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMenuUploadTab("json")}
+                    className={`px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-2 transition-all ${
+                      menuUploadTab === "json"
+                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
+                        : "text-[var(--kravy-text-muted)] hover:text-[var(--kravy-text-primary)] hover:bg-[var(--kravy-surface)]"
+                    }`}
+                  >
+                    <Code size={14} /> Upload by JSON (Prompt & Paste)
+                  </button>
+                </div>
+              )}
+
+              {/* TAB 1: File Upload */}
+              {menuUploadTab === "file" && extractedMenuItems.length === 0 && (
                 <div className="space-y-6">
                   {/* Selected Files List */}
                   {menuFileQueue.length > 0 && (
@@ -3588,6 +3892,84 @@ export default function ViewMenuPage() {
                     <div>
                       <h4 className="font-black text-sm text-[var(--kravy-text-primary)] uppercase tracking-wider">{menuFileQueue.length > 0 ? "Add More Files" : "Drag & Drop Menu File Here"}</h4>
                       <p className="text-[10px] text-[var(--kravy-text-muted)] font-bold mt-1">Supports PDF, Excel, Word, or Images (JPG/PNG/WebP)</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: Upload by JSON (Prompt & Paste Flow) */}
+              {menuUploadTab === "json" && extractedMenuItems.length === 0 && (
+                <div className="space-y-6">
+                  {/* Step 1: Copy Prompt Card */}
+                  <div className="bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-transparent border border-indigo-500/20 rounded-3xl p-6 shadow-sm">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 rounded-full bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider">Step 1</span>
+                          <h4 className="text-sm font-black uppercase tracking-wider text-[var(--kravy-text-primary)]">Copy Kravy AI Gemini Prompt</h4>
+                        </div>
+                        <p className="text-xs text-[var(--kravy-text-muted)] font-medium">
+                          Copy our optimized system prompt, paste it in Google Gemini, and attach your menu images/PDF to get pure JSON.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={copyGeminiPrompt}
+                        className={`px-5 py-3 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow-md active:scale-95 shrink-0 ${
+                          isPromptCopied
+                            ? "bg-emerald-600 text-white shadow-emerald-600/30"
+                            : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/25"
+                        }`}
+                      >
+                        {isPromptCopied ? <CheckCircle2 size={16} /> : <Copy size={16} />}
+                        {isPromptCopied ? "Prompt Copied!" : "Copy Gemini Prompt"}
+                      </button>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-indigo-200/60 dark:border-indigo-800/40 flex flex-wrap items-center gap-3 text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                      <span>💡 Tips:</span>
+                      <span className="bg-white/80 dark:bg-slate-900/60 px-2.5 py-1 rounded-lg border border-indigo-100 dark:border-indigo-900/50">1. Open Google Gemini</span>
+                      <span className="bg-white/80 dark:bg-slate-900/60 px-2.5 py-1 rounded-lg border border-indigo-100 dark:border-indigo-900/50">2. Paste Prompt & Upload Menu</span>
+                      <span className="bg-white/80 dark:bg-slate-900/60 px-2.5 py-1 rounded-lg border border-indigo-100 dark:border-indigo-900/50">3. Paste output JSON below</span>
+                    </div>
+                  </div>
+
+                  {/* Step 2: Paste JSON Area */}
+                  <div className="bg-[var(--kravy-surface-hover)] border border-[var(--kravy-border)] rounded-3xl p-6 shadow-inner space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-white text-[10px] font-black uppercase tracking-wider">Step 2</span>
+                        <h4 className="text-xs font-black uppercase tracking-widest text-[var(--kravy-text-primary)]">Paste Gemini Output JSON</h4>
+                      </div>
+                      {manualMenuJson && (
+                        <button
+                          type="button"
+                          onClick={() => setManualMenuJson("")}
+                          className="text-[10px] font-black uppercase tracking-wider text-rose-500 hover:underline"
+                        >
+                          Clear Text
+                        </button>
+                      )}
+                    </div>
+
+                    <textarea
+                      value={manualMenuJson}
+                      onChange={(e) => setManualMenuJson(e.target.value)}
+                      placeholder='Paste the JSON here... e.g. {"restaurantName": "Cafe", "menu": [{"category": "Shakes", "name": "Mango Shake", "price": 120}]}'
+                      className="w-full h-52 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl p-4 font-mono text-xs text-[var(--kravy-text-primary)] placeholder-[var(--kravy-text-muted)] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none shadow-sm"
+                    />
+
+                    <div className="flex justify-end pt-2">
+                      <button
+                        type="button"
+                        onClick={handleProcessManualJson}
+                        disabled={extractingMenu || !manualMenuJson.trim()}
+                        className="px-8 py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg shadow-indigo-600/30 transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+                      >
+                        {extractingMenu ? <Loader2 className="animate-spin" size={15} /> : <Zap size={15} fill="currentColor" />}
+                        Parse JSON & Match Images
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -3707,6 +4089,7 @@ export default function ViewMenuPage() {
                   onClick={() => {
                     setExtractedMenuItems([]);
                     setMenuFileQueue([]);
+                    setManualMenuJson("");
                   }}
                   className="px-6 py-3 border border-[var(--kravy-border)] hover:bg-[var(--kravy-surface-hover)] text-[var(--kravy-text-primary)] font-black text-xs uppercase tracking-widest rounded-2xl transition-all"
                 >
