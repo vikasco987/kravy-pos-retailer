@@ -445,7 +445,7 @@ export async function POST(req: NextRequest) {
     }
 
     const unroundedTotal = finalSubtotal + calculatedTax - serverDiscountAmt - loyaltyPointsRedeemedAmt + finalDeliveryCharge + serverDeliveryGst + finalPackagingCharge + serverPackagingGst + finalServiceCharge;
-    const finalTotal = Math.round(unroundedTotal);
+    const finalTotal = Number(unroundedTotal.toFixed(2));
 
     // ✅ ATOMIC TRANSACTION FOR BILL CREATION, COUNTER ALLOCATION, & LEDGER
     _tPreTx = Date.now() - _t3;

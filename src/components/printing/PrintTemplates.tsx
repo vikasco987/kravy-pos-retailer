@@ -1,4 +1,5 @@
 import { useCurrency } from '@/lib/currency-context';
+import { getTaxConfig } from '@/lib/tax-config';
 import React, { useState, useEffect } from 'react';
 import { getQRCodeDataUrl } from '@/lib/qrHelper';
 import { devanagariToHinglish } from '@/lib/transliterate';
@@ -53,7 +54,6 @@ interface PrintTemplatesProps {
 }
 
 const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
-  const { currencySymbol: sym } = useCurrency();
   const {
     receiptRef, kotRef, business, billNumber, billDate, tokenNumber, selectedTable,
     customerName, customerPhone, customerAddress, orderNotes, buyerGSTIN, placeOfSupply,
@@ -64,32 +64,67 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
     amountPaid, balanceDue, canPrintCustomerPhone, isPreviewMode, isOfflineKOT, isAddonKOT, addonSequence, offlineKotRef
   } = props;
 
+  const { currencySymbol: sym, currencyCode, taxConfig: ctxTaxConfig } = useCurrency();
+  const taxConfig = ctxTaxConfig || getTaxConfig(business?.currencyCode || currencyCode || sym || "INR");
+  const taxName = taxConfig.taxName || "GST";
+  const taxIdLabel = taxConfig.taxIdLabel || "GSTIN";
+  const isSplitTax = taxConfig.isSplitTax !== false; // true only for India
+
   const [menuQrBase64, setMenuQrBase64] = useState<string>("");
   const [reviewQrBase64, setReviewQrBase64] = useState<string>("");
   const [logoBase64, setLogoBase64] = useState<string>("");
+  const [upiQrBase64, setUpiQrBase64] = useState<string>("");
+
+  // Automatically generate local Base64 QR code for UPI if not already Base64
+  useEffect(() => {
+    if (qrUrl) {
+      if (qrUrl.startsWith("data:")) {
+        setUpiQrBase64(qrUrl);
+      } else {
+        // If external API URL is passed, extract UPI text or generate directly
+        try {
+          const match = qrUrl.match(/data=([^&]+)/);
+          const rawText = match ? decodeURIComponent(match[1]) : qrUrl;
+          getQRCodeDataUrl(rawText, { width: 220 }).then(setUpiQrBase64);
+        } catch {
+          setUpiQrBase64(qrUrl);
+        }
+      }
+    } else if (business?.upi && business?.upiQrEnabled !== false && finalTotal !== undefined) {
+      const upiText = `upi://pay?pa=${business.upi}&pn=${encodeURIComponent(business?.businessName || "Store")}&am=${Number(finalTotal).toFixed(2)}&cu=INR`;
+      getQRCodeDataUrl(upiText, { width: 220 }).then(setUpiQrBase64);
+    }
+  }, [qrUrl, business?.upi, business?.upiQrEnabled, business?.businessName, finalTotal]);
 
   useEffect(() => {
     if (business?.logoUrl) {
       if (business.logoUrl.startsWith("data:")) {
         setLogoBase64(business.logoUrl);
       } else {
+        // Try loading via same-origin proxy to completely eliminate S3 / external CORS blocking
+        const proxiedSrc = `/api/proxy-image?url=${encodeURIComponent(business.logoUrl)}`;
         const img = new window.Image();
         img.crossOrigin = 'Anonymous';
         img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0);
-            setLogoBase64(canvas.toDataURL('image/png'));
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0);
+              setLogoBase64(canvas.toDataURL('image/png'));
+              return;
+            }
+          } catch {
+            setLogoBase64(proxiedSrc);
           }
         };
         img.onerror = () => {
-          setLogoBase64(business.logoUrl);
+          // If proxy fails, fallback to direct proxy url or original url
+          setLogoBase64(proxiedSrc);
         };
-        // Add a cache-buster to prevent CORS issues with cached images
-        img.src = business.logoUrl + (business.logoUrl.includes('?') ? '&' : '?') + 'cb=' + new Date().getTime();
+        img.src = proxiedSrc;
       }
     }
   }, [business?.logoUrl]);
@@ -246,16 +281,14 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
         {Boolean(business?.logoUrl && s('showLogo')) && (
           <div className="flex justify-center mt-0 pt-0" style={{ marginTop: '-4mm', marginBottom: `${ps.logoBottomMargin !== undefined ? ps.logoBottomMargin : 0}mm` }}>
             <img 
-              src={logoBase64 || business.logoUrl} 
+              src={logoBase64 || `/api/proxy-image?url=${encodeURIComponent(business.logoUrl)}`} 
               alt="Logo" 
               style={{ 
                 width: 'auto',
                 height: 'auto',
                 maxWidth: '100%',
                 maxHeight: `${ps.logoHeight || 50}mm`,
-                objectFit: 'contain',
-                imageRendering: 'pixelated', 
-                filter: 'contrast(1000%) grayscale(100%) brightness(1.1)' 
+                objectFit: 'contain'
               }} 
             />
           </div>
@@ -306,7 +339,7 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
         )}
         {(business?.gstNumber && s('showGST')) && (
           <div className="text-center font-bold border-y border-black py-1 mt-2 mb-1" style={{ fontSize: 'var(--r-details-size)', fontWeight: ps.detailsWeight || undefined }}>
-            GSTIN: {business.gstNumber}
+            {taxIdLabel}: {business.gstNumber}
           </div>
         )}
         {(business?.fssaiNumber && business?.fssaiEnabled && s('showFSSAI')) && (
@@ -360,7 +393,7 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
           <div className={`mt-2 font-black ${s('sepCustomer') ? 'border-t-2 border-dashed border-black' : ''} pt-1`} style={{ fontSize: 'var(--r-customer-details-size, var(--r-details-size))', fontWeight: ps.customerDetailsFontWeight || ps.detailsWeight || undefined }}>
             {customerName && <div>Customer: {customerName}</div>}
             {(customerPhone && canPrintCustomerPhone !== false) && <div>Phone: {customerPhone}</div>}
-            {buyerGSTIN && <div className="uppercase">Buyer GST: {buyerGSTIN}</div>}
+            {buyerGSTIN && <div className="uppercase">Buyer {taxIdLabel}: {buyerGSTIN}</div>}
             {customerAddress && <div className="mt-0.5" style={{ wordWrap: 'break-word', whiteSpace: 'pre-wrap' }}>Addr: {customerAddress}</div>}
             {orderNotes && <div className="mt-0.5 italic">Note: {orderNotes}</div>}
           </div>
@@ -420,12 +453,12 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
                       Note: {devanagariToHinglish(i.notes)}
                     </div>
                   )}
-                  {/* HSN and Per-product GST for 3-inch */}
+                  {/* HSN and Per-product GST/VAT for 3-inch */}
                   {((business?.hsnEnabled && i.hsnCode) || (s('showPerProductGST') !== false && taxActive && itemRate > 0)) && (
                     <div className="font-normal text-[calc(var(--r-items-size)-2px)] opacity-75 pl-0.5 leading-tight mt-0.5" style={{ fontSize: 'calc(var(--r-items-size) - 2px)' }}>
                       {((business?.hsnEnabled && i.hsnCode) ? `HSN: ${i.hsnCode}` : "")}
                       {((business?.hsnEnabled && i.hsnCode) && (s('showPerProductGST') !== false && taxActive && itemRate > 0)) ? " | " : ""}
-                      {(s('showPerProductGST') !== false && taxActive && itemRate > 0) ? `GST: ${itemRate}%` : ""}
+                      {(s('showPerProductGST') !== false && taxActive && itemRate > 0) ? `${taxName}: ${itemRate}%` : ""}
                     </div>
                   )}
                 </>
@@ -442,7 +475,7 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
                     <span>{i.qty} x {sym}{Number(i.rate ?? 0).toFixed(2)}{discDeduction > 0 ? ` (-${sym}${discDeduction.toFixed(2)})` : ''}</span>
                     <span className="font-bold">
                       {((business?.hsnEnabled && i.hsnCode) ? `HSN: ${i.hsnCode}` : "")} 
-                      {(s('showPerProductGST') !== false && taxActive) ? ` | GST: ${itemRate}%` : ""}
+                      {(s('showPerProductGST') !== false && taxActive) ? ` | ${taxName}: ${itemRate}%` : ""}
                     </span>
                   </div>
                 </>
@@ -467,17 +500,24 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
                 const totalCGST = taxBreakup.reduce((sum, g) => sum + (g.cgst || 0), 0);
                 const totalSGST = taxBreakup.reduce((sum, g) => sum + (g.sgst || 0), 0);
                 const totalIGST = taxBreakup.reduce((sum, g) => sum + (g.igst || 0), 0);
-                if (totalCGST > 0 || totalSGST > 0) {
-                  return (
-                    <>
-                      <div className="flex justify-between font-bold" style={{ fontSize: 'var(--r-details-size)' }}><span>CGST{taxBreakup.length === 1 ? ` (${taxBreakup[0].rate / 2}%)` : ''}</span><span>{sym}{(totalCGST || 0).toFixed(2)}</span></div>
-                      <div className="flex justify-between font-bold" style={{ fontSize: 'var(--r-details-size)' }}><span>SGST{taxBreakup.length === 1 ? ` (${taxBreakup[0].rate / 2}%)` : ''}</span><span>{sym}{(totalSGST || 0).toFixed(2)}</span></div>
-                    </>
-                  );
-                } else if (totalIGST > 0) {
-                  return <div className="flex justify-between font-bold" style={{ fontSize: 'var(--r-details-size)' }}><span>IGST{taxBreakup.length === 1 ? ` (${taxBreakup[0].rate}%)` : ''}</span><span>{sym}{(totalIGST || 0).toFixed(2)}</span></div>;
+                
+                // For India: show CGST/SGST or IGST split
+                if (isSplitTax) {
+                  if (totalCGST > 0 || totalSGST > 0) {
+                    return (
+                      <>
+                        <div className="flex justify-between font-bold" style={{ fontSize: 'var(--r-details-size)' }}><span>CGST{taxBreakup.length === 1 ? ` (${taxBreakup[0].rate / 2}%)` : ''}</span><span>{sym}{(totalCGST || 0).toFixed(2)}</span></div>
+                        <div className="flex justify-between font-bold" style={{ fontSize: 'var(--r-details-size)' }}><span>SGST{taxBreakup.length === 1 ? ` (${taxBreakup[0].rate / 2}%)` : ''}</span><span>{sym}{(totalSGST || 0).toFixed(2)}</span></div>
+                      </>
+                    );
+                  } else if (totalIGST > 0) {
+                    return <div className="flex justify-between font-bold" style={{ fontSize: 'var(--r-details-size)' }}><span>IGST{taxBreakup.length === 1 ? ` (${taxBreakup[0].rate}%)` : ''}</span><span>{sym}{(totalIGST || 0).toFixed(2)}</span></div>;
+                  }
                 }
-                return <div className="flex justify-between font-bold" style={{ fontSize: 'var(--r-details-size)' }}><span>Total Tax</span><span>{sym}{(totalGst || 0).toFixed(2)}</span></div>;
+                
+                // For UAE (VAT), Saudi (VAT), USA (Sales Tax), UK (VAT) etc. show direct Tax Name
+                const displayTaxLabel = taxBreakup.length === 1 ? `${taxName} (${taxBreakup[0].rate}%)` : `Total ${taxName}`;
+                return <div className="flex justify-between font-bold" style={{ fontSize: 'var(--r-details-size)' }}><span>{displayTaxLabel}</span><span>{sym}{(totalGst || 0).toFixed(2)}</span></div>;
               })()}
             </>
           )}
@@ -553,19 +593,23 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
 
         {(taxActive) && taxBreakup.length > 0 && s('showTaxBreakup') && (
           <div className="mt-3" style={{ fontSize: 'var(--r-details-size)' }}>
-            <div className="font-black border-b border-dashed border-black mb-1 pb-0.5">GST TAX BREAKUP</div>
+            <div className="font-black border-b border-dashed border-black mb-1 pb-0.5">{taxName} TAX BREAKUP</div>
             <table className="w-full border-collapse font-bold" style={{ fontSize: 'calc(var(--r-details-size) - 1px)' }}>
               <thead>
                 <tr className="border-b-2 border-black">
                   <th className="text-left font-bold">Rate</th>
                   <th className="text-right font-bold">Taxable</th>
-                  {taxBreakup.some(g => g.igst > 0) ? (
-                    <th className="text-right font-bold">IGST</th>
+                  {isSplitTax ? (
+                    taxBreakup.some(g => g.igst > 0) ? (
+                      <th className="text-right font-bold">IGST</th>
+                    ) : (
+                      <>
+                        <th className="text-right font-bold">CGST</th>
+                        <th className="text-right font-bold">SGST</th>
+                      </>
+                    )
                   ) : (
-                    <>
-                      <th className="text-right font-bold">CGST</th>
-                      <th className="text-right font-bold">SGST</th>
-                    </>
+                    <th className="text-right font-bold">{taxName}</th>
                   )}
                 </tr>
               </thead>
@@ -574,13 +618,17 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
                   <tr key={idx}>
                     <td className="text-left">{g.rate}%</td>
                     <td className="text-right">{(g.taxable || 0).toFixed(2)}</td>
-                    {g.igst > 0 ? (
-                      <td className="text-right">{(g.igst || 0).toFixed(2)}</td>
+                    {isSplitTax ? (
+                      g.igst > 0 ? (
+                        <td className="text-right">{(g.igst || 0).toFixed(2)}</td>
+                      ) : (
+                        <>
+                          <td className="text-right">{(g.cgst || 0).toFixed(2)}</td>
+                          <td className="text-right">{(g.sgst || 0).toFixed(2)}</td>
+                        </>
+                      )
                     ) : (
-                      <>
-                        <td className="text-right">{(g.cgst || 0).toFixed(2)}</td>
-                        <td className="text-right">{(g.sgst || 0).toFixed(2)}</td>
-                      </>
+                      <td className="text-right">{((g.cgst || 0) + (g.sgst || 0) + (g.igst || 0) || (g.taxable * g.rate / 100) || 0).toFixed(2)}</td>
                     )}
                   </tr>
                 ))}
@@ -628,12 +676,16 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
         
         {((business?.upi && business?.upiQrEnabled !== false) || paymentMode === "UPI") && (
           <div className="mt-2 text-center font-bold border-t border-dashed border-black pt-2" style={{ fontSize: 'var(--r-details-size)' }}>
-            {(business?.upi && business?.upiQrEnabled !== false && Boolean(qrUrl)) && (
+            {(business?.upi && business?.upiQrEnabled !== false && Boolean(upiQrBase64 || qrUrl)) && (
               <>
                 <div className="font-bold mb-1" style={{ fontSize: 'var(--r-items-size)' }}>SCAN & PAY</div>
                 <div className="my-2 text-center">
                   <div className="inline-block border-2 border-black p-1 bg-white">
-                    <img src={qrUrl} alt="UPI QR" className="w-[30mm] h-[30mm] object-contain block" style={{ imageRendering: 'pixelated', filter: 'contrast(1000%) grayscale(100%)' }} />
+                    <img 
+                      src={upiQrBase64 || qrUrl} 
+                      alt="UPI QR" 
+                      className="w-[30mm] h-[30mm] object-contain block mx-auto" 
+                    />
                   </div>
                 </div>
                 <div className="mb-2 font-bold" style={{ fontSize: 'var(--r-items-size)' }}>UPI: {business.upi}</div>

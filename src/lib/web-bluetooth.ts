@@ -2,6 +2,7 @@
 import { Capacitor } from '@capacitor/core';
 import QRCode from 'qrcode';
 import { devanagariToHinglish } from './transliterate';
+import { getTaxConfig } from './tax-config';
 
 // In-memory cache for fetched logo image elements to ensure instant, reliable thermal printing
 const logoImageCache = new Map<string, HTMLImageElement>();
@@ -84,6 +85,8 @@ export interface BluetoothPrintSettings {
     bottomFeeds?: number;
     cutPaper?: boolean;
     customGreetingMessage?: string;
+    phonePrefixType?: string;
+    secondaryPhone?: string;
 }
 
 export const DEFAULT_BT_PRINT_SETTINGS: BluetoothPrintSettings = {
@@ -159,7 +162,9 @@ export const DEFAULT_BT_PRINT_SETTINGS: BluetoothPrintSettings = {
     kotTokenStyle: "double_h",
     bottomFeeds: 4,
     cutPaper: true,
-    customGreetingMessage: ""
+    customGreetingMessage: "",
+    phonePrefixType: "TEXT",
+    secondaryPhone: ""
 };
 
 export function getEffectiveBtSettings(business: any): BluetoothPrintSettings {
@@ -1566,11 +1571,18 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                 return lines;
             };
 
-            const numToWords: any = (num) => {
+            const activeCurCode = (typeof localStorage !== 'undefined' ? localStorage.getItem("selected_currency") : null) || business?.currencyCode || order?.currencySymbol || business?.currencySymbol || "INR";
+            const activeTaxCfg = getTaxConfig(activeCurCode);
+            const activeCurrPrefix = activeTaxCfg.symbol === "₹" ? "Rs." : `${activeTaxCfg.symbol} `;
+            const activeTaxName = activeTaxCfg.taxName || "GST";
+            const activeTaxIdLabel = activeTaxCfg.taxIdLabel || "GSTIN";
+            const isSplitTax = activeTaxCfg.isSplitTax !== false;
+
+            const numToWords: any = (num: number) => {
                 if (num === 0) return "Zero";
                 const a = ["", "One ", "Two ", "Three ", "Four ", "Five ", "Six ", "Seven ", "Eight ", "Nine ", "Ten ", "Eleven ", "Twelve ", "Thirteen ", "Fourteen ", "Fifteen ", "Sixteen ", "Seventeen ", "Eighteen ", "Nineteen "];
                 const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
-                const inWords = (n) => {
+                const inWords = (n: any) => {
                     if ((n = n.toString()).length > 9) return "overflow";
                     let nArray = ("000000000" + n).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
                     if (!nArray) return "";
@@ -1582,7 +1594,17 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                     str += (Number(nArray[5]) !== 0) ? ((str != "") ? "and " : "") + (a[Number(nArray[5])] || b[nArray[5][0]] + " " + a[nArray[5][1]]) : "";
                     return str.trim();
                 };
-                return inWords(Math.round(num)) + " Rupees Only";
+                const intVal = Math.floor(Math.abs(num));
+                const decVal = Math.round((Math.abs(num) - intVal) * 100);
+                const intWords = inWords(intVal);
+                if (activeTaxCfg && activeTaxCfg.code !== "INR") {
+                    let result = intWords + ` ${activeTaxCfg.code}`;
+                    if (decVal > 0) result += " and " + inWords(decVal) + " Cents";
+                    return result + " Only";
+                }
+                let result = intWords + " Rupees";
+                if (decVal > 0) result += " and " + inWords(decVal) + " Paise";
+                return result + " Only";
             };
 
             // Universal High-Speed QR Code generator:
@@ -2032,9 +2054,12 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                     }
                 }
 
+                const phonePrefix = (business?.phonePrefixType || bt?.phonePrefixType || "TEXT").toString().toUpperCase() === "SYMBOL" ? "Tel: " : "Mob: ";
                 const phoneStr = business?.contactPersonPhone || business?.contactPhone || business?.businessPhone || business?.phone;
-                if (bt.showContact !== false && phoneStr) dataChunks.push(encoder.encode(padCenter("Mob: " + phoneStr, WIDTH) + "\n"));
-                if (bt.showGST !== false && business?.gstNumber) dataChunks.push(encoder.encode(padCenter("GSTIN: " + business.gstNumber, WIDTH) + "\n"));
+                if (bt.showContact !== false && phoneStr) dataChunks.push(encoder.encode(padCenter(phonePrefix + phoneStr, WIDTH) + "\n"));
+                const secPhone = bt?.secondaryPhone || business?.secondaryPhone || business?.printSettings?.secondaryPhone;
+                if (bt.showContact !== false && secPhone) dataChunks.push(encoder.encode(padCenter(phonePrefix + secPhone, WIDTH) + "\n"));
+                if (bt.showGST !== false && business?.gstNumber) dataChunks.push(encoder.encode(padCenter(`${activeTaxIdLabel}: ` + business.gstNumber, WIDTH) + "\n"));
                 if (bt.showFSSAI !== false && business?.fssaiNumber) dataChunks.push(encoder.encode(padCenter("FSSAI: " + business.fssaiNumber, WIDTH) + "\n"));
                 
                 if (bt.showBillTypeHeader !== false) {
@@ -2147,7 +2172,7 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                     const taxActive = (order?.tax || 0) > 0 || (order?.deliveryGst || 0) > 0 || (order?.packagingGst || 0) > 0 || (items.some((it: any) => it.gst !== undefined && it.gst !== null && Number(it.gst) > 0));
                     let qtyStr = `${qty} x ${price.toFixed(2)}`;
                     if (taxActive && item.gst !== undefined && item.gst !== null && Number(item.gst) > 0) {
-                        qtyStr += ` | GST ${item.gst}%`;
+                        qtyStr += ` | ${activeTaxName} ${item.gst}%`;
                     }
                     dataChunks.push(encoder.encode(pLR(qtyStr, tot, WIDTH) + "\n"));
                     
@@ -2192,21 +2217,28 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                         
                         let hasBreakupPrinted = false;
                         for (const t of taxBreakup) {
-                            if (t.cgst > 0 || t.sgst > 0) {
-                                hasBreakupPrinted = true;
-                                if (t.cgst > 0) dataChunks.push(encoder.encode(pLR(`CGST (${t.rate/2}%)`, t.cgst.toFixed(2), WIDTH) + "\n"));
-                                if (t.sgst > 0) dataChunks.push(encoder.encode(pLR(`SGST (${t.rate/2}%)`, t.sgst.toFixed(2), WIDTH) + "\n"));
-                            } else if (t.igst > 0) {
-                                hasBreakupPrinted = true;
-                                dataChunks.push(encoder.encode(pLR(`IGST (${t.rate}%)`, t.igst.toFixed(2), WIDTH) + "\n"));
+                            if (isSplitTax) {
+                                if (t.cgst > 0 || t.sgst > 0) {
+                                    hasBreakupPrinted = true;
+                                    if (t.cgst > 0) dataChunks.push(encoder.encode(pLR(`CGST (${t.rate/2}%)`, t.cgst.toFixed(2), WIDTH) + "\n"));
+                                    if (t.sgst > 0) dataChunks.push(encoder.encode(pLR(`SGST (${t.rate/2}%)`, t.sgst.toFixed(2), WIDTH) + "\n"));
+                                } else if (t.igst > 0) {
+                                    hasBreakupPrinted = true;
+                                    dataChunks.push(encoder.encode(pLR(`IGST (${t.rate}%)`, t.igst.toFixed(2), WIDTH) + "\n"));
+                                }
+                            } else {
+                                if (t.totalTax > 0) {
+                                    hasBreakupPrinted = true;
+                                    dataChunks.push(encoder.encode(pLR(`${activeTaxName} (${t.rate}%)`, t.totalTax.toFixed(2), WIDTH) + "\n"));
+                                }
                             }
                         }
                         
                         if (!hasBreakupPrinted && tax > 0) {
-                            dataChunks.push(encoder.encode(pLR("Tax/GST", "+" + tax.toFixed(2), WIDTH) + "\n"));
+                            dataChunks.push(encoder.encode(pLR(activeTaxName, "+" + tax.toFixed(2), WIDTH) + "\n"));
                         }
                     } else if (tax > 0) {
-                        dataChunks.push(encoder.encode(pLR("Tax/GST", "+" + tax.toFixed(2), WIDTH) + "\n"));
+                        dataChunks.push(encoder.encode(pLR(activeTaxName, "+" + tax.toFixed(2), WIDTH) + "\n"));
                     }
                 }
                 
@@ -2214,7 +2246,7 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                     dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
                     const gtStyle = resolveStyle(undefined, bt.grandTotalFontSize, bt.grandTotalFontSize && bt.grandTotalFontSize >= 24 ? 'triple' : 'double_h');
                     applyStyle(gtStyle);
-                    dataChunks.push(encoder.encode(pLR("GRAND TOTAL", `Rs.${total.toFixed(2)}`, WIDTH) + "\n"));
+                    dataChunks.push(encoder.encode(pLR("GRAND TOTAL", `${activeCurrPrefix}${total.toFixed(2)}`, WIDTH) + "\n"));
                     applyStyle('normal');
                     dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
                 }
@@ -2236,8 +2268,8 @@ export async function printReceiptData(order: any, business: any, elementToPrint
                     const paid = order?.amountPaid || 0;
                     const due = order?.balanceDue || 0;
                     dataChunks.push(encoder.encode("-".repeat(WIDTH) + "\n"));
-                    dataChunks.push(encoder.encode(pLR("Amount Paid:", `Rs.${paid.toFixed(2)}`, WIDTH) + "\n"));
-                    dataChunks.push(encoder.encode(pLR("Balance Due:", `Rs.${due.toFixed(2)}`, WIDTH) + "\n"));
+                    dataChunks.push(encoder.encode(pLR("Amount Paid:", `${activeCurrPrefix}${paid.toFixed(2)}`, WIDTH) + "\n"));
+                    dataChunks.push(encoder.encode(pLR("Balance Due:", `${activeCurrPrefix}${due.toFixed(2)}`, WIDTH) + "\n"));
                 }
                 dataChunks.push(LINE_FEED);
                 
@@ -2694,11 +2726,11 @@ const wrapText: any = (text, maxFirstLineWidth, maxSubLineWidth) => {
     return lines;
 };
 
-const numToWords: any = (num) => {
-    if (num === 0) return "Zero";
+const numToWords: any = (num: number, currencyCode: string = "INR") => {
+    if (num === 0) return "Zero Only";
     const a = ["", "One ", "Two ", "Three ", "Four ", "Five ", "Six ", "Seven ", "Eight ", "Nine ", "Ten ", "Eleven ", "Twelve ", "Thirteen ", "Fourteen ", "Fifteen ", "Sixteen ", "Seventeen ", "Eighteen ", "Nineteen "];
     const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
-    const inWords = (n) => {
+    const inWords = (n: any) => {
         if ((n = n.toString()).length > 9) return "overflow";
         let nArray = ("000000000" + n).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
         if (!nArray) return "";
@@ -2710,7 +2742,17 @@ const numToWords: any = (num) => {
         str += (Number(nArray[5]) !== 0) ? ((str != "") ? "and " : "") + (a[Number(nArray[5])] || b[nArray[5][0]] + " " + a[nArray[5][1]]) : "";
         return str.trim();
     };
-    return inWords(Math.round(num)) + " Rupees Only";
+    const intVal = Math.floor(Math.abs(num));
+    const decVal = Math.round((Math.abs(num) - intVal) * 100);
+    const intWords = inWords(intVal);
+    if (currencyCode !== "INR") {
+        let result = intWords + ` ${currencyCode}`;
+        if (decVal > 0) result += " and " + inWords(decVal) + " Cents";
+        return result + " Only";
+    }
+    let result = intWords + " Rupees";
+    if (decVal > 0) result += " and " + inWords(decVal) + " Paise";
+    return result + " Only";
 };
 
 const padCenter: any = (str, w) => {
@@ -2725,6 +2767,13 @@ export function generateTextReceiptPreview(order: any, business: any, isKot: boo
         const is80 = bt.paperWidth === '80mm' || business?.printSettings?.paperWidth === '80mm';
         const WIDTH = is80 ? 48 : 32;
         let out = "";
+
+        const activeCurCode = (typeof localStorage !== 'undefined' ? localStorage.getItem("selected_currency") : null) || business?.currencyCode || order?.currencySymbol || business?.currencySymbol || "INR";
+        const activeTaxCfg = getTaxConfig(activeCurCode);
+        const activeCurrPrefix = activeTaxCfg.symbol === "₹" ? "Rs." : `${activeTaxCfg.symbol} `;
+        const activeTaxName = activeTaxCfg.taxName || "GST";
+        const activeTaxIdLabel = activeTaxCfg.taxIdLabel || "GSTIN";
+        const isSplitTax = activeTaxCfg.isSplitTax !== false;
         
         const pLR: any = (l, r, w = WIDTH) => {
             const len = l.length + r.length;
@@ -2849,9 +2898,12 @@ export function generateTextReceiptPreview(order: any, business: any, isKot: boo
                 }
             }
 
+            const phonePrefix = (business?.phonePrefixType || bt?.phonePrefixType || "TEXT").toString().toUpperCase() === "SYMBOL" ? "Tel: " : "Mob: ";
             const phoneStr = business?.contactPersonPhone || business?.contactPhone || business?.businessPhone || business?.phone;
-            if (bt.showContact !== false && phoneStr) out += padCenter("Mob: " + phoneStr, WIDTH) + "\n";
-            if (bt.showGST !== false && business?.gstNumber) out += padCenter("GSTIN: " + business.gstNumber, WIDTH) + "\n";
+            if (bt.showContact !== false && phoneStr) out += padCenter(phonePrefix + phoneStr, WIDTH) + "\n";
+            const secPhone = bt?.secondaryPhone || business?.secondaryPhone || business?.printSettings?.secondaryPhone;
+            if (bt.showContact !== false && secPhone) out += padCenter(phonePrefix + secPhone, WIDTH) + "\n";
+            if (bt.showGST !== false && business?.gstNumber) out += padCenter(`${activeTaxIdLabel}: ` + business.gstNumber, WIDTH) + "\n";
             if (bt.showFSSAI !== false && business?.fssaiNumber) out += padCenter("FSSAI: " + business.fssaiNumber, WIDTH) + "\n";
             
             out += "-".repeat(WIDTH) + "\n";
@@ -2926,7 +2978,7 @@ export function generateTextReceiptPreview(order: any, business: any, isKot: boo
                 const taxActive = (order?.tax || 0) > 0 || (order?.deliveryGst || 0) > 0 || (order?.packagingGst || 0) > 0 || (items.some((it: any) => it.gst !== undefined && it.gst !== null && Number(it.gst) > 0));
                 let qtyStr = `${qty} x ${price.toFixed(2)}`;
                 if (taxActive && item.gst !== undefined && item.gst !== null && Number(item.gst) > 0) {
-                    qtyStr += ` | GST ${item.gst}%`;
+                    qtyStr += ` | ${activeTaxName} ${item.gst}%`;
                 }
                 out += pLR(qtyStr, tot, WIDTH) + "\n";
                 out += "\n";
@@ -2968,31 +3020,38 @@ export function generateTextReceiptPreview(order: any, business: any, isKot: boo
                     }
                     let hasBreakupPrinted = false;
                     for (const t of taxBreakup) {
-                        if (t.cgst > 0 || t.sgst > 0) {
-                            hasBreakupPrinted = true;
-                            if (t.cgst > 0) out += pLR(`CGST (${t.rate/2}%)`, t.cgst.toFixed(2), WIDTH) + "\n";
-                            if (t.sgst > 0) out += pLR(`SGST (${t.rate/2}%)`, t.sgst.toFixed(2), WIDTH) + "\n";
-                        } else if (t.igst > 0) {
-                            hasBreakupPrinted = true;
-                            out += pLR(`IGST (${t.rate}%)`, t.igst.toFixed(2), WIDTH) + "\n";
+                        if (isSplitTax) {
+                            if (t.cgst > 0 || t.sgst > 0) {
+                                hasBreakupPrinted = true;
+                                if (t.cgst > 0) out += pLR(`CGST (${t.rate/2}%)`, t.cgst.toFixed(2), WIDTH) + "\n";
+                                if (t.sgst > 0) out += pLR(`SGST (${t.rate/2}%)`, t.sgst.toFixed(2), WIDTH) + "\n";
+                            } else if (t.igst > 0) {
+                                hasBreakupPrinted = true;
+                                out += pLR(`IGST (${t.rate}%)`, t.igst.toFixed(2), WIDTH) + "\n";
+                            }
+                        } else {
+                            if (t.totalTax > 0) {
+                                hasBreakupPrinted = true;
+                                out += pLR(`${activeTaxName} (${t.rate}%)`, t.totalTax.toFixed(2), WIDTH) + "\n";
+                            }
                         }
                     }
                     if (!hasBreakupPrinted && tax > 0) {
-                        out += pLR("Tax/GST", "+" + tax.toFixed(2), WIDTH) + "\n";
+                        out += pLR(activeTaxName, "+" + tax.toFixed(2), WIDTH) + "\n";
                     }
                 } else if (tax > 0) {
-                    out += pLR("Tax/GST", "+" + tax.toFixed(2), WIDTH) + "\n";
+                    out += pLR(activeTaxName, "+" + tax.toFixed(2), WIDTH) + "\n";
                 }
             }
             
             if (bt.showGrandTotal !== false) {
                 out += "-".repeat(WIDTH) + "\n";
-                out += pLR("GRAND TOTAL", `Rs.${total.toFixed(2)}`, WIDTH) + "\n";
+                out += pLR("GRAND TOTAL", `${activeCurrPrefix}${total.toFixed(2)}`, WIDTH) + "\n";
                 out += "-".repeat(WIDTH) + "\n";
             }
             
             if (bt.showAmountInWords !== false) {
-                const amtWords = "Amount in Words: " + numToWords(total);
+                const amtWords = "Amount in Words: " + numToWords(total, activeTaxCfg.code);
                 const awLines = wrapText(amtWords, WIDTH, WIDTH);
                 awLines.forEach((l: string) => out += l + "\n");
             }
@@ -3008,8 +3067,8 @@ export function generateTextReceiptPreview(order: any, business: any, isKot: boo
                 const paid = order?.amountPaid || 0;
                 const due = order?.balanceDue || 0;
                 out += "-".repeat(WIDTH) + "\n";
-                out += pLR("Amount Paid:", `Rs.${paid.toFixed(2)}`, WIDTH) + "\n";
-                out += pLR("Balance Due:", `Rs.${due.toFixed(2)}`, WIDTH) + "\n";
+                out += pLR("Amount Paid:", `${activeCurrPrefix}${paid.toFixed(2)}`, WIDTH) + "\n";
+                out += pLR("Balance Due:", `${activeCurrPrefix}${due.toFixed(2)}`, WIDTH) + "\n";
             }
             out += "\n";
 

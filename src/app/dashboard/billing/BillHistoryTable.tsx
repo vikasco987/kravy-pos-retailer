@@ -1,6 +1,7 @@
 "use client";
 
 import { useCurrency } from '@/lib/currency-context';
+import { getTaxConfig } from '@/lib/tax-config';
 import React, { useState } from "react";
 import { 
   ChevronDown, ChevronRight, Filter, Clock, CheckCircle2, 
@@ -35,7 +36,9 @@ const Th = ({ label, width, isRight, color }: { label: string, width?: string, i
 // --- Main Table Component ---
 
 export default function BillHistoryTable({ bills, business, userRole, userPermissions, refresh, currentPage, itemsPerPage, visibleCols }: any) {
-  const { currencySymbol: sym } = useCurrency();
+  const { currencySymbol: sym, currencyCode, taxConfig: ctxTaxConfig } = useCurrency();
+  const taxConfig = ctxTaxConfig || getTaxConfig(business?.currencyCode || currencyCode || sym || "INR");
+  const taxName = taxConfig?.taxName || "GST";
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [previewBill, setPreviewBill] = useState<any>(null);
   const [viewBillDetails, setViewBillDetails] = useState<any>(null);
@@ -117,7 +120,7 @@ export default function BillHistoryTable({ bills, business, userRole, userPermis
             {visibleCols.items && <Th label="Items" width="100px" />}
             {visibleCols.subtotal && <Th label="Subtotal" isRight />}
             {visibleCols.discount && <Th label="Disc." isRight color="#EF4444" />}
-            {visibleCols.gst && <Th label="GST" isRight color="#F59E0B" />}
+            {visibleCols.gst && <Th label={taxName} isRight color="#F59E0B" />}
             {visibleCols.total && <Th label="Net Total" isRight />}
             {visibleCols.payment && <Th label="Payment" />}
             <th style={{ padding: "16px 20px", textAlign: "right", fontSize: "0.7rem", fontWeight: 900, color: "#9CA3AF" }}>ACTIONS</th>

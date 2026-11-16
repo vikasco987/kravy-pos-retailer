@@ -2670,8 +2670,8 @@ export default function CheckoutClient() {
 
   // Final total is now simply net taxable + GST + additional charges + tax on charges
   const unroundedTotal = totalTaxable + totalGst + totalCharges + totalChargesGst;
-  const finalTotal = Math.round(unroundedTotal);
-  const roundOff = finalTotal - unroundedTotal;
+  const finalTotal = Number(unroundedTotal.toFixed(2));
+  const roundOff = 0;
   const gstAmount = Number((totalGst + totalChargesGst).toFixed(2));
 
   // 🛡️ SMART AUDIT LOG: Detect if default was used
@@ -3729,8 +3729,8 @@ export default function CheckoutClient() {
         }
         ` : ''}
 
-        * { color: #000 !important; border-color: #000 !important; overflow: visible !important; }
-        img { filter: grayscale(100%) contrast(300%) !important; max-width: 100% !important; display: block !important; margin: 0 auto !important; }
+        * { color: #000 !important; border-color: #000 !important; overflow: visible !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        img { max-width: 100% !important; display: block !important; margin: 0 auto !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
         /* 3-inch print layout: explicit CSS fallbacks for Tailwind utility classes */
         ${is80 ? `
@@ -3815,21 +3815,35 @@ export default function CheckoutClient() {
     if (type === "kot") setIsKotPrinted(true);
 
     // Dynamic Image Preloader: Ensure all images are 100% loaded before showing the print dialog
-    const images = container.querySelectorAll("img");
-    const imagePromises = Array.from(images).map((img) => {
-      if (img.complete) return Promise.resolve();
+    const images = Array.from(container.querySelectorAll("img"));
+    const imagePromises = images.map((img) => {
+      if (img.complete && img.naturalWidth > 0) {
+        if (typeof img.decode === "function") {
+          return img.decode().catch(() => {});
+        }
+        return Promise.resolve();
+      }
       return new Promise<void>((resolve) => {
-        img.onload = () => resolve();
+        img.onload = () => {
+          if (typeof img.decode === "function") {
+            img.decode().then(resolve).catch(resolve);
+          } else {
+            resolve();
+          }
+        };
         img.onerror = () => resolve(); // continue even if an image fails
       });
     });
 
     const tJobStart = performance.now();
-    Promise.all(imagePromises).then(() => {
+    const isClientOfflineNow = typeof navigator !== "undefined" && !navigator.onLine;
+    const maxImgWait = new Promise<void>(resolve => setTimeout(resolve, isClientOfflineNow ? 60 : 800));
+
+    Promise.race([Promise.all(imagePromises), maxImgWait]).then(() => {
       const tDomReady = performance.now();
       console.log(`⚡ [PRINT_WINDOW_PERF] 6. Image/font preloader wait: ${(tDomReady - tJobStart).toFixed(2)} ms`);
 
-      const timeoutDelay = images.length > 0 ? 150 : 10;
+      const timeoutDelay = isClientOfflineNow ? 10 : (images.length > 0 ? 150 : 10);
       setTimeout(() => {
         const tPrintTrigger = performance.now();
         console.log(`⚡ [PRINT_WINDOW_PERF] 7. Hidden setTimeout delay before print: ${(tPrintTrigger - tDomReady).toFixed(2)} ms (Configured: ${timeoutDelay}ms)`);
@@ -3847,7 +3861,7 @@ export default function CheckoutClient() {
           if (document.body.contains(container)) container.remove();
           if (document.head.contains(style)) style.remove();
         }, 2500);
-      }, images.length > 0 ? 150 : 10);
+      }, timeoutDelay);
     });
   };
 

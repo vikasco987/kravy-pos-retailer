@@ -1,6 +1,7 @@
 "use client";
 
 import { useCurrency } from '@/lib/currency-context';
+import { getTaxConfig } from '@/lib/tax-config';
 import React, { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -14,6 +15,7 @@ import { formatWhatsAppNumber } from "@/lib/whatsapp";
 import { WhatsAppBillButton } from "@/components/WhatsAppBillButton";
 import { useAuthContext } from "@/components/AuthContext";
 import PrintTemplates from "@/components/printing/PrintTemplates";
+import { getQRCodeDataUrl } from "@/lib/qrHelper";
 import BillHistoryModal from "../components/BillHistoryModal";
 import { toast } from "sonner";
 import type {
@@ -77,7 +79,12 @@ type BillResponse = {
 
 
 export default function ViewBillPage() {
-  const { currencySymbol: sym } = useCurrency();
+  const [bill, setBill] = useState<BillManager | null>(null);
+  const [business, setBusiness] = useState<PrismaBusinessProfile | null>(null);
+  const { currencySymbol: sym, currencyCode, taxConfig: ctxTaxConfig } = useCurrency();
+  const taxConfig = ctxTaxConfig || getTaxConfig(business?.currencyCode || currencyCode || sym || "INR");
+  const taxName = taxConfig?.taxName || "GST";
+  const taxIdLabel = taxConfig?.taxIdLabel || "GSTIN";
   const params = useParams();
   const id = params.id as string;
   const searchParams = useSearchParams();
@@ -87,10 +94,8 @@ export default function ViewBillPage() {
   const { user: authUser } = useAuthContext();
   const userRole = authUser?.type || null;
   const userPermissions = authUser?.permissions || [];
-
-  const [bill, setBill] = useState<BillManager | null>(null);
-  const [business, setBusiness] = useState<PrismaBusinessProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [qrUrl, setQrUrl] = useState<string>("");
   const [showJson, setShowJson] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showWebPreview, setShowWebPreview] = useState(false);
@@ -133,8 +138,8 @@ export default function ViewBillPage() {
         const doPrint = async () => {
           try {
             const { ensurePrinterConnected, printReceiptData } = await import("@/lib/web-bluetooth");
-            await ensurePrinterConnected();
-            await printReceiptData(bill, business, receiptRef.current);
+            await ensurePrinterConnected(false, 'bill');
+            await printReceiptData(bill, business, receiptRef.current, 'bill');
           } catch (e: any) {
             toast.error(e.message || "Auto Web Print failed");
           }
@@ -263,7 +268,7 @@ export default function ViewBillPage() {
           ` : ''}
 
           * { color: #000 !important; border-color: #000 !important; overflow: visible !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          img { filter: grayscale(100%) contrast(300%) !important; max-width: 100% !important; display: block !important; margin: 0 auto !important; }
+          img { max-width: 100% !important; display: block !important; margin: 0 auto !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
           /* 3-inch print layout: explicit CSS fallbacks for Tailwind utility classes */
           ${is80 ? `
@@ -346,16 +351,29 @@ export default function ViewBillPage() {
       document.body.appendChild(container);
 
       // Dynamic Image Preloader: Ensure logo and QR codes are fully loaded before print dialog opens
-      const images = container.querySelectorAll("img");
-      const imagePromises = Array.from(images).map((img) => {
-        if (img.complete) return Promise.resolve();
+      const images = Array.from(container.querySelectorAll("img"));
+      const imagePromises = images.map((img) => {
+        if (img.complete && img.naturalWidth > 0) {
+          if (typeof img.decode === "function") {
+            return img.decode().catch(() => {});
+          }
+          return Promise.resolve();
+        }
         return new Promise<void>((resolve) => {
-          img.onload = () => resolve();
+          img.onload = () => {
+            if (typeof img.decode === "function") {
+              img.decode().then(resolve).catch(resolve);
+            } else {
+              resolve();
+            }
+          };
           img.onerror = () => resolve();
         });
       });
 
-      Promise.all(imagePromises).then(() => {
+      const maxWait = new Promise<void>((resolve) => setTimeout(resolve, 800));
+
+      Promise.race([Promise.all(imagePromises), maxWait]).then(() => {
         const timeoutDelay = images.length > 0 ? 150 : 10;
         setTimeout(() => {
           window.print();
@@ -518,20 +536,24 @@ export default function ViewBillPage() {
   const totalTaxable = Number(taxBreakup.reduce((a, b) => a + b.taxable, 0).toFixed(2));
   const totalGst = Number(taxBreakup.reduce((a, b) => a + b.totalTax, 0).toFixed(2));
 
-  /* ================= Delivery / Packaging / Service Charges ================= */
-  const deliveryCharge = (bill as any).deliveryCharges || 0;
-  const packagingCharge = (bill as any).packagingCharges || 0;
-  const serviceCharge = (bill as any).serviceCharge || 0;
+  useEffect(() => {
+    if (bill && business?.upi) {
+      const upiLink = `upi://pay?pa=${business.upi}&pn=${encodeURIComponent(business.businessName || "Store")}&am=${bill.total.toFixed(2)}&cu=INR`;
+      getQRCodeDataUrl(upiLink, { width: 220 }).then(setQrUrl);
+    } else {
+      setQrUrl("");
+    }
+  }, [bill?.total, business?.upi, business?.businessName]);
+
+  const deliveryCharge = (bill as any)?.deliveryCharges || 0;
+  const packagingCharge = (bill as any)?.packagingCharges || 0;
+  const serviceCharge = (bill as any)?.serviceCharge || 0;
   const deliveryGst = (deliveryCharge > 0 && business?.deliveryGstEnabled)
     ? (deliveryCharge * (business?.deliveryGstRate || 0) / 100)
     : 0;
   const packagingGst = (packagingCharge > 0 && business?.packagingGstEnabled)
     ? (packagingCharge * (business?.packagingGstRate || 0) / 100)
     : 0;
-
-  /* ================= UPI ================= */
-  const upiLink = `upi://pay?pa=${business?.upi || ""}&pn=${encodeURIComponent(business?.businessName || "Store")}&am=${bill.total.toFixed(2)}&cu=INR`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiLink)}`;
   
   const handleBack = () => {
     if (returnTo) {
@@ -643,8 +665,8 @@ export default function ViewBillPage() {
             <button
               onClick={async () => {
                 try {
-                  await ensurePrinterConnected();
-                  await printReceiptData(bill, business, receiptRef.current);
+                  await ensurePrinterConnected(false, 'bill');
+                  await printReceiptData(bill, business, receiptRef.current, 'bill');
                 } catch (err: any) {
                   toast.error(err.message || "Web Print failed");
                 }
@@ -753,7 +775,7 @@ export default function ViewBillPage() {
 
                   {bill.tax ? (
                     <div className="flex justify-between items-center text-xs sm:text-sm">
-                      <span className="font-semibold text-slate-500 dark:text-slate-400">GST / Tax</span>
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">{taxName}</span>
                       <span className="font-black text-amber-600 dark:text-amber-400">{sym}{(bill.tax || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                     </div>
                   ) : null}
@@ -810,7 +832,7 @@ export default function ViewBillPage() {
                 )}
                 {(bill as any).buyerGSTIN && (
                   <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">GSTIN Number</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{taxIdLabel} Number</p>
                     <p className="text-xs sm:text-sm font-black text-indigo-600 dark:text-indigo-400 uppercase">{(bill as any).buyerGSTIN}</p>
                   </div>
                 )}
@@ -1058,8 +1080,8 @@ export default function ViewBillPage() {
                 onClick={async () => {
                   setShowWebPreview(false);
                   try {
-                    await ensurePrinterConnected();
-                    await printReceiptData(bill, business, receiptRef.current);
+                    await ensurePrinterConnected(false, 'bill');
+                    await printReceiptData(bill, business, receiptRef.current, 'bill');
                   } catch (err: any) {
                     toast.error(err.message || "Web Print failed");
                   }

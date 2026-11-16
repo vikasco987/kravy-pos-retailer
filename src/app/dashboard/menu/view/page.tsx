@@ -4041,42 +4041,105 @@ Expected Output JSON:
                     <span className="text-[10px] text-orange-500 font-black uppercase tracking-widest">Select items to import</span>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[40vh] overflow-y-auto pr-1 no-scrollbar animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    {extractedMenuItems.map((item, idx) => (
-                      <div 
-                        key={idx} 
-                        className={`bg-[var(--kravy-surface)] border rounded-[1.5rem] p-4 flex items-center justify-between gap-4 transition-all ${
-                          item.checked ? "border-orange-500 bg-orange-50/5 animate-pulse" : "border-[var(--kravy-border)]"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <input
-                            type="checkbox"
-                            checked={item.checked}
-                            onChange={(e) => {
-                              setExtractedMenuItems(prev => prev.map((it, i) => i === idx ? { ...it, checked: e.target.checked } : it));
-                            }}
-                            className="w-4 h-4 rounded border-[var(--kravy-border)] text-orange-600 focus:ring-orange-500/20 accent-orange-500 cursor-pointer animate-none"
-                          />
-                          <div className="w-12 h-12 rounded-xl overflow-hidden bg-[var(--kravy-bg-2)] flex-shrink-0 relative">
-                            {item.imageUrl ? (
-                              <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-[var(--kravy-text-muted)] bg-[var(--kravy-bg-2)]">
-                                {item.img_status === 'loading' ? <Loader2 className="animate-spin text-orange-500" size={16} /> : <ImageIcon size={16} />}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto pr-1 no-scrollbar animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    {extractedMenuItems.map((item, idx) => {
+                      // Collect all variant/addon options to display
+                      const rawVars = item.variants || [];
+                      let optionsList: { groupName: string; name: string; price: number }[] = [];
+
+                      if (Array.isArray(rawVars) && rawVars.length > 0) {
+                        rawVars.forEach((g: any) => {
+                          const gName = g.groupName || g.name || "Option";
+                          if (Array.isArray(g.options) && g.options.length > 0) {
+                            g.options.forEach((opt: any) => {
+                              optionsList.push({
+                                groupName: gName,
+                                name: opt.name || opt.n || "Option",
+                                price: parseFloat(opt.price ?? opt.p) || 0
+                              });
+                            });
+                          } else if (g.name || g.n) {
+                            optionsList.push({
+                              groupName: "Variant",
+                              name: g.name || g.n,
+                              price: parseFloat(g.price ?? g.p) || 0
+                            });
+                          }
+                        });
+                      }
+
+                      return (
+                        <div 
+                          key={idx} 
+                          className={`bg-[var(--kravy-surface)] border rounded-[1.5rem] p-4 flex flex-col justify-between gap-3 transition-all ${
+                            item.checked ? "border-orange-500 bg-orange-50/5 shadow-sm" : "border-[var(--kravy-border)] opacity-75"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={item.checked}
+                              onChange={(e) => {
+                                setExtractedMenuItems(prev => prev.map((it, i) => i === idx ? { ...it, checked: e.target.checked } : it));
+                              }}
+                              className="w-4 h-4 mt-1 rounded border-[var(--kravy-border)] text-orange-600 focus:ring-orange-500/20 accent-orange-500 cursor-pointer animate-none"
+                            />
+                            <div className="w-12 h-12 rounded-xl overflow-hidden bg-[var(--kravy-bg-2)] flex-shrink-0 relative">
+                              {item.imageUrl ? (
+                                <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-[var(--kravy-text-muted)] bg-[var(--kravy-bg-2)]">
+                                  {item.img_status === 'loading' ? <Loader2 className="animate-spin text-orange-500" size={16} /> : <ImageIcon size={16} />}
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {item.type?.toLowerCase().includes("non") ? (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded border border-rose-500/40 text-rose-500 font-black">🍗 Non-Veg</span>
+                                ) : item.type?.toLowerCase().includes("egg") ? (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded border border-amber-500/40 text-amber-500 font-black">🥚 Egg</span>
+                                ) : (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded border border-emerald-500/40 text-emerald-600 font-black">🥗 Veg</span>
+                                )}
+                                {item.shortCode && (
+                                  <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">#{item.shortCode}</span>
+                                )}
                               </div>
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h5 className="font-bold text-xs text-[var(--kravy-text-primary)] truncate" title={item.name}>{item.name}</h5>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-[9px] font-black text-orange-500 uppercase bg-orange-500/10 px-1.5 py-0.5 rounded">{item.category}</span>
-                              <span className="text-[9px] font-bold text-[var(--kravy-text-muted)]">{sym}{item.price}</span>
+
+                              <h5 className="font-bold text-xs text-[var(--kravy-text-primary)] truncate mt-0.5" title={item.name}>{item.name}</h5>
+
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[9px] font-black text-orange-500 uppercase bg-orange-500/10 px-1.5 py-0.5 rounded">{item.category}</span>
+                                <span className="text-[10px] font-black text-[var(--kravy-text-primary)]">{sym}{item.price}</span>
+                              </div>
                             </div>
                           </div>
+
+                          {/* Variants & Addons Chips Preview */}
+                          {optionsList.length > 0 && (
+                            <div className="pt-2 border-t border-[var(--kravy-border)]/60 space-y-1.5">
+                              <div className="flex items-center justify-between text-[10px]">
+                                <span className="font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1">
+                                  <span>✦</span> Variants / Portions ({optionsList.length})
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {optionsList.map((opt, oIdx) => (
+                                  <span 
+                                    key={oIdx} 
+                                    className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40"
+                                  >
+                                    <span className="text-[var(--kravy-text-primary)]">{opt.name}:</span>
+                                    <span className="font-black text-indigo-600 dark:text-indigo-400">{sym}{opt.price}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
