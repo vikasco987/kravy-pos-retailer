@@ -91,10 +91,21 @@ export default function MobileBottomNav({ profile }: any) {
         }
     }, [authUser, authLoading]);
 
-    // Close More menu on route change
+    // Close More menu on route change and handle Android hardware back
     useEffect(() => {
         setIsMoreOpen(false);
     }, [pathname]);
+
+    useEffect(() => {
+        const handleHardwareBack = (e: Event) => {
+            if (isMoreOpen) {
+                e.preventDefault();
+                setIsMoreOpen(false);
+            }
+        };
+        window.addEventListener("kravy:hardware-back", handleHardwareBack);
+        return () => window.removeEventListener("kravy:hardware-back", handleHardwareBack);
+    }, [isMoreOpen]);
 
     const userRole = authUser?.type || "USER";
     const allowedPaths = Array.isArray(authUser?.permissions) ? authUser.permissions : [];

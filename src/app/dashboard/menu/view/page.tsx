@@ -341,7 +341,7 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Search, ChevronDown, Trash2, Pencil, RotateCcw, Check, X, Sparkles, Image as ImageIcon, Loader2, Globe, Zap, Printer, File, Heart, Copy, GripVertical, IndianRupee, Layers, LayoutGrid, ListFilter, Edit2, MonitorSmartphone, Code, FileText, CheckCircle2 } from "lucide-react";
+import { Plus, Search, ChevronDown, Trash2, Pencil, RotateCcw, Check, X, Sparkles, Image as ImageIcon, Loader2, Globe, Zap, Printer, File, Heart, Copy, GripVertical, IndianRupee, Layers, LayoutGrid, ListFilter, Edit2, MonitorSmartphone, Code, FileText, CheckCircle2, AlertTriangle, HelpCircle } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useRouter, useSearchParams } from "next/navigation";
 import ItemModal from "@/components/MenuEditor/ItemModal";
@@ -914,12 +914,17 @@ Expected Output JSON:
         const desc = item.d || item.description || "";
 
         // Raw food type
-        const rawType = String(item.t || item.type || item.foodType || "").toLowerCase();
-        let isVeg = true;
-        let isEgg = false;
+        const rawTypeRaw = item.t !== undefined ? item.t : (item.type !== undefined ? item.type : item.foodType);
+        const rawType = String(rawTypeRaw ?? "").trim().toLowerCase();
+        let isVeg: boolean | null = true;
+        let isEgg: boolean | null = false;
         let foodTypeStr = "Pure Veg";
 
-        if (rawType.includes("egg")) {
+        if (rawTypeRaw === null || rawType === "null" || rawType === "" || rawType === "unknown" || rawType === "unclassified") {
+          isVeg = null;
+          isEgg = null;
+          foodTypeStr = "Unknown";
+        } else if (rawType.includes("egg")) {
           isVeg = false;
           isEgg = true;
           foodTypeStr = "Contains Egg";
@@ -927,10 +932,14 @@ Expected Output JSON:
           isVeg = false;
           isEgg = false;
           foodTypeStr = "Non-Veg";
-        } else {
+        } else if (rawType.includes("veg")) {
           isVeg = true;
           isEgg = false;
           foodTypeStr = "Pure Veg";
+        } else {
+          isVeg = null;
+          isEgg = null;
+          foodTypeStr = "Unknown";
         }
 
         // Process variants if any
@@ -972,13 +981,23 @@ Expected Output JSON:
           }
         }
 
-        // Resolve price
-        let finalPrice = parseFloat(item.p ?? item.price ?? 0);
-        if ((!finalPrice || isNaN(finalPrice) || finalPrice === 0) && formattedVariants && formattedVariants.length > 0) {
-          const allPrices = formattedVariants.flatMap((g: any) => (g.options || []).map((o: any) => o.price)).filter((p: number) => p > 0);
+        // Resolve price: preserve exact numeric 0 (complimentary/free/beverage item)
+        const rawPriceValue = item.p !== undefined ? item.p : item.price;
+        let finalPrice: number;
+
+        if (rawPriceValue !== undefined && rawPriceValue !== null && rawPriceValue !== "") {
+          const parsedVal = parseFloat(rawPriceValue);
+          finalPrice = isNaN(parsedVal) ? 0 : parsedVal;
+        } else if (formattedVariants && formattedVariants.length > 0) {
+          // If base price was completely omitted/undefined, pick the lowest variant price
+          const allPrices = formattedVariants.flatMap((g: any) => (g.options || []).map((o: any) => o.price)).filter((p: number) => !isNaN(p));
           if (allPrices.length > 0) {
             finalPrice = Math.min(...allPrices);
+          } else {
+            finalPrice = 0;
           }
+        } else {
+          finalPrice = 0;
         }
 
         return {
@@ -1300,8 +1319,12 @@ Expected Output JSON:
         }
 
         const rawName = item.item_name || item.name || "Unnamed Item";
-        const isVegVal = item.type?.toLowerCase().includes("veg") && !item.type?.toLowerCase().includes("non");
-        const isEggVal = item.type?.toLowerCase().includes("egg");
+        const hasVegKeyword = item.type?.toLowerCase().includes("veg") && !item.type?.toLowerCase().includes("non");
+        const hasEggKeyword = item.type?.toLowerCase().includes("egg");
+        const isUnknownType = item.type === "Unknown" || item.type === "Unclassified" || item.isVeg === null;
+
+        const isVegVal = isUnknownType ? false : (item.isVeg !== undefined && item.isVeg !== null ? item.isVeg : hasVegKeyword);
+        const isEggVal = isUnknownType ? false : (item.isEgg !== undefined && item.isEgg !== null ? item.isEgg : hasEggKeyword);
         
         await fetch("/api/items", {
           method: "POST",
@@ -4034,7 +4057,17 @@ Expected Output JSON:
 
 
               {/* Extracted Items List */}
-              {extractedMenuItems.length > 0 && (
+              {extractedMenuItems.length > 0 && (() => {
+                // Pre-calculate shortCode occurrences to detect duplicates
+                const codeCounts = new Map<string, number>();
+                extractedMenuItems.forEach(it => {
+                  if (it.shortCode) {
+                    const c = String(it.shortCode).trim().toUpperCase();
+                    codeCounts.set(c, (codeCounts.get(c) || 0) + 1);
+                  }
+                });
+
+                return (
                 <div className="space-y-4">
                   <div className="flex justify-between items-center opacity-75">
                     <h4 className="text-xs font-black uppercase tracking-widest text-[var(--kravy-text-primary)]">Parsed Menu Preview ({extractedMenuItems.length} Items)</h4>
@@ -4068,6 +4101,9 @@ Expected Output JSON:
                         });
                       }
 
+                      const upperCode = item.shortCode ? String(item.shortCode).trim().toUpperCase() : null;
+                      const isDuplicateCode = upperCode && (codeCounts.get(upperCode) || 0) > 1;
+
                       return (
                         <div 
                           key={idx} 
@@ -4095,15 +4131,30 @@ Expected Output JSON:
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                {item.type?.toLowerCase().includes("non") ? (
+                                {item.type === "Unknown" || item.isVeg === null ? (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded border border-slate-400/40 text-slate-500 dark:text-slate-400 font-bold flex items-center gap-0.5">
+                                    <HelpCircle size={10} /> Unclassified
+                                  </span>
+                                ) : item.type?.toLowerCase().includes("non") ? (
                                   <span className="text-[9px] px-1.5 py-0.2 rounded border border-rose-500/40 text-rose-500 font-black">🍗 Non-Veg</span>
                                 ) : item.type?.toLowerCase().includes("egg") ? (
                                   <span className="text-[9px] px-1.5 py-0.2 rounded border border-amber-500/40 text-amber-500 font-black">🥚 Egg</span>
                                 ) : (
                                   <span className="text-[9px] px-1.5 py-0.2 rounded border border-emerald-500/40 text-emerald-600 font-black">🥗 Veg</span>
                                 )}
+
                                 {item.shortCode && (
-                                  <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">#{item.shortCode}</span>
+                                  <span 
+                                    title={isDuplicateCode ? `Warning: Duplicate shortcut #${item.shortCode} used in multiple items` : `Shortcut #${item.shortCode}`}
+                                    className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-bold flex items-center gap-1 ${
+                                      isDuplicateCode
+                                        ? "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800"
+                                        : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                                    }`}
+                                  >
+                                    {isDuplicateCode && <AlertTriangle size={10} className="text-amber-600 shrink-0" />}
+                                    #{item.shortCode}
+                                  </span>
                                 )}
                               </div>
 
@@ -4111,7 +4162,9 @@ Expected Output JSON:
 
                               <div className="flex items-center gap-2 mt-1">
                                 <span className="text-[9px] font-black text-orange-500 uppercase bg-orange-500/10 px-1.5 py-0.5 rounded">{item.category}</span>
-                                <span className="text-[10px] font-black text-[var(--kravy-text-primary)]">{sym}{item.price}</span>
+                                <span className="text-[10px] font-black text-[var(--kravy-text-primary)]">
+                                  {item.price === 0 ? "₹0 (Free / Base)" : `${sym}${item.price}`}
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -4142,7 +4195,8 @@ Expected Output JSON:
                     })}
                   </div>
                 </div>
-              )}
+                );
+              })()}
             </div>
 
             {/* Modal Footer */}

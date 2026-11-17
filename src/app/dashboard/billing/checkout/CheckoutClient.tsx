@@ -592,6 +592,12 @@ export default function CheckoutClient() {
         setIsMobileCartOpen(false);
       }
     };
+    const handleHardwareBack = (e: Event) => {
+      if (isMobileCartOpen) {
+        e.preventDefault();
+        closeMobileCart();
+      }
+    };
     const handleResize = () => {
       if (window.innerWidth >= 1024 && isMobileCartOpen) {
         if (window.history.state?.cartOpen) {
@@ -603,9 +609,11 @@ export default function CheckoutClient() {
     };
     window.addEventListener('popstate', handlePopState);
     window.addEventListener('resize', handleResize);
+    window.addEventListener('kravy:hardware-back', handleHardwareBack);
     return () => {
       window.removeEventListener('popstate', handlePopState);
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('kravy:hardware-back', handleHardwareBack);
     };
   }, [isMobileCartOpen]);
 
@@ -3148,25 +3156,13 @@ export default function CheckoutClient() {
 
     if (isKOTEnabled && kotHtml) {
       let finalKotHtml = kotHtml;
-      // KOT Print
-      if (spoolerDelay > 0) {
-        runPrintJob("kot", finalKotHtml, () => {
-          setTimeout(() => {
-            runPrintJob("bill", billHtml, onComplete);
-          }, spoolerDelay);
-        });
-      } else {
-        const combinedHtml = `
-            <div class="kot-container-dynamic text-black bg-white">
-                ${finalKotHtml}
-            </div>
-            <div style="page-break-after: always; height: 10px;"></div>
-            <div class="receipt-container-dynamic text-black bg-white" style="margin-top: 10px;">
-                ${billHtml}
-            </div>
-        `;
-        runPrintJob("bill", combinedHtml, onComplete);
-      }
+      // KOT Print: Always separate KOT and Bill print jobs to prevent artificial pagination & blank feed
+      const effectiveDelay = spoolerDelay > 0 ? spoolerDelay : 300;
+      runPrintJob("kot", finalKotHtml, () => {
+        setTimeout(() => {
+          runPrintJob("bill", billHtml, onComplete);
+        }, effectiveDelay);
+      });
     } else {
       runPrintJob("bill", billHtml, onComplete);
     }
@@ -3573,24 +3569,13 @@ export default function CheckoutClient() {
       const spoolerDelay = configuredDelay !== undefined && configuredDelay !== null ? Number(configuredDelay) : 0;
 
       if (!billOnly && business?.enableKOTWithBill && finalKotHtml) {
-        if (spoolerDelay > 0) {
-          runPrintJob("kot", finalKotHtml, () => {
-            setTimeout(() => {
-              runPrintJob("bill", finalBillHtml, finishPrintAction, tClickStart);
-            }, spoolerDelay);
-          }, tClickStart);
-        } else {
-          const combinedHtml = `
-                    <div class="kot-container-dynamic text-black bg-white">
-                        ${finalKotHtml}
-                    </div>
-                    <div style="page-break-after: always; height: 10px;"></div>
-                    <div class="receipt-container-dynamic text-black bg-white" style="margin-top: 10px;">
-                        ${finalBillHtml}
-                    </div>
-                `;
-          runPrintJob("bill", combinedHtml, finishPrintAction, tClickStart);
-        }
+        // Always separate KOT and Bill into separate print jobs to match Reprint standalone output
+        const effectiveDelay = spoolerDelay > 0 ? spoolerDelay : 300;
+        runPrintJob("kot", finalKotHtml, () => {
+          setTimeout(() => {
+            runPrintJob("bill", finalBillHtml, finishPrintAction, tClickStart);
+          }, effectiveDelay);
+        }, tClickStart);
       } else {
         runPrintJob("bill", finalBillHtml, finishPrintAction, tClickStart);
       }
@@ -3598,11 +3583,14 @@ export default function CheckoutClient() {
   };
 
   const runPrintJob = (type: "kot" | "bill", html: string, callback?: () => void, tOriginalClick?: number) => {
+    setTimeout(() => {
     const tPrintJobFnStart = performance.now();
-    const containerId = `print-container-checkout-${type}`;
-    const styleId = `print-style-checkout-${type}`;
+    const containerId = `print-container-${type}`;
+    const styleId = `print-style-${type}`;
 
-    // Clean up ALL previous print styles and containers to prevent conflicting CSS rules
+    // Clean ONLY this specific type's old containers (matching billing/[id] reprint)
+    document.getElementById(containerId)?.remove();
+    document.getElementById(styleId)?.remove();
     document.querySelectorAll("[id^='print-container-checkout-']").forEach(el => el.remove());
     document.querySelectorAll("[id^='print-style-checkout-']").forEach(el => el.remove());
 
@@ -3853,16 +3841,17 @@ export default function CheckoutClient() {
         console.log(`🖨️ [PERF] 8. Triggering window.print() for '${type}' at:`, new Date().toLocaleTimeString());
         window.print();
 
-        // Call callback immediately after print dialog is closed (or returns)
+        // Call callback after print dialog is closed
         if (callback) callback();
 
-        // Delay cleanup to ensure spooler finishes reading the DOM
+        // Delay cleanup significantly (15s) matching billing/[id] to ensure slow spoolers finish reading the DOM
         setTimeout(() => {
           if (document.body.contains(container)) container.remove();
           if (document.head.contains(style)) style.remove();
-        }, 2500);
+        }, 15000);
       }, timeoutDelay);
     });
+    }, 50);
   };
 
   /* ================= QUICK ADD ITEM ================= */

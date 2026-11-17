@@ -136,13 +136,28 @@ export default function ClientLayout({
     const handleToggleSidebar = () => {
       setSidebarOpen((prev) => !prev);
     };
+    const handleHardwareBack = (e: Event) => {
+      if (sidebarOpen) {
+        e.preventDefault();
+        setSidebarOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && sidebarOpen) {
+        setSidebarOpen(false);
+      }
+    };
     window.addEventListener("profile-updated", handleProfileUpdate);
     window.addEventListener("kravy-toggle-sidebar", handleToggleSidebar);
+    window.addEventListener("kravy:hardware-back", handleHardwareBack);
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("profile-updated", handleProfileUpdate);
       window.removeEventListener("kravy-toggle-sidebar", handleToggleSidebar);
+      window.removeEventListener("kravy:hardware-back", handleHardwareBack);
+      window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [invalidateCache]);
+  }, [invalidateCache, sidebarOpen]);
 
   // 2. Safe Auto-Recovery: Controlled redirect via useEffect when authentication has finished loading and no user exists
   const redirectInitiatedRef = useRef(false);
