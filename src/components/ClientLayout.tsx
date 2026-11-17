@@ -44,6 +44,7 @@ export default function ClientLayout({
   const isProfile = pathname.startsWith("/dashboard/profile");
   const isSettings = pathname.startsWith("/dashboard/settings");
   const isMenuView = pathname.startsWith("/dashboard/menu/view");
+  const isEditMenuItem = pathname.startsWith("/dashboard/menu/edit-menu-item");
   const isPOS = isTerminal || isCheckout || isKitchen;
   const [isMobile, setIsMobile] = useState(false);
   const [isApp, setIsApp] = useState(false);
@@ -353,7 +354,7 @@ export default function ClientLayout({
             )}
 
             <main
-              className={`flex-1 min-h-0 ${isMenuView ? 'overflow-hidden flex flex-col' : (isPOS || isExpenses) ? 'overflow-y-auto' : 'overflow-y-auto'} transition-all duration-400 pb-[65px] lg:pb-0`}
+              className={`flex-1 min-h-0 ${(isMenuView || isEditMenuItem) ? 'overflow-hidden flex flex-col pb-0' : (isPOS || isExpenses) ? 'overflow-y-auto pb-[65px] lg:pb-0' : 'overflow-y-auto pb-[65px] lg:pb-0'} transition-all duration-400`}
               style={{
                 background: "var(--kravy-bg)",
                 minHeight: (isPOS || isExpenses) ? "100dvh" : undefined,
@@ -361,8 +362,8 @@ export default function ClientLayout({
               }}
             >
               <div
-                className={`w-full mx-auto ${isPOS || isMenuView ? 'p-0 h-full flex-1 min-h-0 flex flex-col' : (isExpenses || isProfile || isSettings) ? 'p-2 sm:p-4 md:p-6 kravy-page-fade' : 'p-4 sm:p-6 lg:p-8 kravy-page-fade'}`}
-                style={{ minHeight: isPOS || isMenuView ? undefined : "100%" }}
+                className={`w-full mx-auto ${(isPOS || isMenuView || isEditMenuItem) ? 'p-0 h-full flex-1 min-h-0 flex flex-col' : (isExpenses || isProfile || isSettings) ? 'p-2 sm:p-4 md:p-6 kravy-page-fade' : 'p-4 sm:p-6 lg:p-8 kravy-page-fade'}`}
+                style={{ minHeight: (isPOS || isMenuView || isEditMenuItem) ? undefined : "100%" }}
               >
                 {children}
               </div>

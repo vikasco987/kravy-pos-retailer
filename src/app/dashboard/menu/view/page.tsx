@@ -348,6 +348,8 @@ import ItemModal from "@/components/MenuEditor/ItemModal";
 import { useConfirm } from "@/components/ConfirmContext";
 import { useTerminalContext } from "@/components/TerminalContext";
 import { useProfileCache } from "@/hooks/useProfileCache";
+import { useDeviceDetect } from "@/hooks/useDeviceDetect";
+import MobileEditMenuView from "../components/MobileEditMenuView";
 
 /* types */
 type MenuItem = {
@@ -524,6 +526,10 @@ export default function ViewMenuPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const asUserId = searchParams.get("asUserId");
+
+  // Device & Adaptive Layout Detection
+  const { isMobileOrApp, mounted: deviceMounted } = useDeviceDetect();
+  const [userLayoutOverride, setUserLayoutOverride] = useState<"desktop" | "mobile" | null>(null);
 
   // Admin States
   const [isAdmin, setIsAdmin] = useState(false);
@@ -2494,6 +2500,22 @@ Expected Output JSON:
   };
 
 
+  // Determine active view mode (mobile/app vs desktop)
+  const isMobileLayout = userLayoutOverride === "mobile" 
+    ? true 
+    : userLayoutOverride === "desktop" 
+    ? false 
+    : (deviceMounted && isMobileOrApp);
+
+  if (isMobileLayout) {
+    return (
+      <MobileEditMenuView
+        asUserId={asUserId}
+        onSwitchToDesktop={() => setUserLayoutOverride("desktop")}
+      />
+    );
+  }
+
   if (loading) return <p className="p-6 text-center">Loading items...</p>;
   if (error) return <p className="p-6 text-center text-red-600">Error: {error}</p>;
 
@@ -2759,6 +2781,13 @@ Expected Output JSON:
                   className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-2xl font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95 shrink-0 ${isBulkMode ? "bg-amber-500 text-white shadow-amber-500/20" : "bg-white border border-indigo-200 text-indigo-600 shadow-indigo-500/10"}`}
                 >
                   <Check size={15} strokeWidth={3} /> {isBulkMode ? "Exit Bulk Edit" : "Bulk Edit"}
+                </button>
+                <button
+                  onClick={() => setUserLayoutOverride("mobile")}
+                  className="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95 shrink-0 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700"
+                  title="Switch to Mobile / Fast Item Editor"
+                >
+                  <MonitorSmartphone size={15} strokeWidth={2.5} /> Fast Edit
                 </button>
               </div>
             </div>
