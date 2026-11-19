@@ -7,6 +7,7 @@ import { useSidebar } from "./SidebarContext";
 import { useTheme } from "./ThemeProvider";
 import { useProfileCache } from "@/hooks/useProfileCache";
 import { performLogout } from "@/lib/logout";
+import { getBusinessMode } from "@/config/business-mode";
 
 import {
   LayoutGrid,
@@ -559,6 +560,8 @@ export default function Sidebar({ profile, isMobile = false, onClose }: { profil
   const userRole = authUser?.type || "USER";
   const allowedPaths = Array.isArray(authUser?.permissions) ? authUser.permissions : [];
   const loadingRole = authLoading;  const { profile: cachedProfile } = useProfileCache();
+  const activeProfile = profile || cachedProfile;
+  const businessMode = getBusinessMode(activeProfile?.businessType);
 
   useEffect(() => {
     // Prefer the prop if passed, otherwise fallback to cache
@@ -1097,17 +1100,30 @@ export default function Sidebar({ profile, isMobile = false, onClose }: { profil
                   opacity: isDark ? 1 : 0.7,
                 }}>{group.group}</div>
               )}
-              {sortedItems.map((item: any, index) => (
-                <SidebarItem 
-                  key={item.label} 
-                  item={item} 
-                  index={index} 
-                  isActive={pathname === item.href || item.subItems?.some((sub: any) => pathname === sub.href)} 
-                  collapsed={collapsed} 
-                  isDark={isDark} 
-                  pathname={pathname}
-                />
-              ))}
+              {sortedItems.map((item: any, index) => {
+                let adaptedItem = item;
+                if (businessMode) {
+                  // Adapt labels dynamically according to business terminology
+                  if (item.href === "/dashboard/terminal") {
+                    adaptedItem = { ...item, label: businessMode.features.showTableGrid ? "Live Floor Terminal" : "Live Orders & Counter Terminal" };
+                  } else if (item.href === "/dashboard/tables") {
+                    adaptedItem = { ...item, label: `${businessMode.terminology.unitPlural} & QR Manager` };
+                  } else if (item.href === "/dashboard/expenses") {
+                    adaptedItem = { ...item, label: businessMode.id === "food" ? "Restaurant Expenses" : "Store Expenses" };
+                  }
+                }
+                return (
+                  <SidebarItem 
+                    key={adaptedItem.label} 
+                    item={adaptedItem} 
+                    index={index} 
+                    isActive={pathname === adaptedItem.href || adaptedItem.subItems?.some((sub: any) => pathname === adaptedItem.href)} 
+                    collapsed={collapsed} 
+                    isDark={isDark} 
+                    pathname={pathname}
+                  />
+                );
+              })}
           </div>
         );
       });

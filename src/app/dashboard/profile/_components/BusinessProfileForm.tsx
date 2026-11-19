@@ -325,11 +325,19 @@ export default function BusinessProfileForm({
             >
               <span className="truncate">
                 {watchedValues.businessType === "food"
-                  ? "Restaurant / Food"
+                  ? "Restaurant / Cafe / Food"
                   : watchedValues.businessType === "retail"
-                  ? "Retail"
+                  ? "Retail / Supermarket / Grocery"
+                  : watchedValues.businessType === "fashion"
+                  ? "Garments / Fashion / Clothing"
+                  : watchedValues.businessType === "electronics"
+                  ? "Electronics / Mobile / Hardware"
+                  : watchedValues.businessType === "general"
+                  ? "General Store / Wholesale / Trade"
                   : watchedValues.businessType === "service"
-                  ? "Service"
+                  ? "Service / Salon / Repair Center"
+                  : watchedValues.businessType === "fuel"
+                  ? "Fuel Pump / Petrol Station"
                   : "Select Business Type"}
               </span>
               <ChevronDown
@@ -346,9 +354,13 @@ export default function BusinessProfileForm({
                 <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-[var(--kravy-surface)] border border-[var(--kravy-border)] rounded-2xl shadow-2xl p-1.5 max-h-56 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-100">
                   {[
                     { value: "", label: "Select Business Type" },
-                    { value: "food", label: "Restaurant / Food" },
-                    { value: "retail", label: "Retail" },
-                    { value: "service", label: "Service" },
+                    { value: "food", label: "Restaurant / Cafe / Food Business" },
+                    { value: "retail", label: "Retail / Supermarket / Grocery" },
+                    { value: "fashion", label: "Garments / Fashion / Clothing" },
+                    { value: "electronics", label: "Electronics / Mobile / Hardware" },
+                    { value: "general", label: "General Store / Wholesale / Trade" },
+                    { value: "service", label: "Service / Salon / Repair Center" },
+                    { value: "fuel", label: "Fuel Pump / Petrol Station" },
                   ].map((opt) => {
                     const isSelected = (watchedValues.businessType || "") === opt.value;
                     return (

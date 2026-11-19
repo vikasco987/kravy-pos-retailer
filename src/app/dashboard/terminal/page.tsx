@@ -51,6 +51,7 @@ import MergeOrdersModal from "./components/MergeOrdersModal";
 import FullScreenToggle from "@/components/FullScreenToggle";
 import TransferTableModal from "./components/TransferTableModal";
 import { TableActionSheet } from "./components/TableActionSheet";
+import { getBusinessMode } from "@/config/business-mode";
 
 
 const SatoshiFont = async () => (
@@ -572,10 +573,17 @@ function KravyPOS() {
     }, [orders]);
     const { socket, isConnected } = useSocket();
 
-    const switchTab = (tab: TabKey) => {
-        kravy.click();
-        setActiveTab(tab);
-    };
+    const businessMode = getBusinessMode(business?.businessType);
+    const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
+        return businessMode.features.defaultTerminalView;
+    });
+
+    // Update view mode if business mode changes
+    useEffect(() => {
+        if (business?.businessType) {
+            setViewMode(getBusinessMode(business.businessType).features.defaultTerminalView);
+        }
+    }, [business?.businessType]);
 
 
     const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
@@ -2542,10 +2550,12 @@ function KravyPOS() {
                         </button>
 
                         <div className="min-w-0 flex-1">
-                            <div className="text-lg font-black text-slate-900 dark:text-white leading-none tracking-tighter truncate">Live Orders & <em className="text-indigo-600 dark:text-indigo-400 not-italic">Floor Terminal</em></div>
+                            <div className="text-lg font-black text-slate-900 dark:text-white leading-none tracking-tighter truncate">
+                                {businessMode.defaultFloorTitle.split("&")[0]} & <em className="text-indigo-600 dark:text-indigo-400 not-italic">{businessMode.defaultFloorTitle.split("&")[1] || "Terminal"}</em>
+                            </div>
                             <div className="flex items-center gap-1.5 mt-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                                <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest truncate">Main Branch v2.4</span>
+                                <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest truncate">{businessMode.label} • Main Branch</span>
                             </div>
                         </div>
                     </div>
@@ -2785,53 +2795,178 @@ function KravyPOS() {
                                         )}
                                         </div>
 
-                                        {/* Status Filter Chips with sliding animated pill highlight */}
-                                        <div className="relative flex items-center gap-1.5 p-1 bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/70 rounded-2xl overflow-x-auto no-scrollbar">
-                                            {[
-                                                { key: "ALL", label: "All", count: tablesList.length },
-                                                { key: "FREE", label: "Free", count: tablesList.filter(t => !t.status || t.status === "FREE").length },
-                                                { key: "RUNNING", label: "Busy", count: orders.filter(o => o.status === "PREPARING" && !o.isDeleted).length },
-                                                { key: "READY", label: "Ready", count: orders.filter(o => o.status === "READY" && !o.isDeleted).length },
-                                            ].map((chip) => {
-                                                const isSelected = tableFilter === chip.key;
-                                                return (
-                                                    <button
-                                                        key={chip.key}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            kravy.click();
-                                                            setTableFilter(chip.key as any);
-                                                        }}
-                                                        className={`relative flex-1 min-w-[70px] sm:min-w-[80px] h-7.5 px-2.5 rounded-xl text-[11px] sm:text-[12px] font-[700] flex items-center justify-center gap-1.5 transition-colors z-10 ${
-                                                            isSelected
-                                                                ? "text-white"
-                                                                : "text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white"
-                                                        }`}
-                                                    >
-                                                        {isSelected && (
-                                                            <motion.div
-                                                                layoutId="tableStatusChipActivePill"
-                                                                transition={{ type: "spring", stiffness: 450, damping: 32 }}
-                                                                className="absolute inset-0 bg-[#635BFF] rounded-xl z-[-1] shadow-xs"
-                                                            />
-                                                        )}
-                                                        <span>{chip.label}</span>
-                                                        <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold tabular-nums ${
-                                                            isSelected
-                                                                ? "bg-white/20 text-white"
-                                                                : "bg-slate-200/80 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300"
-                                                        }`}>
-                                                            {chip.count}
-                                                        </span>
-                                                    </button>
-                                                );
-                                            })}
+                                        {/* Status Filter Chips + View Mode Switcher (Grid vs List) */}
+                                        <div className="flex items-center gap-2">
+                                            <div className="relative flex-1 flex items-center gap-1.5 p-1 bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/70 rounded-2xl overflow-x-auto no-scrollbar">
+                                                {[
+                                                    { key: "ALL", label: "All", count: tablesList.length },
+                                                    { key: "FREE", label: "Free", count: tablesList.filter(t => !t.status || t.status === "FREE").length },
+                                                    { key: "RUNNING", label: "Busy", count: orders.filter(o => o.status === "PREPARING" && !o.isDeleted).length },
+                                                    { key: "READY", label: "Ready", count: orders.filter(o => o.status === "READY" && !o.isDeleted).length },
+                                                ].map((chip) => {
+                                                    const isSelected = tableFilter === chip.key;
+                                                    return (
+                                                        <button
+                                                            key={chip.key}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                kravy.click();
+                                                                setTableFilter(chip.key as any);
+                                                            }}
+                                                            className={`relative flex-1 min-w-[70px] sm:min-w-[80px] h-7.5 px-2.5 rounded-xl text-[11px] sm:text-[12px] font-[700] flex items-center justify-center gap-1.5 transition-colors z-10 ${
+                                                                isSelected
+                                                                    ? "text-white"
+                                                                    : "text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white"
+                                                            }`}
+                                                        >
+                                                            {isSelected && (
+                                                                <motion.div
+                                                                    layoutId="tableStatusChipActivePill"
+                                                                    transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                                                                    className="absolute inset-0 bg-[#635BFF] rounded-xl z-[-1] shadow-xs"
+                                                                />
+                                                            )}
+                                                            <span>{chip.label}</span>
+                                                            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold tabular-nums ${
+                                                                isSelected
+                                                                    ? "bg-white/20 text-white"
+                                                                    : "bg-slate-200/80 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300"
+                                                            }`}>
+                                                                {chip.count}
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {/* View Mode Switcher: Grid vs List Stream */}
+                                            <div className="flex items-center p-1 bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/70 rounded-2xl shrink-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        kravy.click();
+                                                        setViewMode("grid");
+                                                    }}
+                                                    className={`h-7.5 px-3 rounded-xl flex items-center gap-1.5 text-[11px] font-bold transition-all ${
+                                                        viewMode === "grid"
+                                                            ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs"
+                                                            : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                                                    }`}
+                                                    title={`${businessMode.terminology.unitPlural} Grid View`}
+                                                >
+                                                    <LayoutGrid size={13} />
+                                                    <span className="hidden sm:inline">Grid</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        kravy.click();
+                                                        setViewMode("list");
+                                                    }}
+                                                    className={`h-7.5 px-3 rounded-xl flex items-center gap-1.5 text-[11px] font-bold transition-all ${
+                                                        viewMode === "list"
+                                                            ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs"
+                                                            : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                                                    }`}
+                                                    title="Orders Stream / Queue View"
+                                                >
+                                                    <ListTodo size={13} />
+                                                    <span className="hidden sm:inline">Orders</span>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Tables Grid Grouped By Floor */}
+                                {/* Tables Grid Grouped By Floor OR Retail Orders Stream */}
                                 <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y p-2.5 sm:p-4 pb-20 sm:pb-10 scrollbar-hide bg-[#F8FAFC]/50 dark:bg-slate-950/50 space-y-4 sm:space-y-5">
+                                    {viewMode === "list" ? (
+                                        /* ── RETAIL LIVE ORDERS STREAM / QUEUE VIEW ── */
+                                        <div className="space-y-3">
+                                            <div className="flex items-center justify-between px-1">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-3.5 w-1.5 bg-[#635BFF] rounded-full" />
+                                                    <span className="text-[13px] font-[800] uppercase tracking-wider text-[#0F172A] dark:text-slate-100 font-['Plus_Jakarta_Sans',sans-serif]">
+                                                        Live Orders Stream ({orders.filter(o => o.status !== "COMPLETED" && !o.isDeleted).length})
+                                                    </span>
+                                                </div>
+                                                <span className="text-[11px] font-[600] text-[#64748B]">Click any order to view & settle</span>
+                                            </div>
+
+                                            {orders.filter(o => o.status !== "COMPLETED" && !o.isDeleted).length === 0 ? (
+                                                <div className="flex flex-col items-center justify-center opacity-40 py-20 text-center">
+                                                    <ListTodo size={40} strokeWidth={1.2} className="text-[#64748B]" />
+                                                    <p className="text-[13px] font-[700] uppercase tracking-wider text-[#64748B] mt-4">No Active Orders In Queue</p>
+                                                    <p className="text-[11px] text-[#64748B] mt-1">New QR orders and counter bills will appear here in real time</p>
+                                                </div>
+                                            ) : (
+                                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                                                    {orders
+                                                        .filter(o => o.status !== "COMPLETED" && !o.isDeleted)
+                                                        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+                                                        .map((ord) => {
+                                                            const isSelected = selectedOrderId === ord.id;
+                                                            const tableObj = tablesList.find(t => t.id === ord.tableId || t.id === ord.table?.id);
+                                                            const itemCount = Array.isArray(ord.items) ? ord.items.reduce((acc, it) => acc + (it.quantity || it.qty || 1), 0) : 0;
+                                                            const statusBadgeColor = ord.status === "READY" 
+                                                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300"
+                                                                : "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-300";
+
+                                                            return (
+                                                                <div
+                                                                    key={ord.id}
+                                                                    onClick={() => {
+                                                                        kravy.click();
+                                                                        setSelectedOrderId(ord.id);
+                                                                        if (tableObj) setSelectedTableId(tableObj.id);
+                                                                    }}
+                                                                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative ${
+                                                                        isSelected
+                                                                            ? "bg-white dark:bg-slate-900 border-[#635BFF] ring-2 ring-[#635BFF]/20 shadow-md"
+                                                                            : "bg-white dark:bg-slate-900/90 border-[#E2E8F0] dark:border-slate-800 hover:border-[#635BFF]/50 shadow-xs"
+                                                                    }`}
+                                                                >
+                                                                    <div className="flex items-center justify-between mb-2">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="font-extrabold text-sm text-[#0F172A] dark:text-white">
+                                                                                #{ord.tokenNumber || ord.id.slice(-4).toUpperCase()}
+                                                                            </span>
+                                                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeColor}`}>
+                                                                                {ord.status}
+                                                                            </span>
+                                                                        </div>
+                                                                        <span className="text-xs font-black text-[#635BFF] font-['Inter',sans-serif]">
+                                                                            {sym}{ord.total?.toFixed(2) || "0.00"}
+                                                                        </span>
+                                                                    </div>
+
+                                                                    <div className="flex items-center justify-between text-xs text-[#64748B] dark:text-slate-400 mb-2.5">
+                                                                        <span className="font-semibold truncate max-w-[150px]">
+                                                                            {tableObj?.name ? `${businessMode.terminology.unitSingular}: ${tableObj.name}` : (ord.customerName || "Store Counter")}
+                                                                        </span>
+                                                                        <span>{itemCount} {itemCount === 1 ? "item" : "items"}</span>
+                                                                    </div>
+
+                                                                    {/* Item preview badges */}
+                                                                    <div className="flex flex-wrap gap-1 max-h-12 overflow-hidden">
+                                                                        {ord.items?.slice(0, 3).map((it: any, i: number) => (
+                                                                            <span key={i} className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium truncate max-w-[130px]">
+                                                                                {it.quantity || it.qty}x {it.name}
+                                                                            </span>
+                                                                        ))}
+                                                                        {(ord.items?.length || 0) > 3 && (
+                                                                            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold">
+                                                                                +{(ord.items?.length || 0) - 3} more
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
                                     <DndContext
                                         sensors={dndSensors}
                                         collisionDetection={closestCenter}
@@ -2968,7 +3103,7 @@ function KravyPOS() {
                                                                 <div className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center group-hover:bg-indigo-100 dark:group-hover:bg-indigo-950 transition-colors shadow-2xs">
                                                                     <Plus size={13} className="text-[#64748B] group-hover:text-[#635BFF] transition-colors" />
                                                                 </div>
-                                                                <span className="text-[11px] font-[700] uppercase tracking-wider text-[#64748B] group-hover:text-[#635BFF] font-['Plus_Jakarta_Sans',sans-serif]">Quick Add Table</span>
+                                                                <span className="text-[11px] font-[700] uppercase tracking-wider text-[#64748B] group-hover:text-[#635BFF] font-['Plus_Jakarta_Sans',sans-serif]">Quick Add {businessMode.terminology.unitSingular}</span>
                                                             </motion.div>
                                                         </div>
                                                     )}
@@ -2976,6 +3111,7 @@ function KravyPOS() {
                                             );
                                         })()}
                                     </DndContext>
+                                    )}
                                 </div>
 
                                 {/* Stats Footer - Professional FinTech SaaS Stats Bar */}

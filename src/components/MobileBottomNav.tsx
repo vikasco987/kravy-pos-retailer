@@ -35,6 +35,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useAuthContext } from "@/components/AuthContext";
 import { useProfileCache } from "@/hooks/useProfileCache";
 import { kravy } from "@/lib/sounds";
+import { getBusinessMode } from "@/config/business-mode";
 
 export default function MobileBottomNav({ profile }: any) {
     const pathname = usePathname();
@@ -109,12 +110,13 @@ export default function MobileBottomNav({ profile }: any) {
 
     const userRole = authUser?.type || "USER";
     const allowedPaths = Array.isArray(authUser?.permissions) ? authUser.permissions : [];
+    const businessMode = getBusinessMode(activeProfile?.businessType);
 
     const rawNavItems = [
         { label: "Dashboard", href: "/dashboard", IconComponent: LayoutDashboard, imageSrc: "/images/bottom-nav/dashboard.png" },
         { label: "POS", href: "/dashboard/billing/checkout", IconComponent: ShoppingCart, imageSrc: "/images/bottom-nav/pos.png" },
         { label: "Bills", href: "/dashboard/billing", IconComponent: ReceiptText, imageSrc: "/images/bottom-nav/history.png" },
-        { label: "Menu", href: "/dashboard/menu/view", IconComponent: Utensils, tabletOnly: true }
+        { label: businessMode.terminology.catalog, href: "/dashboard/menu/view", IconComponent: Utensils, tabletOnly: true }
     ];
 
     const filterAllowed = (item: any) => {
