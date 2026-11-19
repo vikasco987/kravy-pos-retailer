@@ -3691,8 +3691,12 @@ function KravyPOS() {
                                                                         .sort((a, b) => a - b);
 
                                                                     const sortedRounds = [
-                                                                        ...itemKotNumbers.map((kn: number, i: number) => ({ id: kn, label: `Round ${i + 1} - KOT #${kn}`, items: rounds[kn] })),
-                                                                        ...(rounds["New Items"] ? [{ id: "New Items", label: "🛒 Current Cart (Not Printed)", items: rounds["New Items"] }] : [])
+                                                                        ...itemKotNumbers.map((kn: number, i: number) => ({
+                                                                            id: kn,
+                                                                            label: businessMode.id === "food" ? `Round ${i + 1} - KOT #${kn}` : `Order Batch #${kn}`,
+                                                                            items: rounds[kn]
+                                                                        })),
+                                                                        ...(rounds["New Items"] ? [{ id: "New Items", label: "🛒 Current Cart (Pending Confirmation)", items: rounds["New Items"] }] : [])
                                                                     ].filter(r => r.items && r.items.length > 0);
 
                                                                     return sortedRounds.map((roundObj) => {
@@ -3775,12 +3779,12 @@ function KravyPOS() {
                                                                                                                     {isPrepared ? (
                                                                                                                         <>
                                                                                                                             <Check size={9} strokeWidth={3} />
-                                                                                                                            <span>READY</span>
+                                                                                                                            <span>{businessMode.id === "food" ? "READY" : "PACKED"}</span>
                                                                                                                         </>
                                                                                                                     ) : (
                                                                                                                         <>
                                                                                                                             <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                                                                                                                            <span>COOKING</span>
+                                                                                                                            <span>{businessMode.id === "food" ? "COOKING" : "PACKING"}</span>
                                                                                                                         </>
                                                                                                                     )}
                                                                                                                 </button>
@@ -3883,47 +3887,50 @@ function KravyPOS() {
                                                 <div className="shrink-0 p-3 sm:p-5 pb-5 sm:pb-5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 space-y-2 sm:space-y-3 shadow-[0_-4px_25px_rgba(0,0,0,0.06)]">
                                                     {/* Row 1: Kitchen Operations + Grand Total Card */}
                                                     <div className="flex gap-2 sm:gap-3">
-                                                        {/* Kitchen Operations Card */}
+                                                        {/* Operations & Processing Card (Adaptive to Business Mode) */}
                                                         <div className="flex-1 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between">
                                                             <span className="text-[8.5px] sm:text-[9px] font-[800] uppercase text-[#64748B] tracking-wider flex items-center gap-1.5 mb-1.5 sm:mb-2">
-                                                                <ChefHat size={11} className="text-[#635BFF]" />
-                                                                Kitchen Operations
+                                                                <Package size={11} className="text-[#635BFF]" />
+                                                                {businessMode.id === "food" ? "Kitchen Operations" : "Order Fulfillment"}
                                                             </span>
                                                             <div className="flex w-full">
                                                                 {(() => {
                                                                     const status = activeOrderForSelected?.status;
-                                                                    const isPending = status === "PENDING";
+                                                                    const isPending = status === "PENDING" || status === "ACCEPTED";
                                                                     const isPreparing = status === "PREPARING";
                                                                     const isReady = status === "READY";
 
                                                                     if (isPending) {
+                                                                        const btnLabel = businessMode.id === "food" ? "Start Cooking" : "Start Packing";
                                                                         return (
                                                                             <button
                                                                                 type="button"
                                                                                 onClick={async () => updateOrderStatus(activeOrderForSelected!.id, "PREPARING")}
                                                                                 className="w-full h-8 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center gap-1.5 text-[9.5px] sm:text-[10px] font-[700] uppercase tracking-wider bg-[#0F172A] hover:bg-slate-800 text-white shadow-2xs active:scale-95 transition-all duration-200"
                                                                             >
-                                                                                <ChefHat size={12} /> Start Cooking
+                                                                                <Package size={12} /> {btnLabel}
                                                                             </button>
                                                                         );
                                                                     }
 
                                                                     if (isPreparing) {
+                                                                        const btnLabel = businessMode.id === "food" ? "Mark Food Ready" : "Mark Packed & Ready";
                                                                         return (
                                                                             <button
                                                                                 type="button"
                                                                                 onClick={async () => updateOrderStatus(activeOrderForSelected!.id, "READY")}
                                                                                 className="w-full h-8 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center gap-1.5 text-[9.5px] sm:text-[10px] font-[700] uppercase tracking-wider bg-[#10B981] hover:bg-[#0ea372] text-white shadow-sm shadow-emerald-500/20 active:scale-95 transition-all duration-200"
                                                                             >
-                                                                                <Check size={12} strokeWidth={3} /> Mark All Ready
+                                                                                <Check size={12} strokeWidth={3} /> {btnLabel}
                                                                             </button>
                                                                         );
                                                                     }
 
                                                                     if (isReady) {
+                                                                        const readyLabel = businessMode.id === "food" ? "All Items Ready" : "Packed & Ready for Pickup";
                                                                         return (
                                                                             <div className="w-full h-8 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center gap-1.5 text-[9.5px] sm:text-[10px] font-[700] uppercase tracking-wider bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/50">
-                                                                                <Check size={12} strokeWidth={3} className="text-emerald-600" /> All Items Ready
+                                                                                <Check size={12} strokeWidth={3} className="text-emerald-600" /> {readyLabel}
                                                                             </div>
                                                                         );
                                                                     }

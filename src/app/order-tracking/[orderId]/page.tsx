@@ -21,10 +21,13 @@ import {
     History,
     MapPin,
     ArrowLeft,
-    MessageCircle
+    MessageCircle,
+    Package,
+    ShoppingBag
 } from "lucide-react";
 import { toast } from "sonner";
 import MenuQRAddMoreFlow from "@/components/MenuQRAddMoreFlow";
+import { getBusinessMode, getOrderStatusDetails } from "@/config/business-mode";
 
 interface OrderItem {
     name: string;
@@ -53,6 +56,7 @@ interface Order {
     businessName?: string;
     businessAddress?: string;
     businessPhone?: string;
+    businessType?: string;
     deliveryCharges?: number;
     packagingCharges?: number;
     servedStatusLabel?: string;
@@ -200,8 +204,14 @@ export default function OrderTrackingPage() {
         );
     }
 
-    const currentStatusConfig = statusConfig[order.status as keyof typeof statusConfig] || statusConfig.PENDING;
-    const StatusIcon = currentStatusConfig.icon;
+    const businessMode = getBusinessMode(order.businessType);
+    const orderStatusDetails = getOrderStatusDetails(order.status, order.businessType);
+    const StatusIcon = order.status === "COMPLETED" ? CheckCircle 
+      : order.status === "READY" ? ShoppingBag 
+      : order.status === "PREPARING" ? Package 
+      : order.status === "ACCEPTED" ? CheckCircle 
+      : Clock;
+
     const currentStep = getStatusStep(order.status);
     
     const calculatedSubtotal = order.items.reduce((acc: number, item: any) => acc + (item.price * item.quantity), 0);
@@ -229,8 +239,8 @@ export default function OrderTrackingPage() {
                         </button>
                         <div className="min-w-0 flex-1">
                             <div className="text-[0.9rem] font-[800] leading-none truncate tracking-tight flex items-center gap-1.5">
-                                <span className="text-lg leading-none translate-y-[-1px]">🍽</span>
-                                {order.table?.name ? `Table ${order.table.name}` : "Order Tracking"}
+                                <span className="text-lg leading-none translate-y-[-1px]">🛍</span>
+                                {order.table?.name ? `${businessMode.terminology.unitSingular} ${order.table.name}` : `${businessMode.label} Order`}
                             </div>
                             <div className="text-[0.6rem] text-[#696969] font-[700] mt-1 flex items-center gap-1.5 truncate">
                                 <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse shrink-0" />
@@ -255,10 +265,10 @@ export default function OrderTrackingPage() {
                             </div>
                             <div className="flex-1 text-left">
                                 <h2 className="text-[1.35rem] font-[900] tracking-tight text-[#1C1C1C] leading-tight">
-                                    {order.status === 'SERVED' ? (order.servedStatusLabel || currentStatusConfig.label) : currentStatusConfig.label}
+                                    {orderStatusDetails.customerHeading}
                                 </h2>
                                 <p className="text-[0.8rem] text-[#696969] font-[600] mt-0.5">
-                                    {order.status === 'SERVED' ? `Your order has been ${order.servedStatusLabel?.toLowerCase() || 'served'}` : currentStatusConfig.description}
+                                    {orderStatusDetails.customerDesc}
                                 </p>
                             </div>
                         </div>
@@ -267,15 +277,15 @@ export default function OrderTrackingPage() {
                         <div className="relative pt-2 pb-2 w-full">
                             <div className="absolute top-[12px] left-4 right-4 h-[3px] bg-[#F4F4F4] rounded-full" />
                             <div className="flex items-start justify-between relative z-10">
-                                {Object.entries(statusConfig).map(([status, config]: [string, any], index: number) => {
-                                    const statusOrder = ['PENDING', 'ACCEPTING', 'ACCEPTED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED'];
+                                {(['PENDING', 'ACCEPTED', 'PREPARING', 'READY', 'COMPLETED'] as const).map((status, index) => {
+                                    const statusOrder = ['PENDING', 'ACCEPTED', 'PREPARING', 'READY', 'COMPLETED'];
                                     const stepIndex = statusOrder.indexOf(status);
                                     const isActive = stepIndex <= currentStep;
                                     const isCurrent = status === order.status;
-                                    const Icon = config.icon;
+                                    const details = getOrderStatusDetails(status, order.businessType);
 
                                     return (
-                                        <div key={status} className="flex flex-col items-center relative z-10 w-12 shrink-0">
+                                        <div key={status} className="flex flex-col items-center relative z-10 w-16 shrink-0">
                                             {/* Progress line overlay */}
                                             {index > 0 && index <= currentStep && (
                                                 <div className="absolute top-[12px] right-[50%] w-full h-[3px] bg-[#EF4F5F]" />
@@ -286,7 +296,7 @@ export default function OrderTrackingPage() {
                                                 isCurrent ? "bg-[#EF4F5F] border-2 border-white scale-110 shadow-md" : 
                                                 isActive ? "bg-[#EF4F5F] border-2 border-white" : "bg-white border-2 border-[#EBEBEB]"
                                             }`}>
-                                                <Icon size={12} className={isActive ? "text-white" : "text-[#ABABAB]"} />
+                                                <div className={`w-2 h-2 rounded-full ${isActive ? "bg-white" : "bg-[#ABABAB]"}`} />
                                                 {isCurrent && (
                                                     <div className="absolute inset-0 rounded-full border-2 border-[#EF4F5F] animate-ping opacity-20" />
                                                 )}
@@ -294,10 +304,10 @@ export default function OrderTrackingPage() {
                                             
                                             {/* Label */}
                                             <div className="mt-2 text-center w-full">
-                                                <span className={`block text-[9px] leading-none font-[800] uppercase tracking-tighter transition-all duration-500 whitespace-nowrap ${
+                                                <span className={`block text-[8px] leading-tight font-[800] uppercase tracking-tighter transition-all duration-500 whitespace-nowrap ${
                                                     isCurrent ? "text-[#EF4F5F]" : isActive ? "text-[#1C1C1C]" : "text-[#ABABAB]"
                                                 }`}>
-                                                    {status === 'PENDING' ? 'RECEIVED' : status === 'ACCEPTING' ? 'REVIEWING' : status === 'ACCEPTED' ? 'CONFIRMED' : status === 'PREPARING' ? 'PREPARING' : status === 'READY' ? 'READY' : status === 'SERVED' ? (order.servedStatusLabel || 'SERVED') : 'COMPLETED'}
+                                                    {details.label}
                                                 </span>
                                             </div>
                                         </div>

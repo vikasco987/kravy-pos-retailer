@@ -1,84 +1,182 @@
 /**
  * Business Mode Configuration Engine
- * Kravy Universal POS Platform (Restaurant, Retail, Garments, Electronics, General Business)
+ * Kravy Universal POS Platform (Retail-First + Universal Business POS Platform)
  *
  * Architecture Principles:
- * 1. ONE PLATFORM, ONE BILLING ENGINE, ONE DATABASE ARCHITECTURE.
- * 2. Adaptive Navigation & Terminology based on merchant business profile.
- * 3. Zero regressions: Restaurant retains KOT, KDS, Table Grid, Dining QR 100%.
- * 4. Retail/General stores get fast Barcode-first workflows, Order Queue/Station List views, and non-restaurant terminology.
+ * 1. RETAIL & GENERAL BUSINESS IS THE PRIMARY DEFAULT IN THIS PROJECT.
+ * 2. ONE PLATFORM, ONE BILLING ENGINE, ONE DATABASE ARCHITECTURE.
+ * 3. Unified order lifecycle: PENDING -> ACCEPTED -> PREPARING (Packing) -> READY (Pickup/Dispatch) -> COMPLETED.
+ * 4. Backward-compatible with DB strings and existing settlement / inventory engines.
+ * 5. Terminology automatically adapts: No restaurant kitchen/table/dining jargon for retailers.
  */
 
 export type BusinessType =
-  | "food"         // Restaurant, Cafe, QSR, Bakery, Cloud Kitchen
-  | "retail"       // Grocery, Supermarket, Mini Mart
+  | "retail"       // Grocery, Supermarket, Mini Mart (PRIMARY DEFAULT)
   | "fashion"      // Garments, Clothing, Footwear, Boutique
   | "electronics"  // Electronics, Mobile Store, Computer Hardware
   | "general"      // General Store, Wholesale, Stationery, Hardware
   | "service"      // Salon, Spa, Repair, Auto Services
-  | "fuel";        // Petrol Pump, Fuel Station
+  | "fuel"         // Petrol Pump, Fuel Station
+  | "food";        // Restaurant, Cafe, Bakery (Legacy / Optional)
+
+export interface OrderStatusDetails {
+  key: string;
+  label: string;
+  actionLabel: string;
+  nextStatus?: string;
+  customerHeading: string;
+  customerDesc: string;
+  badgeClass: string;
+}
 
 export interface BusinessModeConfig {
   id: BusinessType;
   label: string;
-  category: "dining" | "retail" | "service";
+  category: "retail" | "service" | "dining";
   
   // Terminology adaptations
   terminology: {
-    unitSingular: string;      // "Table" vs "Station" / "Counter" / "Section"
-    unitPlural: string;        // "Tables" vs "Stations" / "Counters" / "Sections"
-    catalog: string;           // "Menu" vs "Products" / "Catalog"
-    orderTypeDining: string;   // "Dine In" vs "In-Store" / "Counter Sale"
-    orderTypeTakeaway: string; // "Takeaway" vs "Pickup"
-    orderTypeDelivery: string; // "Delivery" vs "Shipment" / "Home Delivery"
-    customerAction: string;    // "Dine-in Customer" vs "Shopper" / "Client"
+    unitSingular: string;      // "Counter" / "Station" vs "Table"
+    unitPlural: string;        // "Counters" / "Stations" vs "Tables"
+    catalog: string;           // "Products" / "Catalog" vs "Menu"
+    orderTypeDining: string;   // "Counter Sale" / "In-Store" vs "Dining"
+    orderTypeTakeaway: string; // "Store Pickup" vs "Takeaway"
+    orderTypeDelivery: string; // "Home Delivery" / "Shipment" vs "Delivery"
+    customerAction: string;    // "Store Customer" / "Shopper" vs "Table Guest"
   };
+
+  // Order Lifecycle Status Mapping
+  statusMap: Record<string, OrderStatusDetails>;
 
   // Feature Toggles
   features: {
-    showTableGrid: boolean;       // Visual layout for dining floors or station grids
+    showTableGrid: boolean;       // Visual layout for stations or dining floors
     showKOT: boolean;             // Kitchen Order Token (Restaurant only)
     showKDS: boolean;             // Kitchen Display System
     showBarcodeFirst: boolean;    // Auto-focus barcode input for instant scan-to-cart
     showStations: boolean;        // Floor/Counter/Station management
     showVariants: boolean;        // Size/Color/IMEI/Serial variants (Fashion/Electronics)
     showFuelBilling: boolean;     // Fuel dispenser billing
-    defaultTerminalView: "grid" | "list"; // Floor Grid vs Live Orders List
+    defaultTerminalView: "list" | "grid"; // Orders Stream vs Grid
   };
 
-  // Quick Action Priorities
   primaryBillingRoute: string;
   defaultFloorTitle: string;
 }
 
-export const BUSINESS_MODES: Record<BusinessType, BusinessModeConfig> = {
-  food: {
-    id: "food",
-    label: "Restaurant / Cafe / Food",
-    category: "dining",
-    terminology: {
-      unitSingular: "Table",
-      unitPlural: "Tables",
-      catalog: "Menu",
-      orderTypeDining: "Dining",
-      orderTypeTakeaway: "Takeaway",
-      orderTypeDelivery: "Delivery",
-      customerAction: "Table Guest",
-    },
-    features: {
-      showTableGrid: true,
-      showKOT: true,
-      showKDS: true,
-      showBarcodeFirst: false,
-      showStations: true,
-      showVariants: false,
-      showFuelBilling: false,
-      defaultTerminalView: "grid",
-    },
-    primaryBillingRoute: "/dashboard/billing/checkout",
-    defaultFloorTitle: "Dining Floor & Tables",
+const RETAIL_STATUS_MAP: Record<string, OrderStatusDetails> = {
+  PENDING: {
+    key: "PENDING",
+    label: "New Order",
+    actionLabel: "Confirm Order",
+    nextStatus: "ACCEPTED",
+    customerHeading: "Order Received",
+    customerDesc: "We've received your order and the store is reviewing it.",
+    badgeClass: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300",
   },
+  ACCEPTED: {
+    key: "ACCEPTED",
+    label: "Confirmed",
+    actionLabel: "Start Packing",
+    nextStatus: "PREPARING",
+    customerHeading: "Order Confirmed",
+    customerDesc: "Your order is confirmed. Store staff is gathering your items.",
+    badgeClass: "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300",
+  },
+  PREPARING: {
+    key: "PREPARING",
+    label: "Packing / Processing",
+    actionLabel: "Mark as Packed & Ready",
+    nextStatus: "READY",
+    customerHeading: "Packing In Progress",
+    customerDesc: "Your items are being picked, quality checked and packed.",
+    badgeClass: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-300",
+  },
+  READY: {
+    key: "READY",
+    label: "Ready for Pickup",
+    actionLabel: "Complete & Settle",
+    nextStatus: "COMPLETED",
+    customerHeading: "Ready at Counter",
+    customerDesc: "Your order is packed and ready for pickup at the counter or dispatch.",
+    badgeClass: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300",
+  },
+  SERVED: {
+    key: "SERVED",
+    label: "Handed Over",
+    actionLabel: "Complete",
+    nextStatus: "COMPLETED",
+    customerHeading: "Handed Over",
+    customerDesc: "Package has been handed over to customer / courier.",
+    badgeClass: "bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300 border-teal-300",
+  },
+  COMPLETED: {
+    key: "COMPLETED",
+    label: "Completed",
+    actionLabel: "Billed",
+    customerHeading: "Completed",
+    customerDesc: "Order has been settled and completed. Thank you for shopping with us!",
+    badgeClass: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-300",
+  },
+};
 
+const RESTAURANT_STATUS_MAP: Record<string, OrderStatusDetails> = {
+  PENDING: {
+    key: "PENDING",
+    label: "New Table Order",
+    actionLabel: "Accept Order",
+    nextStatus: "ACCEPTED",
+    customerHeading: "Order Placed",
+    customerDesc: "Your order has been sent to the kitchen.",
+    badgeClass: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300",
+  },
+  ACCEPTED: {
+    key: "ACCEPTED",
+    label: "Accepted",
+    actionLabel: "Send to Kitchen",
+    nextStatus: "PREPARING",
+    customerHeading: "Order Accepted",
+    customerDesc: "Order accepted by the restaurant.",
+    badgeClass: "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300",
+  },
+  PREPARING: {
+    key: "PREPARING",
+    label: "Cooking in Kitchen",
+    actionLabel: "Food Ready",
+    nextStatus: "READY",
+    customerHeading: "Cooking with Care",
+    customerDesc: "Our chef is preparing your fresh meal.",
+    badgeClass: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-300",
+  },
+  READY: {
+    key: "READY",
+    label: "Ready to Serve",
+    actionLabel: "Serve to Table",
+    nextStatus: "COMPLETED",
+    customerHeading: "Ready to Serve",
+    customerDesc: "Your meal is ready and being served to your table.",
+    badgeClass: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300",
+  },
+  SERVED: {
+    key: "SERVED",
+    label: "Served",
+    actionLabel: "Settle Bill",
+    nextStatus: "COMPLETED",
+    customerHeading: "Served",
+    customerDesc: "Enjoy your meal!",
+    badgeClass: "bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300 border-teal-300",
+  },
+  COMPLETED: {
+    key: "COMPLETED",
+    label: "Completed",
+    actionLabel: "Settled",
+    customerHeading: "Completed",
+    customerDesc: "Bill paid and completed. Visit again!",
+    badgeClass: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-300",
+  },
+};
+
+export const BUSINESS_MODES: Record<BusinessType, BusinessModeConfig> = {
   retail: {
     id: "retail",
     label: "Retail / Supermarket / Grocery",
@@ -92,6 +190,7 @@ export const BUSINESS_MODES: Record<BusinessType, BusinessModeConfig> = {
       orderTypeDelivery: "Home Delivery",
       customerAction: "Store Customer",
     },
+    statusMap: RETAIL_STATUS_MAP,
     features: {
       showTableGrid: false,
       showKOT: false,
@@ -103,7 +202,7 @@ export const BUSINESS_MODES: Record<BusinessType, BusinessModeConfig> = {
       defaultTerminalView: "list",
     },
     primaryBillingRoute: "/dashboard/billing/checkout",
-    defaultFloorTitle: "Store Stations & QR Orders",
+    defaultFloorTitle: "Store Stations & Live Orders",
   },
 
   fashion: {
@@ -115,10 +214,11 @@ export const BUSINESS_MODES: Record<BusinessType, BusinessModeConfig> = {
       unitPlural: "Billing Stations",
       catalog: "Apparel Catalog",
       orderTypeDining: "Walk-in",
-      orderTypeTakeaway: "Pickup",
+      orderTypeTakeaway: "Store Pickup",
       orderTypeDelivery: "Courier / Delivery",
       customerAction: "Shopper",
     },
+    statusMap: RETAIL_STATUS_MAP,
     features: {
       showTableGrid: false,
       showKOT: false,
@@ -142,10 +242,11 @@ export const BUSINESS_MODES: Record<BusinessType, BusinessModeConfig> = {
       unitPlural: "Counter Desks",
       catalog: "Products & Gadgets",
       orderTypeDining: "In-Store",
-      orderTypeTakeaway: "Pickup",
+      orderTypeTakeaway: "Store Pickup",
       orderTypeDelivery: "Doorstep Delivery",
       customerAction: "Customer",
     },
+    statusMap: RETAIL_STATUS_MAP,
     features: {
       showTableGrid: false,
       showKOT: false,
@@ -169,10 +270,11 @@ export const BUSINESS_MODES: Record<BusinessType, BusinessModeConfig> = {
       unitPlural: "Stations",
       catalog: "Item Catalog",
       orderTypeDining: "Over Counter",
-      orderTypeTakeaway: "Pickup",
+      orderTypeTakeaway: "Store Pickup",
       orderTypeDelivery: "Delivery",
       customerAction: "Buyer",
     },
+    statusMap: RETAIL_STATUS_MAP,
     features: {
       showTableGrid: false,
       showKOT: false,
@@ -200,6 +302,7 @@ export const BUSINESS_MODES: Record<BusinessType, BusinessModeConfig> = {
       orderTypeDelivery: "Doorstep",
       customerAction: "Client",
     },
+    statusMap: RETAIL_STATUS_MAP,
     features: {
       showTableGrid: true,
       showKOT: false,
@@ -227,6 +330,7 @@ export const BUSINESS_MODES: Record<BusinessType, BusinessModeConfig> = {
       orderTypeDelivery: "Bulk Tanker",
       customerAction: "Driver",
     },
+    statusMap: RETAIL_STATUS_MAP,
     features: {
       showTableGrid: false,
       showKOT: false,
@@ -240,14 +344,58 @@ export const BUSINESS_MODES: Record<BusinessType, BusinessModeConfig> = {
     primaryBillingRoute: "/dashboard/fuel",
     defaultFloorTitle: "Fuel Dispensers & Stations",
   },
+
+  food: {
+    id: "food",
+    label: "Restaurant / Cafe / Food Business",
+    category: "dining",
+    terminology: {
+      unitSingular: "Table",
+      unitPlural: "Tables",
+      catalog: "Menu",
+      orderTypeDining: "Dining",
+      orderTypeTakeaway: "Takeaway",
+      orderTypeDelivery: "Delivery",
+      customerAction: "Table Guest",
+    },
+    statusMap: RESTAURANT_STATUS_MAP,
+    features: {
+      showTableGrid: true,
+      showKOT: true,
+      showKDS: true,
+      showBarcodeFirst: false,
+      showStations: true,
+      showVariants: false,
+      showFuelBilling: false,
+      defaultTerminalView: "grid",
+    },
+    primaryBillingRoute: "/dashboard/billing/checkout",
+    defaultFloorTitle: "Dining Floor & Tables",
+  },
 };
 
 /**
  * Normalizes any businessType string stored in BusinessProfile
- * Defaults gracefully to "food" if not configured to prevent regressions.
+ * Default is RETAIL for this project (kravy-pos-retailer)
  */
 export function getBusinessMode(rawType?: string | null): BusinessModeConfig {
-  if (!rawType) return BUSINESS_MODES.food;
+  if (!rawType) return BUSINESS_MODES.retail;
   const key = rawType.toLowerCase().trim() as BusinessType;
-  return BUSINESS_MODES[key] || BUSINESS_MODES.food;
+  return BUSINESS_MODES[key] || BUSINESS_MODES.retail;
+}
+
+/**
+ * Helper to get clean status details for any business mode
+ */
+export function getOrderStatusDetails(status: string, businessType?: string | null): OrderStatusDetails {
+  const mode = getBusinessMode(businessType);
+  const normalized = (status || "PENDING").toUpperCase();
+  return mode.statusMap[normalized] || {
+    key: normalized,
+    label: normalized,
+    actionLabel: "Update",
+    customerHeading: "Order Status",
+    customerDesc: `Status: ${normalized}`,
+    badgeClass: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-300",
+  };
 }

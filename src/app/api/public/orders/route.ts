@@ -17,16 +17,18 @@ export async function GET(req: NextRequest) {
             orderBy: { createdAt: 'asc' }
         });
 
-        const businessName = profile?.businessName || "Restaurant";
+        const businessName = profile?.businessName || "Store";
         const businessAddress = profile?.businessAddress || "Address not provided";
         const businessPhone = profile?.contactPersonPhone || "";
-        const servedStatusLabel = (profile as any)?.servedStatusLabel || "SERVED";
+        const businessType = profile?.businessType || "retail";
+        const servedStatusLabel = (profile as any)?.servedStatusLabel || "COMPLETED";
 
         return NextResponse.json({
             ...order,
             businessName,
             businessAddress,
             businessPhone,
+            businessType,
             servedStatusLabel
         });
     } catch (error) {
