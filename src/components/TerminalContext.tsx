@@ -48,6 +48,8 @@ export interface Table {
     isOccupied?: boolean;
     activeCount?: number;
     startTime?: string;
+    sortOrder?: number | null;
+    activeAmount?: number;
 }
 
 interface TerminalContextType {
@@ -63,6 +65,7 @@ interface TerminalContextType {
     fetchData: (showLoading?: boolean, force?: boolean) => any;
     updateTableStatus: (tableId: string, updates: Partial<Table>) => void;
     setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
+    setRawTables: React.Dispatch<React.SetStateAction<Table[]>>;
     isSyncing: boolean;
     manualSync: () => void;
     emitUpdate: (customData?: any) => void;
@@ -103,9 +106,10 @@ export const TerminalProvider = ({ children }: { children: React.ReactNode }) =>
     const ordersByTableId = React.useMemo(() => {
         const map: Record<string, Order[]> = {};
         orders.forEach(order => {
-            if (order.tableId) {
-                if (!map[order.tableId]) map[order.tableId] = [];
-                map[order.tableId].push(order);
+            const tId = order.tableId || order.table?.id;
+            if (tId) {
+                if (!map[tId]) map[tId] = [];
+                map[tId].push(order);
             }
         });
         return map;
@@ -126,8 +130,9 @@ export const TerminalProvider = ({ children }: { children: React.ReactNode }) =>
             const sortedOrders = [...tableOrders].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             const startTime = sortedOrders.length > 0 ? sortedOrders[0].createdAt : undefined;
             const activeOrderId = tableOrders.length > 0 ? tableOrders[0].id : undefined;
+            const activeAmount = tableOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
 
-            return { ...table, status, activeCount, startTime, activeOrderId };
+            return { ...table, status, activeCount, startTime, activeOrderId, activeAmount };
         });
     }, [rawTables, ordersByTableId]);
 
@@ -352,6 +357,7 @@ export const TerminalProvider = ({ children }: { children: React.ReactNode }) =>
             fetchData,
             updateTableStatus,
             setOrders,
+            setRawTables,
             isSyncing,
             manualSync,
             emitUpdate

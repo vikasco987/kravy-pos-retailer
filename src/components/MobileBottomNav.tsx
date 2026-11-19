@@ -195,12 +195,20 @@ export default function MobileBottomNav({ profile }: any) {
     // 2-Column Action Pills (Filtered by staff permissions)
     const actionPills = [
         {
-            label: "Floor & Stations",
-            href: "/dashboard/tables",
+            label: "Floor Terminal",
+            href: "/dashboard/terminal",
             imageSrc: "/images/quick-actions/terminal.png",
-            icon: <LayoutGrid size={18} className="text-[#6366F1]" />,
+            icon: <LayoutDashboard size={18} className="text-[#6366F1]" />,
             iconBg: "bg-[#EEF2FF] dark:bg-indigo-950/50",
             border: "border-indigo-200 dark:border-indigo-900/50"
+        },
+        {
+            label: "Counters & QR",
+            href: "/dashboard/tables",
+            imageSrc: "/images/quick-actions/terminal.png",
+            icon: <LayoutGrid size={18} className="text-[#8B5CF6]" />,
+            iconBg: "bg-[#F3E8FF] dark:bg-purple-950/50",
+            border: "border-purple-200 dark:border-purple-900/50"
         },
         {
             label: "Browse Products",
