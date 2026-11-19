@@ -314,6 +314,7 @@ model Table {
   qrUrl       String? // persisted QR code image URL (150x150) for this table
   zone        String   @default("Default")
   floor       String?  @default("Floor 1") // ✅ Zone assigned to this table
+  sortOrder   Int? // ✅ Custom arrangement display order
   clerkUserId String
   user        User     @relation(fields: [clerkUserId], references: [clerkId])
   orders      Order[]

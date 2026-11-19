@@ -5,6 +5,7 @@ import DateFilter from "../../components/date-filter";
 import { ChevronLeft, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import PrintableTable from "./PrintableTable";
+import ItemReportsNavTabs from "./ItemReportsNavTabs";
 
 export const revalidate = 0;
 
@@ -34,7 +35,7 @@ export default async function ItemWiseSalesReportPage({
     startDate.setDate(endDate.getDate() - range);
   }
 
-  const [bills, menuItems] = await Promise.all([
+  const [bills, menuItems, businessProfile] = await Promise.all([
     prisma.billManager.findMany({
       where: {
         clerkUserId: effectiveId,
@@ -48,14 +49,20 @@ export default async function ItemWiseSalesReportPage({
     prisma.item.findMany({
       where: { clerkId: effectiveId },
       include: { category: true }
+    }),
+    prisma.businessProfile.findFirst({
+      where: { userId: effectiveId },
+      select: { businessName: true }
     })
   ]);
 
-  // Create a map of live menu item categories
+  // Create a map of live menu item categories & ID mapping
   const categoryMap: Record<string, string> = {};
+  const itemIdMap: Record<string, string> = {};
   const allMenuCategories = new Set<string>();
   
   menuItems.forEach(item => {
+    itemIdMap[item.name] = item.id;
     if (item.category?.name) {
       categoryMap[item.name] = item.category.name;
       allMenuCategories.add(item.category.name);
@@ -107,6 +114,7 @@ export default async function ItemWiseSalesReportPage({
 
   const allItems = Object.keys(itemMap)
     .map((name) => ({
+      id: itemIdMap[name] || null,
       name,
       totalSold: itemMap[name].totalSold,
       totalRevenue: itemMap[name].totalRevenue,
@@ -127,73 +135,77 @@ export default async function ItemWiseSalesReportPage({
 
   const format = (num: number) => new Intl.NumberFormat("en-IN").format(Math.round(num));
 
+  const formatDate = (d: Date) =>
+    d.toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const dateRangeStr = `${formatDate(startDate)} TO ${formatDate(endDate)}`;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-      {/* ── Header ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }} className="print:hidden">
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <Link href="/dashboard" style={{
-            width: "40px", height: "40px", borderRadius: "12px", background: "var(--kravy-surface)",
-            border: "1px solid var(--kravy-border)", display: "flex", alignItems: "center", justifyContent: "center",
-            color: "var(--kravy-text-primary)", textDecoration: "none"
-          }}>
+    <div className="flex flex-col gap-4 sm:gap-6 pb-20 md:pb-12" style={{ fontFamily: "'Poppins', sans-serif" }}>
+      {/* ── Top Header ── */}
+      <div className="flex items-center justify-between gap-3 sm:gap-4 print:hidden">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <Link 
+            href="/dashboard" 
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[var(--kravy-surface)] border border-[var(--kravy-border)] flex items-center justify-center text-[var(--kravy-text-primary)] hover:border-orange-500 active:scale-95 transition-all shadow-2xs shrink-0"
+          >
             <ChevronLeft size={20} />
           </Link>
-          <div>
-            <h1 style={{ fontSize: "1.75rem", fontWeight: 900, color: "var(--kravy-text-primary)", letterSpacing: "-1px" }}>
-              Item-wise Sales Report
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-2xl font-black text-[var(--kravy-text-primary)] tracking-tight truncate">
+              Item Reports
             </h1>
-            <p style={{ fontSize: "0.8rem", color: "var(--kravy-text-muted)", fontFamily: "monospace" }}>
-              Detailed analysis of product performance
-            </p>
           </div>
         </div>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+        <div className="flex items-center gap-2 shrink-0">
           <DateFilter />
         </div>
       </div>
 
+      {/* ── Navigation Tabs ── */}
+      <ItemReportsNavTabs currentRange={String(range)} activeCategory={selectedCategory} />
+
       {/* ── Category Filter ── */}
-      <div style={{ 
-        display: "flex", 
-        gap: "10px", 
-        overflowX: "auto", 
-        paddingBottom: "10px"
-      }} className="no-scrollbar print:hidden">
-        {uniqueCategories.map((cat) => (
-          <Link
-            key={cat}
-            href={`/dashboard/reports/items?range=${range}&category=${cat}`}
-            style={{
-              padding: "10px 20px",
-              borderRadius: "14px",
-              background: selectedCategory === cat ? "var(--kravy-brand)" : "var(--kravy-surface)",
-              color: selectedCategory === cat ? "white" : "var(--kravy-text-secondary)",
-              border: `1px solid ${selectedCategory === cat ? "var(--kravy-brand)" : "var(--kravy-border)"}`,
-              fontSize: "0.85rem",
-              fontWeight: 700,
-              textDecoration: "none",
-              whiteSpace: "nowrap",
-              transition: "all 0.2s"
-            }}
-          >
-            {cat}
-          </Link>
-        ))}
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 -mx-1 px-1 print:hidden">
+        {uniqueCategories.map((cat) => {
+          const isSelected = selectedCategory === cat;
+          const count = cat === "All" 
+            ? allItems.length 
+            : allItems.filter(item => item.category.includes(cat)).length;
+
+          return (
+            <Link
+              key={cat}
+              href={`/dashboard/reports/items?range=${range}&category=${cat}`}
+              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all border whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+                isSelected
+                  ? "bg-[#FF6B35] border-[#FF6B35] text-white shadow-md shadow-orange-500/25 scale-[1.02]"
+                  : "bg-[var(--kravy-surface)] border-[var(--kravy-border)] text-[var(--kravy-text-secondary)] hover:border-orange-400"
+              }`}
+            >
+              <span>{cat}</span>
+              <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-black ${
+                isSelected ? "bg-white/20 text-white" : "bg-[var(--kravy-bg)] text-[var(--kravy-text-muted)]"
+              }`}>
+                {count}
+              </span>
+            </Link>
+          );
+        })}
       </div>
 
-
-
-      <PrintableTable filteredItems={filteredItems} grandTotalRevenue={grandTotalRevenue} />
+      <PrintableTable 
+        filteredItems={filteredItems} 
+        grandTotalRevenue={grandTotalRevenue} 
+        grandTotalSold={grandTotalSold}
+        dateRangeStr={dateRangeStr}
+        businessName={businessProfile?.businessName || "Kravy POS"}
+      />
       
       {/* ── Help Tip ── */}
-      <div style={{
-        padding: "16px 24px", background: "rgba(79, 70, 229, 0.05)", border: "1px dashed rgba(79, 70, 229, 0.2)",
-        borderRadius: "16px", display: "flex", alignItems: "center", gap: "12px", color: "var(--kravy-brand)"
-      }} className="print:hidden">
-        <TrendingUp size={18} />
-        <p style={{ fontSize: "0.82rem", fontWeight: 600 }}>
-          Tip: Your top 3 products contribute to {filteredItems.slice(0, 3).reduce((s, i) => s + (grandTotalRevenue > 0 ? (i.totalRevenue / grandTotalRevenue) * 100 : 0), 0).toFixed(1)}% of your total revenue.
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 flex items-center gap-2.5 text-orange-600 dark:text-orange-400 print:hidden text-xs font-semibold">
+        <TrendingUp size={16} className="shrink-0" />
+        <p>
+          Tip: Top 3 products contribute to <span className="font-black font-mono">{filteredItems.slice(0, 3).reduce((s, i) => s + (grandTotalRevenue > 0 ? (i.totalRevenue / grandTotalRevenue) * 100 : 0), 0).toFixed(1)}%</span> of total sales revenue.
         </p>
       </div>
     </div>

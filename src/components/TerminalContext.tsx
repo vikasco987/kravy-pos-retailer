@@ -188,6 +188,12 @@ export const TerminalProvider = ({ children }: { children: React.ReactNode }) =>
             if (tablesRes?.ok) {
                 const tData = await tablesRes.json();
                 setRawTables(tData);
+            } else {
+                const fallback = await fetch("/api/tables", { cache: "no-store" }).catch(() => null);
+                if (fallback?.ok) {
+                    const fbData = await fallback.json();
+                    setRawTables(fbData);
+                }
             }
             if (ordersRes?.ok) {
                 const oData = await ordersRes.json();
