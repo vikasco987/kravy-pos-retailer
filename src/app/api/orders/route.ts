@@ -79,7 +79,7 @@ export async function PATCH(req: NextRequest) {
 
         const body = await req.json();
         orderId = body.orderId;
-        const { status, isKotPrinted, isBillPrinted, items, total, isDeleted, skipInventoryDeduction, customerName, customerPhone, reservedTokenNumber } = body;
+        const { status, isKotPrinted, isBillPrinted, items, total, isDeleted, skipInventoryDeduction, customerName, customerPhone, reservedTokenNumber, tableId: patchTableId } = body;
 
         if (!orderId) {
             return NextResponse.json({ error: "Order ID is required" }, { status: 400 });
@@ -94,6 +94,7 @@ export async function PATCH(req: NextRequest) {
         if (typeof isDeleted === "boolean") data.isDeleted = isDeleted;
         if (customerName !== undefined) data.customerName = customerName;
         if (customerPhone !== undefined) data.customerPhone = customerPhone;
+        if (patchTableId !== undefined) data.tableId = patchTableId || null;
 
         // ✅ 0. FETCH CURRENT ORDER FOR ATOMICITY & TOKEN GENERATION
         const currentOrder = await prisma.order.findUnique({ where: { id: orderId, clerkUserId: effectiveId } });

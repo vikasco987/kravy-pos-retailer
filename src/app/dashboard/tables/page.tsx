@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useAuthContext } from "@/components/AuthContext";
 import { toast } from "sonner";
@@ -8,7 +9,7 @@ import QRCode from "react-qr-code";
 import {
   QrCode, Plus, Trash2, Download, Copy, Eye,
   Table as TableIcon, Search, RefreshCw, X, Edit, Layers, Settings, ChevronDown,
-  Code2, Check, FileCode
+  Code2, Check, FileCode, ShoppingBag, Clock, ArrowRight, ArrowLeftRight, CheckCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,9 @@ interface TableRecord {
 }
 
 export default function TablesPage() {
+  const router = useRouter();
   const { confirm } = useConfirm();
+  const [activeOrders, setActiveOrders] = useState<any[]>([]);
   const { user, loading: authLoading } = useAuthContext();
   const { emitUpdate } = useTerminalContext();
   const [tables, setTables] = useState<TableRecord[]>([]);
@@ -72,17 +75,27 @@ export default function TablesPage() {
     setLoading(true);
     try {
       const ts = Date.now();
-      const [tableRes, floorRes] = await Promise.all([
-        fetch(`${getBase()}/api/tables?t=${ts}`, { cache: "no-store" }),
-        fetch(`${getBase()}/api/floors?t=${ts}`, { cache: "no-store" })
+      const [tableRes, floorRes, ordersRes] = await Promise.all([
+        fetch(`${getBase()}/api/tables?t=${ts}`, { cache: "no-store" }).catch(() => null),
+        fetch(`${getBase()}/api/floors?t=${ts}`, { cache: "no-store" }).catch(() => null),
+        fetch(`${getBase()}/api/orders?active=true`, { cache: "no-store" }).catch(() => null)
       ]);
       
-      if (!tableRes.ok) throw new Error("could not load tables");
-      const data: TableRecord[] = await tableRes.json();
-      setTables(data);
+      let data: TableRecord[] = [];
+      if (tableRes && tableRes.ok) {
+        data = await tableRes.json();
+        setTables(data);
+      }
+
+      if (ordersRes && ordersRes.ok) {
+        const ordData = await ordersRes.json();
+        if (Array.isArray(ordData)) {
+          setActiveOrders(ordData.filter((o: any) => !o.isDeleted && o.status !== "COMPLETED"));
+        }
+      }
 
       let floorsList = ["Floor 1", "Ground Floor"];
-      if (floorRes.ok) {
+      if (floorRes && floorRes.ok) {
         const floorData = await floorRes.json();
         if (floorData.floors && Array.isArray(floorData.floors)) {
           floorsList = floorData.floors;
@@ -231,6 +244,37 @@ export default function TablesPage() {
     }
   };
 
+
+  const getTableOrder = (tableId: string) => {
+    const table = tables.find(t => t.id === tableId);
+    return activeOrders.find(
+      (o) =>
+        !o.isDeleted &&
+        o.status !== "COMPLETED" &&
+        (o.tableId === tableId ||
+          o.table?.id === tableId ||
+          (table && o.tableName && o.tableName.toLowerCase() === table.name.toLowerCase()))
+    );
+  };
+
+  const getTableDetails = (tableId: string) => {
+    const order = getTableOrder(tableId);
+    if (!order) return { status: "FREE" as const, order: null, amount: 0, mins: 0, itemsCount: 0 };
+    const isBilled = order.status === "BILLED" || Boolean(order.isPrinted) || order.status === "READY";
+    const amount = Number(order.total || order.subtotal || 0);
+    const diffMs = order.createdAt ? Date.now() - new Date(order.createdAt).getTime() : 0;
+    const mins = Math.max(0, Math.floor(diffMs / 60000));
+    const itemsCount = Array.isArray(order.items) ? order.items.length : 0;
+    return {
+      status: isBilled ? ("BILLED" as const) : ("OCCUPIED" as const),
+      order,
+      amount,
+      mins,
+      itemsCount,
+    };
+  };
+
+  const formatCurrency = (val: number) => new Intl.NumberFormat("en-IN").format(Math.round(val || 0));
   const copyTableUrl = (id: string, name: string) => {
     const url = generateTableUrl(id, name);
     navigator.clipboard.writeText(url);
@@ -316,7 +360,7 @@ export default function TablesPage() {
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-black text-[var(--kravy-text-primary)] tracking-tight leading-tight">
-                Floor & Table Management
+                Floor & Station Manager
               </h1>
               <p className="text-xs sm:text-sm text-[var(--kravy-text-muted)] font-medium mt-0.5">
                 Create floors (Ground, 1st, Rooftop, Garden), add tables &amp; generate QR codes
@@ -500,7 +544,7 @@ export default function TablesPage() {
                     />
                     <input
                       type="text"
-                      placeholder="Table name — e.g. T-01, VIP-1, Balcony-1, Rooftop-2…"
+                      placeholder="Station / Counter name — e.g. Counter 1, Billing Desk, Shelf A, Spot 05, T-01…"
                       value={newName}
                       onChange={(e) => setNewName(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") createTable(); }}
@@ -548,7 +592,7 @@ export default function TablesPage() {
                 {/* Quick suggestions */}
                 <div className="flex flex-wrap gap-2 items-center">
                   <span className="text-[10px] font-bold text-[var(--kravy-text-muted)] uppercase">Presets:</span>
-                  {["T-01", "T-02", "VIP-1", "F1-01", "F2-01", "Ground-01", "Rooftop-01"].map((tip) => (
+                  {["Counter-01", "Counter-02", "Station-A", "Shelf-1", "Spot-01", "T-01", "Desk-1"].map((tip) => (
                     <button
                       key={tip}
                       onClick={() => setNewName(tip)}
@@ -570,7 +614,7 @@ export default function TablesPage() {
                     <label className="text-[10px] font-black uppercase tracking-wider text-[var(--kravy-text-muted)] px-1">Prefix</label>
                     <input
                       type="text"
-                      placeholder="e.g. Table-, T-, G-"
+                      placeholder="e.g. Counter-, Spot-, Desk-, T-"
                       value={bulkPrefix}
                       onChange={(e) => setBulkPrefix(e.target.value)}
                       className="w-full px-3 py-2.5 bg-[var(--kravy-bg)] border border-[var(--kravy-border)] text-[var(--kravy-text-primary)] rounded-xl text-sm font-bold outline-none focus:border-[var(--kravy-brand)]"
@@ -724,28 +768,70 @@ export default function TablesPage() {
                 <div className="h-1.5 bg-gradient-to-r from-[var(--kravy-brand)] to-indigo-400 opacity-60
                   group-hover:opacity-100 transition-opacity" />
 
-                {/* Table name + number */}
-                <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-[var(--kravy-border)]">
-                  <div>
-                    <p className="text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest mb-0.5">
-                      Table
-                    </p>
-                    <h3 className="text-lg font-black text-[var(--kravy-text-primary)] tracking-tight leading-none">
-                      {table.name}
-                    </h3>
-                  </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <div className="w-9 h-9 rounded-xl bg-[var(--kravy-brand)]/8 border border-[var(--kravy-brand)]/15
-                        flex items-center justify-center flex-shrink-0">
-                        <QrCode size={16} className="text-[var(--kravy-brand)]" />
+                {/* Station name + Live Order Indicator */}
+                {(() => {
+                  const details = getTableDetails(table.id);
+                  const isFree = details.status === "FREE";
+                  const order = details.order;
+                  return (
+                    <div className="px-5 pt-4 pb-3 flex flex-col gap-2 border-b border-[var(--kravy-border)]">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-[var(--kravy-text-muted)] uppercase tracking-widest">
+                              Station / Spot
+                            </span>
+                            {isFree ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-50 text-emerald-600 border border-emerald-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                <span>READY</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-50 text-rose-600 border border-rose-200 animate-bounce">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                <span>ACTIVE ORDER</span>
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="text-lg font-black text-[var(--kravy-text-primary)] tracking-tight leading-none mt-1">
+                            {table.name}
+                          </h3>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-1">
+                          <div className="w-9 h-9 rounded-xl bg-[var(--kravy-brand)]/8 border border-[var(--kravy-brand)]/15 flex items-center justify-center flex-shrink-0">
+                            <QrCode size={16} className="text-[var(--kravy-brand)]" />
+                          </div>
+                          {(table.floor || table.zone) && (
+                            <span className="text-[9px] font-black bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md uppercase tracking-tighter">
+                              {table.floor || table.zone}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      {(table.floor || table.zone) && (
-                        <span className="text-[9px] font-black bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md uppercase tracking-tighter">
-                          {table.floor || table.zone}
-                        </span>
+
+                      {/* Active Order Strip */}
+                      {!isFree && order && (
+                        <div className="mt-1 flex items-center justify-between bg-amber-500/10 p-2 rounded-xl border border-amber-500/20">
+                          <div>
+                            <span className="text-[9px] font-bold text-amber-700 block">Current Bill</span>
+                            <span className="text-base font-black text-amber-700">₹{formatCurrency(details.amount)}</span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              sessionStorage.setItem("quick_pos_handoff_order", JSON.stringify(order));
+                              router.push(`/dashboard/billing/checkout?orderId=${order.id}&tableId=${table.id}&tableName=${encodeURIComponent(table.name)}&returnTo=/dashboard/tables`);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black flex items-center gap-1 shadow-sm active:scale-95 transition-all"
+                          >
+                            <span>Open POS</span>
+                            <ArrowRight size={11} />
+                          </button>
+                        </div>
                       )}
                     </div>
-                </div>
+                  );
+                })()}
 
                 {/* QR Code */}
                 <div className="flex-1 flex items-center justify-center p-5">
