@@ -29,6 +29,7 @@ type BillItem = {
   qty: number;
   rate: number;
   gst?: number;
+  taxStatus?: string;
   hsnCode?: string | null;
   variants?: any[];
   isNew?: boolean;
@@ -79,12 +80,7 @@ type BillResponse = {
 
 
 export default function ViewBillPage() {
-  const [bill, setBill] = useState<BillManager | null>(null);
-  const [business, setBusiness] = useState<PrismaBusinessProfile | null>(null);
   const { currencySymbol: sym, currencyCode, taxConfig: ctxTaxConfig } = useCurrency();
-  const taxConfig = ctxTaxConfig || getTaxConfig(business?.currencyCode || currencyCode || sym || "INR");
-  const taxName = taxConfig?.taxName || "GST";
-  const taxIdLabel = taxConfig?.taxIdLabel || "GSTIN";
   const params = useParams();
   const id = params.id as string;
   const searchParams = useSearchParams();
@@ -94,6 +90,12 @@ export default function ViewBillPage() {
   const { user: authUser } = useAuthContext();
   const userRole = authUser?.type || null;
   const userPermissions = authUser?.permissions || [];
+
+  const [bill, setBill] = useState<BillManager | null>(null);
+  const [business, setBusiness] = useState<PrismaBusinessProfile | null>(null);
+  const taxConfig = ctxTaxConfig || getTaxConfig(business?.currencyCode || currencyCode || sym || "INR");
+  const taxName = taxConfig?.taxName || "GST";
+  const taxIdLabel = taxConfig?.taxIdLabel || "GSTIN";
   const [loading, setLoading] = useState(true);
   const [qrUrl, setQrUrl] = useState<string>("");
   const [showJson, setShowJson] = useState(false);
@@ -162,9 +164,10 @@ export default function ViewBillPage() {
       document.getElementById(styleId)?.remove();
 
       const ps = (business as any)?.printSettings || {};
+      const isA4 = type === "bill" && ps.billFormat === 'A4';
       const is80 = ps.paperWidth === '80mm';
-      const paperWidth = is80 ? '74mm' : '58mm';
-      const paperBottomPadding = ps.paperBottomPadding !== undefined && ps.paperBottomPadding !== null ? `${ps.paperBottomPadding}px` : '80px';
+      const paperWidth = isA4 ? '100%' : (is80 ? '74mm' : '58mm');
+      const paperBottomPadding = ps.paperBottomPadding !== undefined && ps.paperBottomPadding !== null ? `${ps.paperBottomPadding}px` : (is80 ? '80px' : '20px');
 
       const fontFamilyVal = ps.fontFamily || 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
       const kotFontFamilyVal = ps.kotFontFamily || '"Courier New", Courier, monospace';
@@ -209,20 +212,25 @@ export default function ViewBillPage() {
         @media print {
           html, body { height: auto !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; background: #fff !important; }
           body > *:not(#${containerId}) { display: none !important; }
-          @page { margin: 0; size: ${is80 ? '80mm auto' : 'auto'}; }
+          @page { 
+            margin: ${isA4 ? '8mm' : '0'}; 
+            size: ${isA4 ? 'A4 portrait' : (is80 ? '80mm auto' : '58mm auto')}; 
+          }
 
           #${containerId} {
             display: block !important;
             width: 100% !important;
-            max-width: ${paperWidth} !important;
+            max-width: ${isA4 ? '210mm' : paperWidth} !important;
             height: auto !important;
             overflow: visible !important;
             margin: 0 auto !important;
-            padding: ${is80 ? `2mm 6mm ${paperBottomPadding} 6mm` : `2mm 4% ${paperBottomPadding} 4%`} !important; 
+            padding: ${isA4 ? '0' : (is80 ? `2mm 6mm ${paperBottomPadding} 6mm` : `2mm 4% 0 4%`)} !important; 
             background: #fff !important;
             color: #000 !important;
             position: relative !important;
             box-sizing: border-box !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
 
           #${containerId} .receipt-container-dynamic, #${containerId}.receipt-container-dynamic {
@@ -339,14 +347,15 @@ export default function ViewBillPage() {
       container.innerHTML = html;
 
       // Add physical bottom spacer for thermal feeds past cutter to prevent jamming
-      const spacer = document.createElement("div");
-      spacer.style.height = paperBottomPadding;
-      spacer.style.minHeight = paperBottomPadding;
-      spacer.style.display = "block";
-      spacer.style.clear = "both";
-      spacer.style.color = "transparent";
-      spacer.innerHTML = ".";
-      container.appendChild(spacer);
+      // For 58mm (2-inch), extra blank paper is eliminated; 80mm retains configured paperBottomPadding.
+      if (is80) {
+        const spacer = document.createElement("div");
+        spacer.style.height = paperBottomPadding;
+        spacer.style.minHeight = paperBottomPadding;
+        spacer.style.display = "block";
+        spacer.style.clear = "both";
+        container.appendChild(spacer);
+      }
 
       document.body.appendChild(container);
 
@@ -376,6 +385,21 @@ export default function ViewBillPage() {
       Promise.race([Promise.all(imagePromises), maxWait]).then(() => {
         const timeoutDelay = images.length > 0 ? 150 : 10;
         setTimeout(() => {
+          // Dynamic Safe Height Calculation ONLY for 2-inch (58mm) USB printing
+          if (!is80 && !isA4) {
+            try {
+              const measuredPx = Math.max(container.scrollHeight || 0, container.offsetHeight || 0);
+              if (measuredPx > 50) {
+                // Add generous 12mm safety buffer to guarantee footer & QR never get cut or paginated
+                const exactHeightMm = Math.ceil(measuredPx * (25.4 / 96)) + 12;
+                const pageRule = `@page { margin: 0; size: 58mm ${exactHeightMm}mm; }`;
+                style.innerHTML = pageRule + "\n" + style.innerHTML;
+              }
+            } catch (e) {
+              console.warn("[PRINT] dynamic height measurement error:", e);
+            }
+          }
+
           window.print();
           
           // Delay cleanup significantly to ensure slow spoolers finish reading the DOM
@@ -445,6 +469,15 @@ export default function ViewBillPage() {
     window.open(phone ? `https://wa.me/${phone}?text=${message}` : `https://wa.me/?text=${message}`, "_blank");
   };
 
+  useEffect(() => {
+    if (bill && business?.upi) {
+      const upiLink = `upi://pay?pa=${business.upi}&pn=${encodeURIComponent(business.businessName || "Store")}&am=${(bill.total || 0).toFixed(2)}&cu=INR`;
+      getQRCodeDataUrl(upiLink, { width: 220 }).then(setQrUrl);
+    } else {
+      setQrUrl("");
+    }
+  }, [bill?.total, business?.upi, business?.businessName]);
+
   if (loading) return <p className="p-6">Loading bill...</p>;
   if (!bill) return <p className="p-6">Bill not found</p>;
   const billItems: BillItem[] = Array.isArray(bill.items)
@@ -453,6 +486,7 @@ export default function ViewBillPage() {
       qty: Number(i.qty ?? i.quantity ?? 0),
       rate: Number(i.rate ?? i.price ?? 0),
       gst: i.gst !== undefined ? Number(i.gst) : undefined,
+      taxStatus: i.taxStatus || "Without Tax",
       hsnCode: i.hsnCode || null,
       variants: i.variants || [],
       isNew: i.isNew ?? false,
@@ -535,15 +569,6 @@ export default function ViewBillPage() {
 
   const totalTaxable = Number(taxBreakup.reduce((a, b) => a + b.taxable, 0).toFixed(2));
   const totalGst = Number(taxBreakup.reduce((a, b) => a + b.totalTax, 0).toFixed(2));
-
-  useEffect(() => {
-    if (bill && business?.upi) {
-      const upiLink = `upi://pay?pa=${business.upi}&pn=${encodeURIComponent(business.businessName || "Store")}&am=${bill.total.toFixed(2)}&cu=INR`;
-      getQRCodeDataUrl(upiLink, { width: 220 }).then(setQrUrl);
-    } else {
-      setQrUrl("");
-    }
-  }, [bill?.total, business?.upi, business?.businessName]);
 
   const deliveryCharge = (bill as any)?.deliveryCharges || 0;
   const packagingCharge = (bill as any)?.packagingCharges || 0;
@@ -794,6 +819,17 @@ export default function ViewBillPage() {
                     </div>
                   )}
 
+                  {Array.isArray((bill as any).customCharges) && (bill as any).customCharges.map((c: any, idx: number) => {
+                    const amt = Number(c.amount || c.value || 0);
+                    if (amt <= 0) return null;
+                    return (
+                      <div key={idx} className="flex justify-between items-center text-xs sm:text-sm">
+                        <span className="font-semibold text-slate-500 dark:text-slate-400">{c.name}</span>
+                        <span className="font-black text-slate-800 dark:text-slate-200">+{sym}{amt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    );
+                  })}
+
                   <div className="h-px bg-slate-200 dark:bg-slate-700 my-1" />
 
                   <div className="flex justify-between items-center pt-1">
@@ -971,6 +1007,7 @@ export default function ViewBillPage() {
         packagingCharge={packagingCharge}
         packagingGst={packagingGst}
         serviceCharge={serviceCharge}
+        customCharges={Array.isArray((bill as any).customCharges) ? (bill as any).customCharges : []}
         finalTotal={bill.total}
         paymentMode={(bill as any).paymentMode || ''}
         paymentStatus={bill.paymentStatus || ''}

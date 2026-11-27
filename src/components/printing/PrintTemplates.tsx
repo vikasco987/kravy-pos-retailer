@@ -1,8 +1,9 @@
 import { useCurrency } from '@/lib/currency-context';
 import { getTaxConfig } from '@/lib/tax-config';
 import React, { useState, useEffect } from 'react';
-import { getQRCodeDataUrl } from '@/lib/qrHelper';
+import { getQRCodeDataUrl, getCachedQRCodeDataUrl } from '@/lib/qrHelper';
 import { devanagariToHinglish } from '@/lib/transliterate';
+import A4InvoiceTemplate from './A4InvoiceTemplate';
 
 interface PrintTemplatesProps {
   receiptRef: React.RefObject<HTMLDivElement | null>;
@@ -34,6 +35,7 @@ interface PrintTemplatesProps {
   packagingGst: number;
   serviceCharge: number;
   serviceChargeName?: string;
+  customCharges?: Array<{ name: string; amount: number; value?: number; type?: string }>;
   finalTotal: number;
   paymentMode: string;
   paymentStatus: string;
@@ -59,7 +61,7 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
     customerName, customerPhone, customerAddress, orderNotes, buyerGSTIN, placeOfSupply,
     items, subtotal, discountAmt, appliedOffer, taxActive, perProductEnabled,
     globalRate, totalTaxable, totalGst, taxBreakup, deliveryCharge, deliveryGst,
-    packagingCharge, packagingGst, serviceCharge, serviceChargeName, finalTotal, paymentMode,
+    packagingCharge, packagingGst, serviceCharge, serviceChargeName, customCharges, finalTotal, paymentMode,
     paymentStatus, upiTxnRef, qrUrl, prevWalletBalance, selectedParty, numberToWords, kotNumbers,
     amountPaid, balanceDue, canPrintCustomerPhone, isPreviewMode, isOfflineKOT, isAddonKOT, addonSequence, offlineKotRef
   } = props;
@@ -70,10 +72,34 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
   const taxIdLabel = taxConfig.taxIdLabel || "GSTIN";
   const isSplitTax = taxConfig.isSplitTax !== false; // true only for India
 
-  const [menuQrBase64, setMenuQrBase64] = useState<string>("");
-  const [reviewQrBase64, setReviewQrBase64] = useState<string>("");
-  const [logoBase64, setLogoBase64] = useState<string>("");
-  const [upiQrBase64, setUpiQrBase64] = useState<string>("");
+  const defaultUpiText = (business?.upi && business?.upiQrEnabled !== false && finalTotal !== undefined)
+    ? `upi://pay?pa=${business.upi}&pn=${encodeURIComponent(business?.businessName || "Store")}&am=${Number(finalTotal).toFixed(2)}&cu=INR`
+    : "";
+
+  const [menuQrBase64, setMenuQrBase64] = useState<string>(() => {
+    if (business?.enableMenuQRInBill && business?.userId && typeof window !== "undefined") {
+      const menuUrl = `${window.location.origin}/menu/${business.userId}`;
+      return getCachedQRCodeDataUrl(menuUrl, 250) || "";
+    }
+    return "";
+  });
+  const [reviewQrBase64, setReviewQrBase64] = useState<string>(() => {
+    if (business?.reviewUrl) {
+      return getCachedQRCodeDataUrl(business.reviewUrl, 250) || "";
+    }
+    return "";
+  });
+  const [logoBase64, setLogoBase64] = useState<string>(() => {
+    if (business?.logoUrl && business.logoUrl.startsWith("data:")) return business.logoUrl;
+    return "";
+  });
+  const [upiQrBase64, setUpiQrBase64] = useState<string>(() => {
+    if (qrUrl && qrUrl.startsWith("data:")) return qrUrl;
+    if (defaultUpiText) {
+      return getCachedQRCodeDataUrl(defaultUpiText, 220) || "";
+    }
+    return "";
+  });
 
   // Automatically generate local Base64 QR code for UPI if not already Base64
   useEffect(() => {
@@ -146,6 +172,8 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
   const s = (key: string) => ps[key] !== false; // Default to true if not set
 
   // --- Dynamic Typography Configurations with Thermal Safety Limits ---
+  const isA4 = ps.billFormat === 'A4';
+  const a4InvoiceType = ps.a4InvoiceType || 'GST_TAX_INVOICE';
   const is80 = ps.paperWidth === '80mm';
   const paperWidthStr = is80 ? '74mm' : '58mm';
   const printableWidthStr = is80 ? '74mm' : '48mm';
@@ -232,12 +260,12 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
     
     @media print {
       @page { 
-        margin: 0 !important; 
-        size: ${is80 ? '80mm' : '58mm'} auto !important;
+        margin: ${isA4 ? '10mm' : '0'} !important; 
+        size: ${isA4 ? 'A4 portrait' : (is80 ? '80mm' : '58mm')} auto !important;
       }
       body { margin: 0 !important; padding: 0 !important; }
       .receipt-container { 
-        width: ${paperWidthStr} !important; 
+        width: ${isA4 ? '100%' : paperWidthStr} !important; 
         margin: 0 auto !important; 
       }
       .kot-container { 
@@ -263,6 +291,58 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
       <style dangerouslySetInnerHTML={{ __html: dynamicCss }} />
 
       {/* ================= PRINT RECEIPT ================= */}
+      {isA4 ? (
+        <div
+          ref={receiptRef}
+          className={
+            isPreviewMode
+              ? "receipt a4-preview-wrapper w-full shadow-2xl mx-auto rounded-md overflow-hidden my-4 border border-slate-300"
+              : "fixed -z-[9999] top-0 left-0 pointer-events-none opacity-0 print:opacity-100 print:static print:z-auto print:block receipt w-full"
+          }
+        >
+          <A4InvoiceTemplate
+            business={business}
+            billNumber={billNumber}
+            billDate={billDate}
+            tokenNumber={tokenNumber}
+            selectedTable={selectedTable}
+            customerName={customerName}
+            customerPhone={customerPhone}
+            customerAddress={customerAddress}
+            orderNotes={orderNotes}
+            buyerGSTIN={buyerGSTIN}
+            placeOfSupply={placeOfSupply}
+            items={items}
+            subtotal={subtotal}
+            discountAmt={discountAmt}
+            appliedOffer={appliedOffer}
+            taxActive={taxActive}
+            perProductEnabled={perProductEnabled}
+            globalRate={globalRate}
+            totalTaxable={totalTaxable}
+            totalGst={totalGst}
+            taxBreakup={taxBreakup}
+            deliveryCharge={deliveryCharge}
+            deliveryGst={deliveryGst}
+            packagingCharge={packagingCharge}
+            packagingGst={packagingGst}
+            serviceCharge={serviceCharge}
+            serviceChargeName={serviceChargeName}
+            customCharges={customCharges}
+            finalTotal={finalTotal}
+            paymentMode={paymentMode}
+            paymentStatus={paymentStatus}
+            upiTxnRef={upiTxnRef}
+            numberToWords={numberToWords}
+            amountPaid={amountPaid}
+            balanceDue={balanceDue}
+            isPreviewMode={isPreviewMode}
+            invoiceType={a4InvoiceType}
+            upiQrBase64={upiQrBase64}
+            logoBase64={logoBase64}
+          />
+        </div>
+      ) : (
       <div
         ref={receiptRef}
         data-paper={is80 ? "80" : "58"}
@@ -461,6 +541,12 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
                       {(s('showPerProductGST') !== false && taxActive && itemRate > 0) ? `${taxName}: ${itemRate}%` : ""}
                     </div>
                   )}
+                  {/* Tax Status (With Tax / Without Tax) under item */}
+                  {(taxActive && itemRate > 0) && (
+                    <div className="font-normal text-[calc(var(--r-items-size)-2px)] opacity-75 pl-0.5 leading-tight mt-0.5" style={{ fontSize: 'calc(var(--r-items-size) - 2px)' }}>
+                      {(i.taxStatus === "With Tax" || i.isTaxInclusive) ? "With Tax" : "Without Tax"}
+                    </div>
+                  )}
                 </>
               ) : (
                 /* Compact 58mm/2-inch Row Design */
@@ -475,9 +561,15 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
                     <span>{i.qty} x {sym}{Number(i.rate ?? 0).toFixed(2)}{discDeduction > 0 ? ` (-${sym}${discDeduction.toFixed(2)})` : ''}</span>
                     <span className="font-bold">
                       {((business?.hsnEnabled && i.hsnCode) ? `HSN: ${i.hsnCode}` : "")} 
-                      {(s('showPerProductGST') !== false && taxActive) ? ` | ${taxName}: ${itemRate}%` : ""}
+                      {(s('showPerProductGST') !== false && taxActive && itemRate > 0) ? ` | ${taxName}: ${itemRate}%` : ""}
                     </span>
                   </div>
+                  {/* Tax Status (With Tax / Without Tax) under item in 58mm */}
+                  {(taxActive && itemRate > 0) && (
+                    <div className="text-[calc(var(--r-items-size)-2px)] font-normal opacity-75 mt-0.5">
+                      {(i.taxStatus === "With Tax" || i.isTaxInclusive) ? "With Tax" : "Without Tax"}
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -555,6 +647,14 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
               <span>{sym}{(serviceCharge || 0).toFixed(2)}</span>
             </div>
           )}
+          {Array.isArray(customCharges) && customCharges.map((c, idx) => (
+            c.amount > 0 ? (
+              <div key={idx} className="flex justify-between items-center font-bold mt-0.5" style={{ fontSize: 'var(--r-details-size)' }}>
+                <span>{(c.name || "ADDITIONAL CHARGE").toUpperCase()}</span>
+                <span>{sym}{Number(c.amount || 0).toFixed(2)}</span>
+              </div>
+            ) : null
+          ))}
           {s('sepTotalTop') && <div className="border-t-2 border-dashed border-black my-1" />}
           {(() => {
             const roundedTotal = Math.round(finalTotal);
@@ -759,8 +859,10 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
           {s('showPoweredBy') && <div className="mt-3 font-bold" style={{ fontSize: 'calc(var(--r-details-size) - 2px)' }}>Powered by Kravy</div>}
         </div>
       </div>
+      )}
 
       {/* ================= KOT TEMPLATE ================= */}
+      {!(isA4 && isPreviewMode) && (
       <div
         ref={kotRef}
         data-paper={is80 ? "80" : "58"}
@@ -874,6 +976,7 @@ const PrintTemplates: React.FC<PrintTemplatesProps> = (props) => {
           <div className="font-bold mt-1">{billDate}</div>
         </div>
       </div>
+      )}
     </div>
   );
 };

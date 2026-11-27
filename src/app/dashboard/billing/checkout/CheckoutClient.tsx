@@ -3595,9 +3595,10 @@ export default function CheckoutClient() {
     document.querySelectorAll("[id^='print-style-checkout-']").forEach(el => el.remove());
 
     const ps = (business as any)?.printSettings || {};
+    const isA4 = type === "bill" && ps.billFormat === 'A4';
     const is80 = ps.paperWidth === '80mm';
-    const paperWidth = is80 ? '74mm' : '58mm';
-    const paperBottomPadding = ps.paperBottomPadding !== undefined && ps.paperBottomPadding !== null ? `${ps.paperBottomPadding}px` : '80px';
+    const paperWidth = isA4 ? '100%' : (is80 ? '74mm' : '58mm');
+    const paperBottomPadding = ps.paperBottomPadding !== undefined && ps.paperBottomPadding !== null ? `${ps.paperBottomPadding}px` : (is80 ? '80px' : '20px');
 
     // --- Dynamic Typography Configurations with Thermal Safety Limits ---
     const fontFamilyVal = ps.fontFamily || 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -3655,17 +3656,17 @@ export default function CheckoutClient() {
         }
         body > *:not(#${containerId}) { display: none !important; }
         @page { 
-          margin: 0; 
-          size: ${is80 ? '80mm auto' : 'auto'}; 
+          margin: ${isA4 ? '8mm' : '0'}; 
+          size: ${isA4 ? 'A4 portrait' : (is80 ? '80mm auto' : 'auto')}; 
         }
         #${containerId} {
           display: block !important;
           width: 100% !important;
-          max-width: ${paperWidth} !important;
+          max-width: ${isA4 ? '210mm' : paperWidth} !important;
           height: auto !important;
           overflow: visible !important;
           margin: 0 auto !important;
-          padding: ${is80 ? `2mm 6mm ${paperBottomPadding} 6mm` : `2mm 4% ${paperBottomPadding} 4%`} !important; 
+          padding: ${isA4 ? '0' : (is80 ? `2mm 6mm ${paperBottomPadding} 6mm` : `2mm 4% ${paperBottomPadding} 4%`)} !important; 
           background: #fff !important;
           color: #000 !important;
           position: relative !important;

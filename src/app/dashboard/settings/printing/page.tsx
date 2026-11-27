@@ -7,7 +7,7 @@ import {
     Image as ImageIcon, Type, Phone, MapPin, 
     Hash, User, Users, Percent, MessageSquare, QrCode,
     Receipt, ChefHat, Clock, FileText, Check, Zap, MoreVertical, Tag,
-    ChevronDown, ChevronUp, RefreshCw, Bluetooth, ArrowRight
+    ChevronDown, ChevronUp, RefreshCw, Bluetooth, ArrowRight, Maximize2, X
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -55,6 +55,8 @@ const defaults: any = {
     spoolerDelay: 1500,
     
     // Typography Customization Defaults
+    billFormat: "THERMAL", // "THERMAL" | "A4"
+    a4InvoiceType: "GST_TAX_INVOICE", // "GST_TAX_INVOICE" | "RETAIL_INVOICE"
     paperWidth: "58mm",
     printDensity: "balanced",
     fontFamily: "",
@@ -313,6 +315,7 @@ export default function PrintingSettings() {
     const [printSettings, setPrintSettings] = useState<any>({ ...defaults });
     const [originalSettings, setOriginalSettings] = useState<any>(null);
     const [previewZoom, setPreviewZoom] = useState(0.95);
+    const [fullPreviewOpen, setFullPreviewOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<"configure" | "preview">("configure");
 
     const receiptRef = useRef<HTMLDivElement>(null);
@@ -339,7 +342,9 @@ export default function PrintingSettings() {
                 body: JSON.stringify({ 
                     id: business?.id,
                     printSettings,
-                    reviewUrl: business?.reviewUrl || "" 
+                    reviewUrl: business?.reviewUrl || "",
+                    phonePrefixType: business?.phonePrefixType || "TEXT",
+                    greetingMessage: business?.greetingMessage || ""
                 }),
             });
             if (res.ok) {
@@ -395,7 +400,7 @@ export default function PrintingSettings() {
         customerPhone: "9876543210",
         customerAddress: "Flat 101, Green Heights, Delhi",
         orderNotes: "Extra spicy, no onions please!",
-        buyerGSTIN: previewGst ? "07AAAAA0000A1Z5" : null,
+        buyerGSTIN: previewGst ? (business?.gstNumber || "07AAAAA0000A1Z5") : null,
         placeOfSupply: previewGst ? "Delhi (07)" : null,
         items: [
             { name: "Paneer Butter Masala", qty: 2, rate: 250, gst: previewGst ? 5 : 0 },
@@ -416,6 +421,7 @@ export default function PrintingSettings() {
         packagingCharge: 20,
         packagingGst: 1,
         serviceCharge: 0,
+        customCharges: [],
         finalTotal: 787.5,
         paymentMode: "UPI",
         paymentStatus: "PAID",
@@ -600,7 +606,7 @@ export default function PrintingSettings() {
 
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 sm:gap-8 items-start px-1 sm:px-2">
                 {/* Left: Controls */}
-                <div className={`xl:col-span-8 space-y-10 ${activeTab === 'configure' ? 'block' : 'hidden xl:block'}`}>
+                <div className={`${printSettings.billFormat === 'A4' ? 'xl:col-span-6' : 'xl:col-span-8'} space-y-10 ${activeTab === 'configure' ? 'block' : 'hidden xl:block'}`}>
                     
                     {/* Auto-Connect Web Bluetooth Guide */}
                     <div className="space-y-4 sm:space-y-6">
@@ -658,24 +664,47 @@ export default function PrintingSettings() {
                             <motion.div 
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="p-3.5 sm:p-5 md:p-6 rounded-2xl sm:rounded-3xl bg-emerald-500/5 border border-emerald-500/10 space-y-3 mt-3 sm:mt-4"
+                                className="p-3.5 sm:p-5 md:p-6 rounded-2xl sm:rounded-3xl bg-emerald-500/5 border border-emerald-500/10 space-y-4 mt-3 sm:mt-4"
                             >
-                                <div className="flex items-center gap-2.5 sm:gap-3">
-                                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0">
-                                        <Phone size={16} />
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2.5 sm:gap-3">
+                                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                                            <Phone size={16} />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white leading-tight">Phone Prefix Style</h4>
+                                            <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Choose how phone number is labeled on the bill</p>
+                                        </div>
                                     </div>
-                                    <div className="min-w-0">
-                                        <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white leading-tight">Secondary Phone Number</h4>
-                                        <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Prints below the main contact number</p>
-                                    </div>
+                                    <ResponsiveDropdown
+                                        value={business?.phonePrefixType || "TEXT"}
+                                        onChange={(val) => setBusiness({ ...business, phonePrefixType: val })}
+                                        options={[
+                                            { label: "Text (Mob: )", value: "TEXT", sublabel: "Standard text prefix" },
+                                            { label: "Symbol (📞 )", value: "SYMBOL", sublabel: "Modern phone emoji prefix" }
+                                        ]}
+                                        placeholder="Text (Mob: )"
+                                    />
                                 </div>
-                                <input 
-                                    type="text" 
-                                    placeholder="e.g. 9876543210 (Optional)"
-                                    value={printSettings.secondaryPhone || ""}
-                                    onChange={(e) => setPrintSettings({ ...printSettings, secondaryPhone: e.target.value })}
-                                    className="w-full h-10 sm:h-12 px-3.5 sm:px-5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs sm:text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                                />
+
+                                <div className="space-y-2 pt-2 border-t border-emerald-500/10">
+                                    <div className="flex items-center gap-2.5 sm:gap-3">
+                                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                                            <Phone size={16} />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white leading-tight">Secondary Phone Number</h4>
+                                            <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Prints below the main contact number</p>
+                                        </div>
+                                    </div>
+                                    <input 
+                                        type="text" 
+                                        placeholder="e.g. 9876543210 (Optional)"
+                                        value={printSettings.secondaryPhone || ""}
+                                        onChange={(e) => setPrintSettings({ ...printSettings, secondaryPhone: e.target.value })}
+                                        className="w-full h-10 sm:h-12 px-3.5 sm:px-5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs sm:text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                                    />
+                                </div>
                             </motion.div>
                         )}
                     </div>
@@ -738,6 +767,31 @@ export default function PrintingSettings() {
                             <SettingToggle icon={MessageSquare} label="Visit Again" sKey="showVisitAgain" desc="Greeting footer line" color="bg-slate-600" />
                             <SettingToggle icon={Zap} label="Powered By" sKey="showPoweredBy" desc="Kravy branding line" color="bg-violet-600" />
                         </div>
+
+                        {printSettings.showGreetings && (
+                            <motion.div 
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="p-3.5 sm:p-5 md:p-6 rounded-2xl sm:rounded-3xl bg-teal-500/5 border border-teal-500/10 space-y-3 mt-3 sm:mt-4"
+                            >
+                                <div className="flex items-center gap-2.5 sm:gap-3">
+                                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-teal-500 text-white flex items-center justify-center shrink-0">
+                                        <MessageSquare size={16} />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white leading-tight">Custom Greeting Message</h4>
+                                        <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Printed at bottom of the receipt</p>
+                                    </div>
+                                </div>
+                                <input 
+                                    type="text" 
+                                    placeholder="Thank You 🙏 Visit Again!"
+                                    value={business?.greetingMessage ?? ""}
+                                    onChange={(e) => setBusiness({ ...business, greetingMessage: e.target.value })}
+                                    className="w-full h-10 sm:h-12 px-3.5 sm:px-5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs sm:text-sm font-bold focus:ring-2 focus:ring-teal-500 outline-none transition-all"
+                                />
+                            </motion.div>
+                        )}
                     </div>
 
                     {/* Separator Settings */}
@@ -849,12 +903,192 @@ export default function PrintingSettings() {
                                 {/* Paper Settings Row */}
                                 <div className="space-y-4">
                                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                        <Printer size={12} /> Paper Width & Density
+                                        <Printer size={12} /> Bill Print Format & Size
                                     </h3>
+                                    
+                                    {/* Primary Bill Format Selector: 2-inch, 3-inch, A4 Full Page */}
+                                    <div className="flex flex-col gap-2 p-3.5 rounded-2xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10">
+                                        <label className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center justify-between">
+                                            <span>Select Bill Print Format</span>
+                                            {printSettings.billFormat === "A4" ? (
+                                                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">A4 Format Selected</span>
+                                            ) : (
+                                                <span className="text-[10px] font-bold text-violet-600 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">Thermal Roll Selected</span>
+                                            )}
+                                        </label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1">
+                                            <button 
+                                                type="button"
+                                                onClick={() => {
+                                                    setPrintSettings((p: any) => ({ ...p, billFormat: "THERMAL", paperWidth: "58mm" }));
+                                                    kravy.click();
+                                                }}
+                                                className={`p-3 rounded-xl border text-left transition-all ${
+                                                    printSettings.billFormat !== "A4" && printSettings.paperWidth !== "80mm"
+                                                        ? 'bg-violet-600 text-white border-violet-600 shadow-md shadow-violet-600/20'
+                                                        : 'bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-violet-400'
+                                                }`}
+                                            >
+                                                <div className="text-xs font-black">2" Thermal Roll</div>
+                                                <div className={`text-[10px] mt-0.5 ${printSettings.billFormat !== "A4" && printSettings.paperWidth !== "80mm" ? 'text-violet-100' : 'text-slate-400'}`}>58mm Receipt Printer</div>
+                                            </button>
+
+                                            <button 
+                                                type="button"
+                                                onClick={() => {
+                                                    setPrintSettings((p: any) => ({ ...p, billFormat: "THERMAL", paperWidth: "80mm" }));
+                                                    kravy.click();
+                                                }}
+                                                className={`p-3 rounded-xl border text-left transition-all ${
+                                                    printSettings.billFormat !== "A4" && printSettings.paperWidth === "80mm"
+                                                        ? 'bg-violet-600 text-white border-violet-600 shadow-md shadow-violet-600/20'
+                                                        : 'bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-violet-400'
+                                                }`}
+                                            >
+                                                <div className="text-xs font-black">3" Thermal Roll</div>
+                                                <div className={`text-[10px] mt-0.5 ${printSettings.billFormat !== "A4" && printSettings.paperWidth === "80mm" ? 'text-violet-100' : 'text-slate-400'}`}>80mm Receipt Printer</div>
+                                            </button>
+
+                                            <button 
+                                                type="button"
+                                                onClick={() => {
+                                                    setPrintSettings((p: any) => ({ ...p, billFormat: "A4", a4InvoiceType: p.a4InvoiceType || "GST_TAX_INVOICE" }));
+                                                    kravy.click();
+                                                }}
+                                                className={`p-3 rounded-xl border text-left transition-all ${
+                                                    printSettings.billFormat === "A4"
+                                                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/20'
+                                                        : 'bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-emerald-400'
+                                                }`}
+                                            >
+                                                <div className="text-xs font-black">A4 Size Invoice</div>
+                                                <div className={`text-[10px] mt-0.5 ${printSettings.billFormat === "A4" ? 'text-emerald-100' : 'text-slate-400'}`}>Full Page Laser/Inkjet</div>
+                                            </button>
+                                        </div>
+
+                                        {/* A4 Sub-template Selection (Option 2) */}
+                                        {printSettings.billFormat === "A4" && (
+                                            <div className="mt-3 pt-3 border-t border-slate-200 dark:border-white/10 space-y-2 animate-in fade-in-0 duration-200">
+                                                <label className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block">
+                                                    Select A4 Invoice Template Style:
+                                                </label>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setPrintSettings((p: any) => ({ ...p, a4InvoiceType: "GST_TAX_INVOICE" }));
+                                                            kravy.click();
+                                                        }}
+                                                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                                                            (printSettings.a4InvoiceType || "GST_TAX_INVOICE") === "GST_TAX_INVOICE"
+                                                                ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-900 dark:text-emerald-100 font-bold"
+                                                                : "bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400"
+                                                        }`}
+                                                    >
+                                                        <div className="text-xs font-black flex items-center justify-between">
+                                                            <span>A4 GST Tax Invoice</span>
+                                                            {(printSettings.a4InvoiceType || "GST_TAX_INVOICE") === "GST_TAX_INVOICE" && <Check size={14} className="text-emerald-600" />}
+                                                        </div>
+                                                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-normal mt-0.5">
+                                                            HSN/SAC, CGST/SGST/IGST breakdown, Tax Summary Table, B2B compliant.
+                                                        </div>
+                                                    </button>
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setPrintSettings((p: any) => ({ ...p, a4InvoiceType: "RETAIL_INVOICE" }));
+                                                            kravy.click();
+                                                        }}
+                                                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                                                            printSettings.a4InvoiceType === "RETAIL_INVOICE"
+                                                                ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-900 dark:text-emerald-100 font-bold"
+                                                                : "bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400"
+                                                        }`}
+                                                    >
+                                                        <div className="text-xs font-black flex items-center justify-between">
+                                                            <span>A4 Retail Invoice</span>
+                                                            {printSettings.a4InvoiceType === "RETAIL_INVOICE" && <Check size={14} className="text-emerald-600" />}
+                                                        </div>
+                                                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-normal mt-0.5">
+                                                            Clean, modern full-page invoice without complex HSN tax summary tables.
+                                                        </div>
+                                                    </button>
+                                                </div>
+
+                                                {/* Editable Terms & Conditions for A4 */}
+                                                <div className="pt-2 space-y-1.5">
+                                                    <label className="text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-wider block">
+                                                        A4 Invoice Terms & Conditions
+                                                    </label>
+                                                    <textarea
+                                                        rows={2}
+                                                        value={printSettings.a4Terms ?? business?.terms ?? "1. Payment is non-refundable. 2. Goods / Services once confirmed cannot be cancelled. 3. All disputes are subject to local jurisdiction only."}
+                                                        onChange={(e) => setPrintSettings((p: any) => ({ ...p, a4Terms: e.target.value }))}
+                                                        placeholder="Enter Terms & Conditions to print at the bottom of A4 invoices..."
+                                                        className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 p-2.5 text-xs text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                                                    />
+                                                </div>
+
+                                                {/* Editable Bank Details & Contact Info for A4 */}
+                                                <div className="pt-2 space-y-2 border-t border-slate-200/70 dark:border-white/10">
+                                                    <label className="text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-wider block">
+                                                        A4 Bank Details & Header Info (Optional)
+                                                    </label>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                        <input
+                                                            type="text"
+                                                            value={printSettings.a4BankName ?? ""}
+                                                            onChange={(e) => setPrintSettings((p: any) => ({ ...p, a4BankName: e.target.value }))}
+                                                            placeholder="Bank Name (e.g. HDFC Bank)"
+                                                            className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={printSettings.a4AccountName ?? ""}
+                                                            onChange={(e) => setPrintSettings((p: any) => ({ ...p, a4AccountName: e.target.value }))}
+                                                            placeholder="Account Holder Name"
+                                                            className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={printSettings.a4AccountNumber ?? ""}
+                                                            onChange={(e) => setPrintSettings((p: any) => ({ ...p, a4AccountNumber: e.target.value }))}
+                                                            placeholder="Account Number"
+                                                            className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={printSettings.a4IfscCode ?? ""}
+                                                            onChange={(e) => setPrintSettings((p: any) => ({ ...p, a4IfscCode: e.target.value }))}
+                                                            placeholder="IFSC Code"
+                                                            className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={printSettings.a4OwnerName ?? ""}
+                                                            onChange={(e) => setPrintSettings((p: any) => ({ ...p, a4OwnerName: e.target.value }))}
+                                                            placeholder="Contact Person Name"
+                                                            className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={printSettings.a4Website ?? ""}
+                                                            onChange={(e) => setPrintSettings((p: any) => ({ ...p, a4Website: e.target.value }))}
+                                                            placeholder="Website URL (e.g. https://...)"
+                                                            className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {printSettings.billFormat !== "A4" && (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {/* Paper Width Toggle */}
+                                        {/* Paper Width Toggle for Thermal */}
                                         <div className="flex flex-col gap-2">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Paper Width</label>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Thermal Roll Width</label>
                                             <div className="grid grid-cols-2 bg-slate-100 dark:bg-white/5 p-1 rounded-xl gap-1">
                                                 <button 
                                                     type="button"
@@ -902,7 +1136,10 @@ export default function PrintingSettings() {
                                                 ))}
                                             </div>
                                         </div>
+                                    </div>
+                                    )}
 
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {/* Thermal Printer Safety & Feed Spacing */}
                                         <div className="flex flex-col gap-2 col-span-1 md:col-span-2 border-t border-slate-100 dark:border-white/5 pt-4 mt-2">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
@@ -1279,10 +1516,19 @@ export default function PrintingSettings() {
                 </div>
 
                 {/* Right: Live Preview */}
-                <div className={`xl:col-span-4 xl:sticky xl:top-24 h-[calc(100vh-220px)] xl:h-[calc(100vh-140px)] w-full relative flex flex-col ${activeTab === 'preview' ? 'flex' : 'hidden xl:flex'}`}>
+                <div className={`${printSettings.billFormat === 'A4' ? 'xl:col-span-6' : 'xl:col-span-4'} xl:sticky xl:top-24 h-[calc(100vh-220px)] xl:h-[calc(100vh-140px)] w-full relative flex flex-col ${activeTab === 'preview' ? 'flex' : 'hidden xl:flex'}`}>
                     
                     {/* Sleek Vertical/Horizontal Floating Controller Dock - Gutter Positioned on Desktop, Floating on Mobile */}
                     <div className="absolute xl:-left-16 xl:right-auto right-4 top-4 xl:top-8 flex xl:flex-col flex-row gap-2.5 z-30 select-none bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-md border border-slate-800 dark:border-zinc-800/80 rounded-[1.25rem] p-2 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                        {/* Full Screen Preview Button */}
+                        <button
+                            type="button"
+                            onClick={() => setFullPreviewOpen(true)}
+                            className="w-9 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-all active:scale-90 outline-none shadow-lg shadow-emerald-600/30"
+                            title="Full Page Preview"
+                        >
+                            <Maximize2 size={14} />
+                        </button>
                         {/* GST / Non-GST Switcher */}
                         <button 
                             onClick={() => setPreviewGst(!previewGst)} 
@@ -1359,7 +1605,7 @@ export default function PrintingSettings() {
                             <div className="w-16 h-1 bg-slate-800 rounded-full border border-slate-700 shadow-inner opacity-60" />
                             
                             <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-[8px] font-black tracking-wider text-slate-400 uppercase">
-                                {printSettings.paperWidth === '80mm' ? '80MM / 3"' : '58MM / 2"'}
+                                {printSettings.billFormat === 'A4' ? 'A4 INVOICE' : (printSettings.paperWidth === '80mm' ? '80MM / 3"' : '58MM / 2"')}
                             </span>
                         </div>
                         
@@ -1372,7 +1618,7 @@ export default function PrintingSettings() {
                             {/* THE PREVIEW WRAPPER */}
                             <div 
                                 className={`flex flex-col w-full transition-all duration-300 relative ${
-                                    printSettings.paperWidth === '80mm' ? 'max-w-[340px]' : 'max-w-[270px]'
+                                    printSettings.billFormat === 'A4' ? 'max-w-[580px]' : (printSettings.paperWidth === '80mm' ? 'max-w-[340px]' : 'max-w-[270px]')
                                 }`}
                             >
                                 {/* Bill Preview with Smooth Transform Scale */}
@@ -1381,31 +1627,46 @@ export default function PrintingSettings() {
                                    
                                    {/* Advanced Receipt Mockup CSS Overrides */}
                                    <style dangerouslySetInnerHTML={{ __html: `
-                                        .hidden-print .receipt, .hidden-print .kot { 
-                                            display: block !important; 
+                                        ${printSettings.billFormat === 'A4' ? `
+                                          .hidden-print .receipt.a4-preview-wrapper, .hidden-print .a4-invoice-sheet {
+                                            display: block !important;
                                             width: 100% !important;
-                                            background-color: #fafbf9 !important;
-                                            color: #111413 !important;
-                                            box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.35), 0 10px 15px -6px rgba(0, 0, 0, 0.25) !important;
-                                            padding: 24px 16px !important;
-                                            margin-bottom: 40px !important;
-                                            position: relative !important;
-                                            border: none !important;
-                                            clip-path: polygon(
-                                              0% 4px, 2% 0px, 4% 4px, 6% 0px, 8% 4px, 10% 0px, 12% 4px, 14% 0px, 16% 4px, 18% 0px, 20% 4px, 22% 0px, 24% 4px, 26% 0px, 28% 4px, 30% 0px, 32% 4px, 34% 0px, 36% 4px, 38% 0px, 40% 4px, 42% 0px, 44% 4px, 46% 0px, 48% 4px, 50% 0px, 52% 4px, 54% 0px, 56% 4px, 58% 0px, 60% 4px, 62% 0px, 64% 4px, 66% 0px, 68% 4px, 70% 0px, 72% 4px, 74% 0px, 76% 4px, 78% 0px, 80% 4px, 82% 0px, 84% 4px, 86% 0px, 88% 4px, 90% 0px, 92% 4px, 94% 0px, 96% 4px, 98% 0px, 100% 4px,
-                                              100% calc(100% - 4px), 98% 100%, 96% calc(100% - 4px), 94% 100%, 92% calc(100% - 4px), 90% 100%, 88% calc(100% - 4px), 86% 100%, 84% calc(100% - 4px), 82% 100%, 80% calc(100% - 4px), 78% 100%, 76% calc(100% - 4px), 74% 100%, 72% calc(100% - 4px), 70% 100%, 68% calc(100% - 4px), 66% 100%, 64% calc(100% - 4px), 62% 100%, 60% calc(100% - 4px), 58% 100%, 56% calc(100% - 4px), 55% 100%, 52% calc(100% - 4px), 50% 100%, 48% calc(100% - 4px), 46% 100%, 44% calc(100% - 4px), 42% 100%, 40% calc(100% - 4px), 38% 100%, 36% calc(100% - 4px), 34% 100%, 32% calc(100% - 4px), 30% 100%, 28% calc(100% - 4px), 26% 100%, 24% calc(100% - 4px), 22% 100%, 20% calc(100% - 4px), 19% 100%, 18% calc(100% - 4px), 16% 100%, 14% calc(100% - 4px), 13% 100%, 12% calc(100% - 4px), 10% 100%, 8% calc(100% - 4px), 6% 100%, 4% calc(100% - 4px), 2% 100%, 0% calc(100% - 4px)
-                                            ) !important;
-                                        }
-                                        .hidden-print .receipt::before, .hidden-print .kot::before {
-                                            content: '';
-                                            position: absolute;
-                                            top: 0;
-                                            left: 0;
-                                            right: 0;
-                                            height: 4px;
-                                            background: linear-gradient(to bottom, rgba(0,0,0,0.03), transparent);
-                                            pointer-events: none;
-                                        }
+                                            max-width: 794px !important;
+                                            background-color: #ffffff !important;
+                                            color: #000000 !important;
+                                            box-shadow: 0 10px 30px rgba(0,0,0,0.2) !important;
+                                            padding: 0 !important;
+                                            margin: 0 auto !important;
+                                            border-radius: 6px !important;
+                                            clip-path: none !important;
+                                          }
+                                        ` : `
+                                          .hidden-print .receipt, .hidden-print .kot { 
+                                              display: block !important; 
+                                              width: 100% !important;
+                                              background-color: #fafbf9 !important;
+                                              color: #111413 !important;
+                                              box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.35), 0 10px 15px -6px rgba(0, 0, 0, 0.25) !important;
+                                              padding: 24px 16px !important;
+                                              margin-bottom: 40px !important;
+                                              position: relative !important;
+                                              border: none !important;
+                                              clip-path: polygon(
+                                                0% 4px, 2% 0px, 4% 4px, 6% 0px, 8% 4px, 10% 0px, 12% 4px, 14% 0px, 16% 4px, 18% 0px, 20% 4px, 22% 0px, 24% 4px, 26% 0px, 28% 4px, 30% 0px, 32% 4px, 34% 0px, 36% 4px, 38% 0px, 40% 4px, 42% 0px, 44% 4px, 46% 0px, 48% 4px, 50% 0px, 52% 4px, 54% 0px, 56% 4px, 58% 0px, 60% 4px, 62% 0px, 64% 4px, 66% 0px, 68% 4px, 70% 0px, 72% 4px, 74% 0px, 76% 4px, 78% 0px, 80% 4px, 82% 0px, 84% 4px, 86% 0px, 88% 4px, 90% 0px, 92% 4px, 94% 0px, 96% 4px, 98% 0px, 100% 4px,
+                                                100% calc(100% - 4px), 98% 100%, 96% calc(100% - 4px), 94% 100%, 92% calc(100% - 4px), 90% 100%, 88% calc(100% - 4px), 86% 100%, 84% calc(100% - 4px), 82% 100%, 80% calc(100% - 4px), 78% 100%, 76% calc(100% - 4px), 74% 100%, 72% calc(100% - 4px), 70% 100%, 68% calc(100% - 4px), 66% 100%, 64% calc(100% - 4px), 62% 100%, 60% calc(100% - 4px), 58% 100%, 56% calc(100% - 4px), 55% 100%, 52% calc(100% - 4px), 50% 100%, 48% calc(100% - 4px), 46% 100%, 44% calc(100% - 4px), 42% 100%, 40% calc(100% - 4px), 38% 100%, 36% calc(100% - 4px), 34% 100%, 32% calc(100% - 4px), 30% 100%, 28% calc(100% - 4px), 26% 100%, 24% calc(100% - 4px), 22% 100%, 20% calc(100% - 4px), 19% 100%, 18% calc(100% - 4px), 16% 100%, 14% calc(100% - 4px), 13% 100%, 12% calc(100% - 4px), 10% 100%, 8% calc(100% - 4px), 6% 100%, 4% calc(100% - 4px), 2% 100%, 0% calc(100% - 4px)
+                                              ) !important;
+                                          }
+                                          .hidden-print .receipt::before, .hidden-print .kot::before {
+                                              content: '';
+                                              position: absolute;
+                                              top: 0;
+                                              left: 0;
+                                              right: 0;
+                                              height: 4px;
+                                              background: linear-gradient(to bottom, rgba(0,0,0,0.03), transparent);
+                                              pointer-events: none;
+                                          }
+                                        `}
                                    `}} />
                                 </div>
                             </div>
@@ -1460,6 +1721,38 @@ export default function PrintingSettings() {
                     )}
                 </motion.button>
             </AnimatePresence>
+
+            {/* Full-Page A4 / Thermal Preview Modal */}
+            {fullPreviewOpen && (
+                <div 
+                    className="fixed inset-0 z-[9999] bg-black/75 backdrop-blur-sm overflow-y-auto py-6 px-3 sm:px-6"
+                    onClick={() => setFullPreviewOpen(false)}
+                >
+                    <div 
+                        className="relative w-full max-w-[840px] mx-auto bg-slate-100 dark:bg-zinc-900 rounded-3xl p-4 sm:p-6 shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-200 dark:border-zinc-800">
+                            <div>
+                                <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+                                    {printSettings.billFormat === 'A4' ? 'Full-Page A4 Invoice Preview' : 'Full Receipt Preview'}
+                                </h3>
+                                <p className="text-xs text-slate-500">Exact layout as printed or exported to PDF</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setFullPreviewOpen(false)}
+                                className="w-9 h-9 rounded-full bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-rose-500 transition-colors"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="flex justify-center">
+                            <PrintTemplates {...(dummyProps as any)} isPreviewMode={true} />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
