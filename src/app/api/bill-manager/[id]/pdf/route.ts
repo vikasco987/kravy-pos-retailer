@@ -453,32 +453,45 @@ export async function GET(
     const pdfBuffer = Buffer.from(pdfBytes);
     console.log(`[PDF API] STEP 7: PDF generated, size: ${(pdfBuffer.length / 1024).toFixed(2)} KB`);
 
-    console.log("[PDF API] STEP 8: Uploading to AWS S3...");
-    const { s3Client } = await import("@/lib/aws-s3");
-    const { Upload } = await import("@aws-sdk/lib-storage");
-    
-    const bucketName = process.env.MY_AWS_BUCKET || "kravy-datastorage";
-    const pdfFilename = `kravy_bills/bill_${bill.billNumber.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`;
-    
-    const parallelUploads3 = new Upload({
-      client: s3Client,
-      params: {
-        Bucket: bucketName,
-        Key: pdfFilename,
-        Body: pdfBuffer,
-        ContentType: "application/pdf",
-      },
-    });
+    let secure_url = "";
+    const hasAwsCreds = Boolean(
+      (process.env.MY_AWS_ACCESS_KEY || process.env.AWS_ACCESS_KEY_ID) &&
+      (process.env.MY_AWS_ACCESS_SECRET || process.env.AWS_SECRET_ACCESS_KEY)
+    );
 
-    const uploadResult = await parallelUploads3.done();
-    const secure_url = uploadResult.Location || `https://${bucketName}.s3.${process.env.MY_AWS_REGION || "ap-south-1"}.amazonaws.com/${pdfFilename}`;
+    if (hasAwsCreds) {
+      console.log("[PDF API] STEP 8: Uploading to AWS S3...");
+      const { s3Client } = await import("@/lib/aws-s3");
+      const { Upload } = await import("@aws-sdk/lib-storage");
+      
+      const bucketName = process.env.MY_AWS_BUCKET || "kravy-datastorage";
+      const pdfFilename = `kravy_bills/bill_${bill.billNumber.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`;
+      
+      const parallelUploads3 = new Upload({
+        client: s3Client,
+        params: {
+          Bucket: bucketName,
+          Key: pdfFilename,
+          Body: pdfBuffer,
+          ContentType: "application/pdf",
+        },
+      });
 
-    if (secure_url) {
+      const uploadResult = await parallelUploads3.done();
+      secure_url = uploadResult.Location || `https://${bucketName}.s3.${process.env.MY_AWS_REGION || "ap-south-1"}.amazonaws.com/${pdfFilename}`;
+
+      if (secure_url) {
         console.log(`[PDF API] STEP 9: AWS S3 upload success: ${secure_url}`);
         await prisma.billManager.update({
-            where: { id: bill.id },
-            data: { pdfUrl: secure_url }
+          where: { id: bill.id },
+          data: { pdfUrl: secure_url }
         });
+      }
+    } else if (searchParams.get("json") === "true") {
+      return NextResponse.json(
+        { error: "AWS S3 credentials are not configured in environment variables (MY_AWS_ACCESS_KEY / MY_AWS_ACCESS_SECRET)." },
+        { status: 500 }
+      );
     }
 
     if (searchParams.get("json") === "true") {
