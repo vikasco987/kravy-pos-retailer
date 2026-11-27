@@ -29,6 +29,7 @@ import { v4 as uuidv4 } from "uuid";
 import { formatCurrency } from "@/lib/currency";
 import { Capacitor } from "@capacitor/core";
 import { getInventorySettings } from "@/lib/inventory-utils";
+import { getBusinessMode } from "@/config/business-mode";
 
 /* ================= TYPES ================= */
 
@@ -1239,26 +1240,28 @@ export default function CheckoutClient() {
     }
   }, [orderModes, orderType, selectedTable]);
 
+  const businessMode = useMemo(() => getBusinessMode((business as any)?.businessType), [(business as any)?.businessType]);
+
   const availableOrderTypes = useMemo(() => {
     const list = [];
     if (orderModes.dining) {
-      list.push({ id: 'DINING' as const, label: 'Dining', icon: <Utensils size={13} />, activeClass: 'bg-indigo-600 shadow-indigo-500/20' });
+      list.push({ id: 'DINING' as const, label: businessMode.terminology.orderTypeDining, icon: <Utensils size={13} />, activeClass: 'bg-indigo-600 shadow-indigo-500/20' });
     }
     if (orderModes.takeaway) {
-      list.push({ id: 'TAKEAWAY' as const, label: 'Takeaway', icon: <ShoppingBag size={13} />, activeClass: 'bg-amber-600 shadow-amber-500/20' });
+      list.push({ id: 'TAKEAWAY' as const, label: businessMode.terminology.orderTypeTakeaway, icon: <ShoppingBag size={13} />, activeClass: 'bg-amber-600 shadow-amber-500/20' });
     }
     if (orderModes.delivery) {
-      list.push({ id: 'DELIVERY' as const, label: 'Delivery', icon: <Truck size={13} />, activeClass: 'bg-rose-600 shadow-rose-500/20' });
+      list.push({ id: 'DELIVERY' as const, label: businessMode.terminology.orderTypeDelivery, icon: <Truck size={13} />, activeClass: 'bg-rose-600 shadow-rose-500/20' });
     }
     if (list.length === 0) {
       list.push(
-        { id: 'DINING' as const, label: 'Dining', icon: <Utensils size={13} />, activeClass: 'bg-indigo-600 shadow-indigo-500/20' },
-        { id: 'TAKEAWAY' as const, label: 'Takeaway', icon: <ShoppingBag size={13} />, activeClass: 'bg-amber-600 shadow-amber-500/20' },
-        { id: 'DELIVERY' as const, label: 'Delivery', icon: <Truck size={13} />, activeClass: 'bg-rose-600 shadow-rose-500/20' }
+        { id: 'DINING' as const, label: businessMode.terminology.orderTypeDining, icon: <Utensils size={13} />, activeClass: 'bg-indigo-600 shadow-indigo-500/20' },
+        { id: 'TAKEAWAY' as const, label: businessMode.terminology.orderTypeTakeaway, icon: <ShoppingBag size={13} />, activeClass: 'bg-amber-600 shadow-amber-500/20' },
+        { id: 'DELIVERY' as const, label: businessMode.terminology.orderTypeDelivery, icon: <Truck size={13} />, activeClass: 'bg-rose-600 shadow-rose-500/20' }
       );
     }
     return list;
-  }, [orderModes]);
+  }, [orderModes, businessMode]);
 
   const [showTableSelect, setShowTableSelect] = useState(false);
   const [manualDeliveryCharge, setManualDeliveryCharge] = useState<number>(0);
