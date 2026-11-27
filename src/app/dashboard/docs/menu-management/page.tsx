@@ -257,7 +257,7 @@ export default function MenuManagementDocs() {
            <div className="max-w-xl mx-auto px-6">
               <h2 className="text-4xl font-black mb-6 leading-tight">Menu Setup Karne Ke <br/> Liye Taiyaar?</h2>
               <p className="text-orange-100 text-lg font-medium mb-12 opactiy-80">
-                 Apne restaurant ka digital face ab aapke haath mein hai. Chaliye shuru karte hain!
+                 Apne business ka digital face ab aapke haath mein hai. Chaliye shuru karte hain!
               </p>
               <div className="flex flex-wrap justify-center gap-4">
                  <button 

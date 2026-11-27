@@ -97,7 +97,7 @@ export default function IncomingOrderModal() {
 
     const handleConfirmReject = async () => {
         const finalReason = selectedReason === "Other" 
-            ? (customReason.trim() || "Rejected by restaurant") 
+            ? (customReason.trim() || "Rejected by the business")
             : (customReason.trim() ? `${selectedReason} - ${customReason.trim()}` : selectedReason);
 
         setIsRejecting(true);

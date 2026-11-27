@@ -3734,14 +3734,14 @@ export default function MobileEditMenuView({ asUserId, onSwitchToDesktop }: Mobi
                 </button>
               </div>
 
-              {/* Food Type (Restaurant Mode) Enable / Disable Switch */}
+              {/* Food Type (Business Mode) Enable / Disable Switch */}
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
                 <div>
                   <h4 className="text-xs font-black text-slate-900 dark:text-white">
-                    Food Type (Restaurant)
+                    Food Type (Business)
                   </h4>
                   <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-                    Show Veg, Egg & Non-Veg tags (Turn off for retail / non-restaurant)
+                    Show Veg, Egg & Non-Veg tags (Turn off for retail / non-food businesses)
                   </p>
                 </div>
                 <button

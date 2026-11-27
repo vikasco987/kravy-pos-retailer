@@ -387,7 +387,7 @@ export default function StaffManagementPage() {
             Manage Staff Access
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium mt-1">
-            Control what your restaurant staff can see and do.
+            Control what your business staff can see and do.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
@@ -502,7 +502,7 @@ export default function StaffManagementPage() {
                   className="sm:col-span-2 bg-slate-900 dark:bg-white dark:text-slate-900 text-white font-bold py-2.5 sm:py-3 rounded-xl hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-xs sm:text-sm shadow-md"
                 >
                   {isAdding ? <Loader2 className="animate-spin" size={16} /> : <Check size={16} />}
-                  Add Staff to Restaurant
+                  Add Staff to Business
                 </button>
               </form>
             </div>

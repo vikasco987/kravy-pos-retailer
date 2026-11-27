@@ -83,7 +83,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         return { id: offlineRef, offlineRef };
     }, [refreshPendingCount]);
 
-    // Save an offline restaurant table order / KOT locally to IndexedDB
+    // Save an offline business table order / KOT locally to IndexedDB
     const saveOfflineRestaurantOrder = useCallback(async (payload: any, options?: { tableId?: string | null; parentRef?: string | null }): Promise<{ id: string; offlineRef: string; reservedOrderNumber: string; offlineKotRef: string }> => {
         // Durably allocate next sequential offline KOT reference (OFF-KOT-0001, OFF-KOT-0002, ...)
         const { sequence: kotSeq, reference: offlineKotRef } = await offlineStorage.getNextOfflineKotSequence();
@@ -102,7 +102,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
             offlineKotRef,
             offlineKotSequence: kotSeq,
             isOffline: true,
-            auditNote: `OFFLINE RESTAURANT ORDER (KOT: ${offlineKotRef}, Ref: ${offlineRef})`
+            auditNote: `OFFLINE BUSINESS ORDER (KOT: ${offlineKotRef}, Ref: ${offlineRef})`
         };
 
         await offlineStorage.saveOfflineOrder({
@@ -118,7 +118,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         return { id: offlineRef, offlineRef, reservedOrderNumber, offlineKotRef };
     }, [refreshPendingCount]);
 
-    // Save an offline restaurant add-on KOT (QT2, QT3, etc.)
+    // Save an offline business add-on KOT (QT2, QT3, etc.)
     const saveOfflineOrderAddon = useCallback(async (
         payload: any, 
         options: { tableId?: string | null; parentRef?: string | null; parentOrderId?: string | null; existingKotCount?: number }

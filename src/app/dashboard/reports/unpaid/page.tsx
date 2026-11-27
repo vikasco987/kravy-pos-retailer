@@ -37,7 +37,7 @@ export default async function UnpaidDuesReportPage() {
     where: { userId: effectiveId },
     orderBy: { createdAt: 'asc' }
   });
-  const businessName = profile?.businessName || "Your Restaurant";
+  const businessName = profile?.businessName || "Your Business";
 
   // Fetch all customers with negative wallet balance (Udhar)
   // Since wallet updates don't easily map to the same `createdAt` filter as bills,

@@ -93,7 +93,7 @@ export default function POSWorkflowDocs() {
             </motion.div>
             
             <h1 className="text-6xl md:text-8xl font-black text-slate-900 tracking-tighter leading-[0.9]">
-              Restaurant Management <br/> 
+              Business Management <br/>
               <span className="text-orange-600 italic">Redefined.</span>
             </h1>
             
@@ -150,7 +150,7 @@ export default function POSWorkflowDocs() {
                  <div className="w-12 h-12 rounded-2xl bg-orange-600 flex items-center justify-center text-white shadow-lg font-black italic">1</div>
                  <h2 className="text-5xl font-black text-slate-900 leading-tight">Master <span className="text-orange-600 underline decoration-orange-200 underline-offset-8">POS Terminal</span></h2>
                  <p className="text-lg text-slate-600 font-medium leading-relaxed">
-                   Aapka poora restaurant ab ek single terminal par hai. Left side mein tables aur right side mein live order details.
+                   Aapke business ka kaam ab ek single terminal par hai. Left side mein tables aur right side mein live order details.
                  </p>
                  <div className="space-y-4">
                     {[

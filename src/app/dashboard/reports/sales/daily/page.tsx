@@ -141,7 +141,7 @@ export default async function DailySalesReportPage({
 
   // Profile data
   const profile = await prisma.businessProfile.findFirst({ where: { userId: effectiveId }, orderBy: { createdAt: 'asc' } });
-  const businessName = profile?.businessName || "Your Restaurant";
+  const businessName = profile?.businessName || "Your Business";
 
   // Build where clause
   const whereClause: any = {

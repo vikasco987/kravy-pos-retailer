@@ -1132,7 +1132,7 @@ export default function TablesPage() {
               <div>
                 <h3 className="font-black text-[var(--kravy-text-primary)] uppercase tracking-wider text-sm flex items-center gap-2">
                   <Settings size={16} className="text-[var(--kravy-brand)]" />
-                  Manage Restaurant Floors
+                  Manage Tables & Service Areas
                 </h3>
                 <p className="text-[11px] text-[var(--kravy-text-muted)] font-medium mt-0.5">
                   Organize tables by floor (e.g. Floor 1, Ground Floor, Rooftop)

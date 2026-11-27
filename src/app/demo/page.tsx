@@ -92,7 +92,7 @@ export default function DemoPage() {
                     transition={{ delay: 0.1 }}
                     className="text-5xl md:text-7xl font-black tracking-tighter leading-[0.9] mb-6"
                 >
-                    Restaurant ka <br/>
+                    Har business ka <br/>
                     <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-rose-500">
                         Smart Digital Brain
                     </span>
@@ -492,7 +492,7 @@ export default function DemoPage() {
             <section className="bg-gradient-to-t from-orange-600/20 to-transparent pt-32 pb-20 px-6 text-center border-t border-slate-900">
                 <h2 className="text-4xl md:text-6xl font-black tracking-tighter mb-8 leading-tight">
                     Ready to digitize your <br/>
-                    <span className="text-orange-500">restaurant operations?</span>
+                    <span className="text-orange-500">business operations?</span>
                 </h2>
                 <div className="flex flex-wrap justify-center gap-6">
                     <button className="px-10 py-5 bg-orange-600 text-white rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-2xl shadow-orange-600/30 hover:scale-105 active:scale-95 transition-all flex items-center gap-3">
@@ -503,7 +503,7 @@ export default function DemoPage() {
                         Schedule a Demo
                     </button>
                 </div>
-                <p className="mt-12 text-slate-500 text-sm font-bold uppercase tracking-[0.3em]">Trusted by 500+ restaurants pan-india</p>
+                <p className="mt-12 text-slate-500 text-sm font-bold uppercase tracking-[0.3em]">Trusted by 500+ businesses pan-india</p>
             </section>
         </div>
     );

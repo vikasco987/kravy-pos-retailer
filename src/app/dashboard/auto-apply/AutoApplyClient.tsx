@@ -441,7 +441,7 @@ export default function AutoApplyClient() {
 
     const deployMerchant = async () => {
         if (!email || !phone || !password || !restName) {
-            alert("Please fill in all mandatory fields: Email, Phone, Password, and Restaurant Name.");
+            alert("Please fill in all mandatory fields: Email, Phone, Password, and Business Name.");
             return;
         }
 
@@ -605,7 +605,7 @@ export default function AutoApplyClient() {
                     </div>
                 </div>
 
-                {/* Section 2: Restaurant Details */}
+                {/* Section 2: Business Details */}
                 <div className="bg-white dark:bg-[#1A1A2E] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 space-y-5">
                     <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-4">
                         <div className="flex items-center gap-3">
@@ -614,7 +614,7 @@ export default function AutoApplyClient() {
                             </div>
                             <div>
                                 <h3 className="text-base font-bold text-gray-900 dark:text-white">Business Info</h3>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">Restaurant details</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Business details</p>
                             </div>
                         </div>
                         <input type="file" ref={businessFileInputRef} className="hidden" accept="image/*,.pdf" onChange={handleBusinessFileUpload} />
@@ -625,8 +625,8 @@ export default function AutoApplyClient() {
                     </div>
                     <div className="space-y-4">
                         <div>
-                            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1.5">Restaurant Name *</label>
-                            <input type="text" value={restName} onChange={e => setRestName(e.target.value)} placeholder="Restaurant Name" className="w-full bg-gray-50 dark:bg-[#0F0F23] border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none transition-all" />
+                            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1.5">Business Name *</label>
+                            <input type="text" value={restName} onChange={e => setRestName(e.target.value)} placeholder="Business Name" className="w-full bg-gray-50 dark:bg-[#0F0F23] border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none transition-all" />
                         </div>
                         <div>
                             <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1.5">Business Address</label>

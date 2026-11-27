@@ -397,7 +397,7 @@ export default function OfferCardGenerator() {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label className="text-xs font-bold text-white/60 uppercase tracking-wider">Restaurant Name</Label>
+                                <Label className="text-xs font-bold text-white/60 uppercase tracking-wider">Business Name</Label>
                                 <Input 
                                     value={restaurantName}
                                     onChange={(e) => setRestaurantName(e.target.value)}

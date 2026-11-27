@@ -28,7 +28,7 @@ const plans = [
       name: "1 Year Plan",
       price: "6,000",
       originalPrice: "12,000",
-      description: "Perfect for restaurants and small businesses.",
+      description: "Ideal for businesses of every size.",
       features: [
         "Free Thermal Printer + 5 Rolls",
         "Unlimited invoices",
@@ -61,7 +61,7 @@ const plans = [
       name: "3 Year Plan",
       price: "9,500",
       originalPrice: "20,000",
-      description: "Maximum savings for long-term businesses.",
+      description: "Maximum savings for long-term use.",
       features: [
         "Free Thermal Printer + 5 Rolls",
         "Everything in 2 Year plan",

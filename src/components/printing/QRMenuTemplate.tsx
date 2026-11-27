@@ -322,7 +322,7 @@ const QRMenuTemplate: React.FC<QRMenuTemplateProps> = ({ isOpen, onClose, busine
 
                         <div className="space-y-6 flex-1">
                             <div>
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Restaurant Name</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Business Name</label>
                                 <input 
                                     type="text" 
                                     value={customName}

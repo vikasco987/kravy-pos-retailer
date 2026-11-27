@@ -28,7 +28,7 @@ export default function CustomerDataSettings() {
         isOnline: true,
         openingTime: "00:00",
         closingTime: "23:59",
-        offlineMessage: "Restaurant is currently closed or not accepting orders.",
+        offlineMessage: "Orders are currently unavailable. Please try again later.",
         servedStatusLabel: "SERVED",
         qrDeliveryChargeEnabled: false,
         qrDeliveryChargeAmount: 0,
@@ -55,7 +55,7 @@ export default function CustomerDataSettings() {
                 isOnline: data.isOnline ?? true,
                 openingTime: data.openingTime ?? "00:00",
                 closingTime: data.closingTime ?? "23:59",
-                offlineMessage: data.offlineMessage ?? "Restaurant is currently closed or not accepting orders.",
+                offlineMessage: data.offlineMessage ?? "Orders are currently unavailable. Please try again later.",
                 servedStatusLabel: data.servedStatusLabel ?? "SERVED",
                 qrDeliveryChargeEnabled: data.qrDeliveryChargeEnabled ?? false,
                 qrDeliveryChargeAmount: data.qrDeliveryChargeAmount ?? 0,
@@ -194,7 +194,7 @@ export default function CustomerDataSettings() {
                 <div className="space-y-1">
                     <p className="text-sm font-bold text-slate-900 dark:text-white">Why configure this?</p>
                     <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-mono">
-                        Har restaurant ki zaroorat alag hoti hai. Agar aap chahte hain ki orders se pehle customers apna <b>Address</b> bhi dein, to niche toggles ka istemal karein. Mandatory karne pe customer bina detail bhare order nahi kar payega.
+                        Har business ki zaroorat alag hoti hai. Agar aap chahte hain ki orders se pehle customers apna <b>Address</b> bhi dein, to niche toggles ka istemal karein. Mandatory karne pe customer bina detail bhare order nahi kar payega.
                     </p>
                 </div>
             </div>
@@ -205,7 +205,7 @@ export default function CustomerDataSettings() {
                 <FieldOption icon={MapPin} label="Customer Address" collectKey="collectCustomerAddress" requireKey="requireCustomerAddress" />
             </div>
 
-            {/* ✅ RESTAURANT TIMING & ONLINE STATUS */}
+            {/* ✅ BUSINESS TIMING & ONLINE STATUS */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 md:p-8 space-y-6 sm:space-y-8 shadow-sm">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5 sm:pb-6">
                     <div className="flex items-center gap-3 sm:gap-4">
@@ -263,7 +263,7 @@ export default function CustomerDataSettings() {
                             value={settings.offlineMessage}
                             onChange={(e) => setSettings(prev => ({ ...prev, offlineMessage: e.target.value }))}
                             rows={4}
-                            placeholder="Restaurant is closed..."
+                            placeholder="Message shown when orders are unavailable"
                             className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm text-slate-700 focus:border-orange-500/50 outline-none transition-all resize-none"
                         />
                         <p className="text-[10px] text-slate-400 italic">Visible to customers when ordering is disabled.</p>

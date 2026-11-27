@@ -296,7 +296,7 @@ export async function POST(req: NextRequest) {
                             userId: effectiveId,
                             lastTokenNumber: nextToken,
                             lastTokenDate: new Date(),
-                            businessName: "My Restaurant",
+                            businessName: "My Business",
                             contactPersonEmail: effectiveId.includes("user_") ? "" : effectiveId // Fallback
                         }
                     });

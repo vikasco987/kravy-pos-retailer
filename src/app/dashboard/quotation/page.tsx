@@ -64,7 +64,7 @@ export default function QuotationAiPage() {
 
   const [data, setData] = useState<QuotationData>({
     customerName: "Karan Singh",
-    shopName: "Royal Spice Restaurant",
+    shopName: "Royal Spice Business",
     phoneNumber: "9876543210",
     date: todayDate,
     validUntil: nextWeekDate,
@@ -192,7 +192,7 @@ export default function QuotationAiPage() {
     const text = `📄 *KRAVY BILLING SOLUTIONS QUOTATION*
 
 👤 *Customer:* ${data.customerName}
-🏪 *Shop/Restaurant:* ${data.shopName || "N/A"}
+🏪 *Shop/Business:* ${data.shopName || "N/A"}
 📅 *Date:* ${data.date} (Valid till ${data.validUntil})
 
 📦 *Package Details:*
@@ -414,7 +414,7 @@ For any queries, please contact Kravy Billing Solutions.
                 </div>
 
                 <div>
-                  <label className="text-[0.7rem] font-bold text-slate-400 block mb-1">Shop / Restaurant Name</label>
+                  <label className="text-[0.7rem] font-bold text-slate-400 block mb-1">Shop / Business Name</label>
                   <input
                     type="text"
                     value={data.shopName}

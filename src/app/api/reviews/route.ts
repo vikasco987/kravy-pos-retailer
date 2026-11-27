@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
         }
 
         if (clerkUserId) {
-            // Get all reviews for a restaurant
+            // Get all reviews for a business
             const reviews = await prisma.review.findMany({
                 where: { clerkUserId },
                 include: { 

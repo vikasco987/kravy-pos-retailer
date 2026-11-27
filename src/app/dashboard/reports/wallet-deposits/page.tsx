@@ -34,7 +34,7 @@ export default async function WalletDepositsReportPage({
     where: { userId: effectiveId },
     orderBy: { createdAt: 'asc' }
   });
-  const businessName = profile?.businessName || "Your Restaurant";
+  const businessName = profile?.businessName || "Your Business";
 
   // 2. Fetch all parties (customers) created by this merchant
   const parties = await prisma.party.findMany({

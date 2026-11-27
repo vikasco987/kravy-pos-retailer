@@ -161,7 +161,7 @@ export default function MenuPdfGeneratorPage() {
 
       const html2pdf = (await import("html2pdf.js")).default;
       
-      const fileName = `${(profile?.businessName || "Restaurant").replace(/[^a-zA-Z0-9]/g, "_")}_Web_Menu.pdf`;
+      const fileName = `${(profile?.businessName || "Business").replace(/[^a-zA-Z0-9]/g, "_")}_Web_Menu.pdf`;
       
       const opt = {
         margin: [5, 5, 5, 5],
@@ -220,7 +220,7 @@ export default function MenuPdfGeneratorPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${(profile?.businessName || "Restaurant").replace(/[^a-zA-Z0-9]/g, "_")}_Web_Menu.html`;
+      a.download = `${(profile?.businessName || "Business").replace(/[^a-zA-Z0-9]/g, "_")}_Web_Menu.html`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -385,11 +385,11 @@ export default function MenuPdfGeneratorPage() {
           {template === "web_replica" ? (
             /* 📱 EXACT WEB MENU REPLICA (Matches Live QR Menu /menu/[clerkId]) */
             <div className="w-full bg-[#f4f4f4]">
-              {/* RESTAURANT INFO HEADER */}
+              {/* BUSINESS INFO HEADER */}
               <div className="bg-white p-5 border-b border-[#EBEBEB] shadow-sm flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <h1 className="text-2xl font-black text-gray-900 tracking-tight leading-none mb-2">
-                    {profile?.businessName || "Restaurant Name"}
+                    {profile?.businessName || "Business Name"}
                   </h1>
                   {profile?.businessTagLine && (
                     <p className="text-xs text-gray-500 font-semibold mb-3">
@@ -529,7 +529,7 @@ export default function MenuPdfGeneratorPage() {
                   <div className="w-24 h-24 mx-auto mb-4 relative rounded-full overflow-hidden border-2 shadow-xl border-amber-500/40">
                     <img
                       src={profile.logoUrl || profile.profileImageUrl}
-                      alt={profile.businessName || "Restaurant"}
+                      alt={profile.businessName || "Business"}
                       crossOrigin="anonymous"
                       className="w-full h-full object-cover"
                       onError={(e) => {
@@ -556,7 +556,7 @@ export default function MenuPdfGeneratorPage() {
                     ? "font-serif text-[#3c2a21]"
                     : "text-slate-900"
                 }`}>
-                  {profile?.businessName || "Restaurant Menu"}
+                  {profile?.businessName || "Menu & Catalog"}
                 </h1>
 
                 {profile?.businessTagLine && (

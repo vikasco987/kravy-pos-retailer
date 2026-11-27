@@ -85,7 +85,7 @@ function QRMenuContent() {
 
     useEffect(() => {
         if (selectedPaymentMethod === "UPI" && profile?.upi) {
-            QRCode.toDataURL(`upi://pay?pa=${profile.upi}&pn=${encodeURIComponent(profile.businessName || 'Restaurant')}&cu=INR`)
+            QRCode.toDataURL(`upi://pay?pa=${profile.upi}&pn=${encodeURIComponent(profile.businessName || 'Business')}&cu=INR`)
                 .then(url => setQrUrl(url))
                 .catch(err => console.error(err));
         }
@@ -387,7 +387,7 @@ function QRMenuContent() {
                             )}
                             <div>
                                 <h1 className="text-xl font-bold text-gray-900">
-                                    {profile?.businessName || "Restaurant"}
+                                    {profile?.businessName || "Business"}
                                 </h1>
                                 {profile?.businessTagLine && (
                                     <p className="text-sm text-gray-600">{profile.businessTagLine}</p>
@@ -452,7 +452,7 @@ function QRMenuContent() {
 
                                     <h2 className="text-3xl font-black text-gray-900 mb-3 tracking-tight">Currently Closed</h2>
                                     <p className="text-gray-600 mb-8 leading-relaxed font-medium">
-                                        {profile?.offlineMessage || "Restaurant is currently closed or not accepting orders."}
+                                        {profile?.offlineMessage || "Business is currently closed or not accepting orders."}
                                     </p>
 
                                     <div className="w-full space-y-3">

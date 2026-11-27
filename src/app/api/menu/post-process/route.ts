@@ -192,7 +192,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            restaurantName: parsedMenu.restaurantName || "AI Scraped Restaurant",
+            restaurantName: parsedMenu.restaurantName || "AI Scraped Business",
             address: parsedMenu.address || "Delhi NCR",
             timings: parsedMenu.timings || "11:00 AM - 11:00 PM",
             phone: parsedMenu.phone || "9999999999",

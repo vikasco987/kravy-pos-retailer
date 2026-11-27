@@ -51,7 +51,7 @@ export default function WhatsAppTemplatesPage() {
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("delivery_confirmation_1");
   const [autoSendOnSettle, setAutoSendOnSettle] = useState<boolean>(true);
-  const [businessName, setBusinessName] = useState<string>("My Restaurant");
+  const [businessName, setBusinessName] = useState<string>("My Business");
   const [activePreviewId, setActivePreviewId] = useState<string>("delivery_confirmation_1");
 
   useEffect(() => {
@@ -388,7 +388,7 @@ export default function WhatsAppTemplatesPage() {
                   {activeTemplate.header && (
                     <div className="font-black text-[13px] text-slate-900 mb-2 pb-1.5 border-b border-slate-100 flex items-center justify-between">
                       <span>
-                        {activeTemplate.header.replace("{{Restaurant Name}}", businessName)}
+                        {activeTemplate.header.replace("{{Restaurant Name}}", businessName).replace("{{Business Name}}", businessName)}
                       </span>
                     </div>
                   )}

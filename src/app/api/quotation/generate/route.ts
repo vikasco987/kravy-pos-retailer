@@ -29,7 +29,7 @@ Do NOT include any markdown code blocks (like \`\`\`json) or extra text, JUST re
 Format Required:
 {
   "customerName": "Extracted name (default to 'Customer')",
-  "shopName": "Extracted shop or restaurant name (default to '')",
+  "shopName": "Extracted shop or business name (default to '')",
   "phoneNumber": "Extracted phone number (default to '')",
   "date": "Extracted invoice date. If not mentioned, default to '${todayDate}'",
   "validUntil": "Validity date which defaults to '${nextWeekDate}' unless specified otherwise",

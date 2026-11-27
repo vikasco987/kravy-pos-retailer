@@ -70,7 +70,7 @@ interface Props {
   dateLabel: string;
 }
 
-// Display hours: 8 AM to 11 PM (16 active restaurant hours)
+// Display hours: 8 AM to 11 PM (16 active business hours)
 const DISPLAY_HOURS = Array.from({ length: 16 }, (_, i) => i + 8); // 8, 9, ..., 23
 
 // Reorder day names so week starts on Monday: Mon, Tue, Wed, Thu, Fri, Sat, Sun

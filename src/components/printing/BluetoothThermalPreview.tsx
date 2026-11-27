@@ -259,7 +259,7 @@ export default function BluetoothThermalPreview({
 
             {/* Business Name with Smart Auto-Fit & Balanced Multi-Line Wrap */}
             {settings.showBusinessName !== false && (() => {
-              const rawBName = business?.businessName || business?.name || "KRAVY RESTAURANT";
+              const rawBName = business?.businessName || business?.name || "KRAVY BUSINESS";
               const paperW = is80 ? "80mm" : "58mm";
               const formattedLines = formatBusinessName(rawBName, paperW, "double_h");
 

@@ -117,7 +117,7 @@ export default function Page() {
           <Card className="p-6 flex items-center justify-between rounded-3xl bg-[var(--kravy-surface)] border-[var(--kravy-border)]">
             <div>
               <h3 className="font-bold text-lg">Multi-Business Profiles</h3>
-              <p className="text-sm text-slate-500">Manage multiple restaurants from a single account.</p>
+              <p className="text-sm text-slate-500">Manage multiple businesses from a single account.</p>
             </div>
             <Switch checked={enableMultipleProfiles} onCheckedChange={toggleMultipleProfiles} />
           </Card>
@@ -141,7 +141,7 @@ export default function Page() {
         <Card className="p-4 sm:p-6 flex items-center justify-between rounded-2xl sm:rounded-3xl bg-[var(--kravy-surface)] border-[var(--kravy-border)] shadow-sm gap-3">
           <div className="min-w-0">
             <h3 className="font-bold text-base sm:text-lg truncate">Multi-Business Profiles</h3>
-            <p className="text-xs sm:text-sm text-slate-500">Manage multiple restaurants from a single account.</p>
+            <p className="text-xs sm:text-sm text-slate-500">Manage multiple businesses from a single account.</p>
           </div>
           <Switch checked={enableMultipleProfiles} onCheckedChange={toggleMultipleProfiles} className="shrink-0" />
         </Card>
@@ -169,7 +169,7 @@ export default function Page() {
       <Card className="p-4 sm:p-6 flex items-center justify-between rounded-2xl sm:rounded-3xl bg-[var(--kravy-surface)] border-[var(--kravy-border)] shadow-sm gap-3">
         <div className="min-w-0">
           <h3 className="font-bold text-base sm:text-lg truncate">Multi-Business Profiles</h3>
-          <p className="text-xs sm:text-sm text-slate-500">Manage multiple restaurants from a single account.</p>
+          <p className="text-xs sm:text-sm text-slate-500">Manage multiple businesses from a single account.</p>
         </div>
         <Switch checked={enableMultipleProfiles} onCheckedChange={toggleMultipleProfiles} className="shrink-0" />
       </Card>

@@ -18,7 +18,7 @@ export const getOTPEmailTemplate = (name: string, otp: string, type: 'Verificati
               <tr>
                 <td style="padding: 40px 40px 20px 40px; text-align: center; border-bottom: 1px solid #f3f4f6; background: linear-gradient(to right, #ecfdf5, #f0fdfa);">
                   <h1 style="margin: 0; color: #10b981; font-size: 26px; font-weight: 900; letter-spacing: -0.5px; text-transform: uppercase;">Kravy POS</h1>
-                  <p style="margin: 5px 0 0 0; color: #6b7280; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;">Restaurant Management</p>
+                  <p style="margin: 5px 0 0 0; color: #6b7280; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;">Business Management</p>
                 </td>
               </tr>
 
@@ -130,7 +130,7 @@ export const getWelcomeEmailTemplate = (name: string, details: { phone: string, 
               <tr>
                 <td style="padding: 40px 40px 30px 40px; text-align: center; background: linear-gradient(135deg, #10b981, #059669);">
                   <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 900; letter-spacing: -0.5px; text-transform: uppercase;">Kravy POS</h1>
-                  <p style="margin: 5px 0 25px 0; color: #d1fae5; font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;">Restaurant Management</p>
+                  <p style="margin: 5px 0 25px 0; color: #d1fae5; font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;">Business Management</p>
                   
                   <div style="display: inline-block; width: 64px; height: 64px; background-color: #ffffff; border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.1); line-height: 64px; margin-bottom: 20px;">
                     <span style="color: #10b981; font-size: 32px; font-weight: bold;">✓</span>

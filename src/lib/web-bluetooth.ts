@@ -2546,11 +2546,11 @@ export async function printTokenTicketData(ticketData: {
             // Divider
             const divider = "-".repeat(WIDTH) + "\n";
 
-            // Header Section: Restaurant Name
+            // Header Section: Business Name
             dataChunks.push(ALIGN_CENTER);
             dataChunks.push(divider ? encoder.encode(divider) : LINE_FEED);
 
-            const bName = ticketData.business?.businessName || ticketData.business?.name || "KRAVY RESTAURANT";
+            const bName = ticketData.business?.businessName || ticketData.business?.name || "KRAVY BUSINESS";
             dataChunks.push(TEXT_DOUBLE_H);
             dataChunks.push(BOLD_ON);
             dataChunks.push(encoder.encode(bName + "\n"));

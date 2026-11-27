@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
       billId: bill.id,
       invoiceNo: bill.billNumber,
       date: new Date(bill.createdAt).toLocaleString("en-IN"),
-      restaurantName: business?.businessName || "Restaurant",
+      restaurantName: business?.businessName || "Business",
       restaurantAddress: business?.businessAddress || "",
       gstin: business?.gstNumber || "",
       customerPhone,

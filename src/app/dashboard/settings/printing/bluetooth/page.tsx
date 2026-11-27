@@ -633,7 +633,7 @@ export default function BluetoothPrintingSettingsPage() {
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <SettingToggle icon={ImageIcon} label="Store Logo" sKey="showLogo" desc="Print monochrome thermal logo" color="bg-blue-600" />
-                                    <SettingToggle icon={Type} label="Business Name" sKey="showBusinessName" desc="Restaurant/Shop title" color="bg-blue-600" />
+                                    <SettingToggle icon={Type} label="Business Name" sKey="showBusinessName" desc="Business/Shop title" color="bg-blue-600" />
                                     <SettingToggle icon={MessageSquare} label="Tagline" sKey="showTagline" desc="Sub-heading or slogan" color="bg-blue-600" />
                                     <SettingToggle icon={MapPin} label="Full Address" sKey="showAddress" desc="City, state, and pin code" color="bg-blue-600" />
                                     <SettingToggle icon={Phone} label="Contact Phone" sKey="showContact" desc="Store contact phone number" color="bg-blue-600" />
@@ -690,7 +690,7 @@ export default function BluetoothPrintingSettingsPage() {
                                     <SettingToggle icon={Percent} label="Discount" sKey="showDiscount" desc="Applied coupon / flat off" color="bg-purple-600" />
                                     <SettingToggle icon={Percent} label="Delivery Charge" sKey="showDeliveryCharge" desc="Home delivery fee" color="bg-purple-600" />
                                     <SettingToggle icon={Percent} label="Packaging Charge" sKey="showPackagingCharge" desc="Takeaway packing fee" color="bg-purple-600" />
-                                    <SettingToggle icon={Percent} label="Service Charge" sKey="showServiceCharge" desc="Restaurant service charge" color="bg-purple-600" />
+                                    <SettingToggle icon={Percent} label="Service Charge" sKey="showServiceCharge" desc="Service charge configured for your business" color="bg-purple-600" />
                                     <SettingToggle icon={Percent} label="GST Tax Breakup" sKey="showTaxBreakup" desc="CGST, SGST, IGST breakdown" color="bg-purple-600" />
                                     <SettingToggle icon={Zap} label="Grand Total (Highlight)" sKey="showGrandTotal" desc="Bold final amount" color="bg-purple-600" />
                                     <SettingToggle icon={Type} label="Amount in Words" sKey="showAmountInWords" desc="Spelled out rupees" color="bg-purple-600" />
@@ -1008,7 +1008,7 @@ export default function BluetoothPrintingSettingsPage() {
                                             </span>
                                             {settings.paperWidth === "80mm" && <Check size={16} className="text-blue-600" />}
                                         </div>
-                                        <p className="text-[11px] text-slate-400">Wider receipt format for restaurants & counters.</p>
+                                        <p className="text-[11px] text-slate-400">Wider receipt format for businesses & counters.</p>
                                     </button>
                                 </div>
                             </div>

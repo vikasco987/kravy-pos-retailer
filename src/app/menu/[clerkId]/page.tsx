@@ -1192,7 +1192,7 @@ function PublicMenu() {
                                 ref={searchInputRef}
                                 value={searchQ}
                                 onChange={(e) => setSearchQ(e.target.value)}
-                                placeholder={`Search in ${profile?.businessName || "Restaurant"}`}
+                                placeholder={`Search in ${profile?.businessName || "Business"}`}
                                 className="bg-transparent text-[0.92rem] w-full outline-none font-[600] text-gray-800 placeholder:text-gray-400"
                             />
                         </div>
@@ -1267,10 +1267,10 @@ function PublicMenu() {
                         <motion.div key="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                             <ActiveOrderBanner tableId={tableId} clerkId={clerkId} />
 
-                            {/* RESTAURANT HERO */}
+                            {/* BUSINESS HERO */}
                             <div className="bg-white mb-2">
                                 <div className="relative overflow-hidden h-[180px]">
-                                    <Image src={profile?.profileImageUrl || "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&q=80"} alt="Restaurant" fill className="object-cover" />
+                                    <Image src={profile?.profileImageUrl || "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&q=80"} alt="Business" fill className="object-cover" />
                                     <div className="absolute inset-0 bg-gradient-to-b from-black/5 to-black/45" />
                                     <div className="absolute bottom-3 left-3.5 z-10 bg-black/65 backdrop-blur-md rounded-md px-2.5 py-1.5 flex items-center gap-1.5 border border-white/10">
                                         <div className="w-1.5 h-1.5 rounded-full bg-[#4CD964] animate-pulse" />
@@ -1283,7 +1283,7 @@ function PublicMenu() {
                                     )}
                                 </div>
                                 <div className="px-3.5 py-3">
-                                    <div className="text-[1.25rem] font-[900] mb-0.5">{profile?.businessName || "Restaurant"}</div>
+                                    <div className="text-[1.25rem] font-[900] mb-0.5">{profile?.businessName || "Business"}</div>
                                     {profile?.qrMenuShowDetails !== false && profile?.qrMenuCuisines && profile.qrMenuCuisines !== "North Indian, Mughlai, Biryani" && (
                                         <div className="text-[0.75rem] text-[#696969] font-[600] mb-2">{profile.qrMenuCuisines}</div>
                                     )}
@@ -1824,7 +1824,7 @@ function PublicMenu() {
                             <div className="bg-gradient-to-br from-violet-600 to-indigo-700 px-5 py-6 relative overflow-hidden">
                                 <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "radial-gradient(circle at 1px 1px, white 1px, transparent 0)", backgroundSize: "24px 24px" }} />
                                 <div className="relative z-10">
-                                    <div className="text-white font-black text-lg">📸 Restaurant Gallery</div>
+                                    <div className="text-white font-black text-lg">📸 Photo Gallery</div>
                                     <div className="text-violet-200 text-[0.72rem] font-[600] mt-1">Real photos from our kitchen &amp; ambience</div>
                                     <div className="flex gap-2 mt-3">
                                         <span className="bg-white/20 text-white text-[0.6rem] font-black px-2.5 py-1 rounded-full">{galleryImages.length} Photos</span>
@@ -1859,7 +1859,7 @@ function PublicMenu() {
                                     <div className="text-center py-16">
                                         <div className="text-5xl mb-4">📷</div>
                                         <p className="text-sm font-bold text-gray-500">Gallery coming soon!</p>
-                                        <p className="text-xs text-gray-400 mt-1">Restaurant is uploading photos</p>
+                                        <p className="text-xs text-gray-400 mt-1">Photos are being uploaded</p>
                                     </div>
                                 ) : (
                                     <div className="columns-2 gap-3">
@@ -1935,7 +1935,7 @@ function PublicMenu() {
                                 <div className="relative z-10">
                                     <span className="text-3xl mb-2.5 block">👑</span>
                                     <div className="font-[Syne] text-2xl font-[800] text-[#F0EAD6] mb-1">Gold Member</div>
-                                    <div className="text-[0.8rem] text-[#F0EAD6]/55 mb-4 px-10 leading-relaxed">Restaurant Rewards - Earn points on every order!</div>
+                                    <div className="text-[0.8rem] text-[#F0EAD6]/55 mb-4 px-10 leading-relaxed">Loyalty Rewards - Earn points on every order!</div>
                                     <div className="inline-flex items-baseline gap-1 mt-2">
                                         <span className="font-[Syne] text-5xl font-[800] bg-gradient-to-br from-[#F0C060] to-[#D4A353] bg-clip-text text-transparent">{loyaltyPoints}</span>
                                         <span className="text-[0.85rem] font-[800] text-[#D4A353]">pts</span>
@@ -2289,7 +2289,7 @@ function PublicMenu() {
                                         >
                                             <FileText size={18} className={orderNote ? "text-amber-500" : "text-gray-400"} />
                                             <div className="flex flex-col items-start leading-none gap-0.5">
-                                                <span className="text-[0.8rem] font-[800] text-gray-800">{orderNote ? "Note for restaurant" : "Add a note for the restaurant"}</span>
+                                                <span className="text-[0.8rem] font-[800] text-gray-800">{orderNote ? "Note for this business" : "Add a note for this business"}</span>
                                                 {orderNote && <span className="text-[0.6rem] font-bold text-amber-600 truncate max-w-[120px]">{orderNote}</span>}
                                             </div>
                                         </button>

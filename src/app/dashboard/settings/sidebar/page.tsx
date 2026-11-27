@@ -65,7 +65,7 @@ const allSidebarGroups = [
       { icon: Users, label: "Customer Parties", href: "/dashboard/parties" },
       { icon: UserPlus, label: "Staff Management", href: "/dashboard/staff", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: Package, label: "Inventory Stock", href: "/dashboard/inventory", roles: ["ADMIN", "SELLER", "STAFF"] },
-      { icon: IndianRupee, label: "Restaurant Expenses", href: "/dashboard/expenses", roles: ["ADMIN", "SELLER", "STAFF"] },
+      { icon: IndianRupee, label: "Expenses", href: "/dashboard/expenses", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: QrCode, label: "QR Order Terminal", href: "/dashboard/qr-orders" },
     ]
   },

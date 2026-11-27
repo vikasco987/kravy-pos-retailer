@@ -247,7 +247,7 @@ export default function ReviewPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    itemId: null, // Overall restaurant review
+                    itemId: null, // Overall business review
                     clerkUserId: clerkId,
                     rating: overallRating,
                     comment: overallComment,

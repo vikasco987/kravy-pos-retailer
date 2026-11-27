@@ -227,7 +227,7 @@ export default function StaffAccessDocsPage() {
               </div>
               <h2 className="text-4xl font-black text-slate-900 leading-tight">Kaun kya kar raha hai, <span className="text-indigo-600">Pure Control Mein.</span></h2>
               <p className="text-slate-600 font-medium text-lg leading-relaxed">
-                Staff member jo bhi bill banata hai ya edit karta hai, uska log hum save karte hain. Restaurant Owner kisi bhi waqt dekh sakta hai ki kis staff ne kya action liya.
+                Staff member jo bhi bill banata hai ya edit karta hai, uska log hum save karte hain. Business Owner kisi bhi waqt dekh sakta hai ki kis staff ne kya action liya.
               </p>
               <div className="flex gap-4">
                  <div className="flex items-center gap-2">

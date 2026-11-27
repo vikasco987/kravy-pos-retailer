@@ -44,7 +44,7 @@ export const AVAILABLE_TEMPLATES = [
     category: "Utility",
     cost: "₹0.15 / msg",
     trigger: "POS Bill Settle & Print",
-    description: "Sends an official tax invoice with customer name, restaurant name, total amount, and an interactive 'View Bill' button to download the live PDF invoice.",
+    description: "Sends an official tax invoice with customer name, business name, total amount, and an interactive 'View Bill' button to download the live PDF invoice.",
     header: "ORDER DETAILS",
     body: "Hello {{1}},\n\nThank you for dining with us at {{2}}! 🍽️\nYour bill #{{3}} is ready.\n\n🧾 Total Amount: ₹{{4}}\n💳 Payment Status: {{5}}\n\nClick below to view or download your detailed tax invoice.",
     footer: "KRAVY BILLING SOFTWARE",
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
       selectedTemplateId,
       autoSendOnSettle,
       templates: AVAILABLE_TEMPLATES,
-      businessName: profile.businessName || "My Restaurant",
+      businessName: profile.businessName || "My Business",
     });
   } catch (error: any) {
     console.error("[WHATSAPP_TEMPLATES_GET]", error);

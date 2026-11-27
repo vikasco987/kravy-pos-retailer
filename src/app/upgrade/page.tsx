@@ -23,7 +23,7 @@ export const plans = [
     name: "1 Year Plan",
     price: 6000,
     originalPrice: 12000,
-    description: "Perfect for restaurants and small businesses.",
+    description: "Ideal for businesses of every size.",
     features: [
       "Free Thermal Printer + 5 Rolls",
       "Unlimited invoices",
@@ -63,7 +63,7 @@ export const plans = [
     name: "3 Year Plan",
     price: 9500,
     originalPrice: 20000,
-    description: "Maximum savings for long-term businesses.",
+    description: "Maximum savings for long-term use.",
     features: [
       "Free Thermal Printer + 5 Rolls",
       "Everything in 2 Year plan",
@@ -169,7 +169,7 @@ export default function UpgradePage() {
                         Choose Your Plan
                     </h1>
                     <p className="text-sm text-gray-500 dark:text-neutral-400 max-w-xl mx-auto font-medium leading-relaxed">
-                        Simple, transparent pricing designed for restaurants and food businesses. <br className="hidden md:block" /> No hidden fees, instant activation.
+                        Simple, transparent pricing built for retail, service, and food businesses. <br className="hidden md:block" /> No hidden fees, instant activation.
                     </p>
                 </div>
 

@@ -107,7 +107,7 @@ export default function DeepDocsPage() {
                <div className="absolute top-0 right-0 p-4 opacity-10"><Zap size={100} color="white" /></div>
                <div className="relative z-10 font-mono text-xs text-indigo-300 space-y-2">
                  <div className="text-green-400">// Unified Flow</div>
-                 <div className="flex items-center gap-2">Restaurant Owner <ArrowRight size={10} /> Admin Panel</div>
+                 <div className="flex items-center gap-2">Business Owner <ArrowRight size={10} /> Admin Panel</div>
                  <div className="pl-4 border-l border-slate-700 ml-2 py-2 space-y-2">
                     <div className="flex items-center gap-2">Subscription Control <ArrowRight size={10} /> Active Features</div>
                     <div className="flex items-center gap-2">Staff Permissions <ArrowRight size={10} /> UI Visibility</div>
@@ -140,7 +140,7 @@ export default function DeepDocsPage() {
                        </thead>
                        <tbody className="text-slate-600">
                           <tr className="border-b border-slate-50">
-                             <td className="py-4 font-black text-slate-800">Restaurants</td>
+                             <td className="py-4 font-black text-slate-800">Businesses</td>
                              <td className="py-4">Business profiles</td>
                              <td className="py-4 font-mono text-[10px]">ownerId, planId, expiry</td>
                           </tr>
@@ -245,7 +245,7 @@ export default function DeepDocsPage() {
                       </div>
                       <div>
                          <div className="text-sm font-bold tracking-tight">Usage Analytics</div>
-                         <div className="text-[11px] text-slate-500 leading-snug">Know which features are popular among restaurants.</div>
+                         <div className="text-[11px] text-slate-500 leading-snug">Know which features are popular among businesses.</div>
                       </div>
                    </div>
                 </div>
@@ -262,7 +262,7 @@ export default function DeepDocsPage() {
                    </div>
                    <div className="flex gap-2">
                       <span className="text-indigo-400">[14:35:12]</span>
-                      <span className="text-slate-100">Restaurant <span className="text-white font-bold underline">Spicy Hub</span> updated Inventory</span>
+                      <span className="text-slate-100">Business <span className="text-white font-bold underline">Spicy Hub</span> updated Inventory</span>
                    </div>
                    <div className="flex gap-2">
                       <span className="text-yellow-400">[14:40:55]</span>

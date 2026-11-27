@@ -129,7 +129,7 @@ export default function StaffLoginPage() {
                 <input
                   required
                   type="email"
-                  placeholder="name@restaurant.com"
+                  placeholder="name@business.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-medium"

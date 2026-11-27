@@ -7,7 +7,7 @@
  * 2. ONE PLATFORM, ONE BILLING ENGINE, ONE DATABASE ARCHITECTURE.
  * 3. Unified order lifecycle: PENDING -> ACCEPTED -> PREPARING (Packing) -> READY (Pickup/Dispatch) -> COMPLETED.
  * 4. Backward-compatible with DB strings and existing settlement / inventory engines.
- * 5. Terminology automatically adapts: No restaurant kitchen/table/dining jargon for retailers.
+ * 5. Terminology automatically adapts: No business kitchen/table/dining jargon for retailers.
  */
 
 export type BusinessType =
@@ -17,7 +17,7 @@ export type BusinessType =
   | "general"      // General Store, Wholesale, Stationery, Hardware
   | "service"      // Salon, Spa, Repair, Auto Services
   | "fuel"         // Petrol Pump, Fuel Station
-  | "food";        // Restaurant, Cafe, Bakery (Legacy / Optional)
+  | "food";        // Business, Cafe, Bakery (Legacy / Optional)
 
 export interface OrderStatusDetails {
   key: string;
@@ -51,7 +51,7 @@ export interface BusinessModeConfig {
   // Feature Toggles
   features: {
     showTableGrid: boolean;       // Visual layout for stations or dining floors
-    showKOT: boolean;             // Kitchen Order Token (Restaurant only)
+    showKOT: boolean;             // Kitchen Order Token (food-service mode only)
     showKDS: boolean;             // Kitchen Display System
     showBarcodeFirst: boolean;    // Auto-focus barcode input for instant scan-to-cart
     showStations: boolean;        // Floor/Counter/Station management
@@ -136,7 +136,7 @@ const RESTAURANT_STATUS_MAP: Record<string, OrderStatusDetails> = {
     actionLabel: "Send to Kitchen",
     nextStatus: "PREPARING",
     customerHeading: "Order Accepted",
-    customerDesc: "Order accepted by the restaurant.",
+    customerDesc: "Order accepted by the business.",
     badgeClass: "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300",
   },
   PREPARING: {

@@ -160,7 +160,7 @@ export default function GoogleReviewGenerator() {
                     if (data?.googleReviewUrl) {
                         setGoogleUrl(data.googleReviewUrl);
                     } else if (data?.businessName) {
-                        const encodedName = encodeURIComponent(`${data.businessName} Restaurant`);
+                        const encodedName = encodeURIComponent(`${data.businessName} Business`);
                         setGoogleUrl(`https://www.google.com/search?q=${encodedName}&hl=en`);
                     }
                 }
@@ -172,7 +172,7 @@ export default function GoogleReviewGenerator() {
         fetchProfile();
     }, []);
 
-    // Keep custom search term updated when restaurant name changes if not manually modified
+    // Keep custom search term updated when business name changes if not manually modified
     const handleRestaurantNameChange = (val: string) => {
         setRestaurantName(val);
         setCustomSearchTerm(`"${val}" Review`);
@@ -277,7 +277,7 @@ export default function GoogleReviewGenerator() {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label className="text-xs font-bold text-white/60 uppercase tracking-wider">Restaurant Name</Label>
+                                <Label className="text-xs font-bold text-white/60 uppercase tracking-wider">Business Name</Label>
                                 <Input 
                                     value={restaurantName}
                                     onChange={(e) => handleRestaurantNameChange(e.target.value)}

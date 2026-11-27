@@ -86,7 +86,7 @@ Your job is to read this document and extract EVERY single item with 100% precis
 CRITICAL INSTRUCTION: First, determine if this document is a FOOD menu (Restaurant/Cafe) OR a RETAIL/GENERAL product catalog (e.g. Hardware, Grocery, Electronics, Clothing).
 
 Also, please search the top/header/footer of the document to extract the business contact details if present:
-- Business/Restaurant Name
+- Business Name
 - Address
 - Timings
 - Phone number
@@ -234,7 +234,7 @@ ${languageRule}
         console.log(`✅ [Menu AI OCR Engine] Extracted ${finalMenu.length} items successfully for ${parsedMenu.restaurantName} using model ${selectedModel}!`);
         return NextResponse.json({
             success: true,
-            restaurantName: parsedMenu.restaurantName || "AI Scraped Restaurant",
+            restaurantName: parsedMenu.restaurantName || "AI Scraped Business",
             address: parsedMenu.address || "Delhi NCR",
             timings: parsedMenu.timings || "11:00 AM - 11:00 PM",
             phone: parsedMenu.phone || "9999999999",

@@ -73,7 +73,7 @@ const statusConfig = {
         icon: UtensilsCrossed,
         label: "Order Confirmed",
         color: "bg-blue-500",
-        description: "Your order has been confirmed by the restaurant"
+        description: "Your order has been confirmed by the business"
     },
     ACCEPTED: {
         icon: CheckCircle,
@@ -435,14 +435,14 @@ export default function OrderTrackingPage() {
                         </div>
                     </motion.div>
 
-                    {/* ── RESTAURANT DETAILS ── */}
+                    {/* ── BUSINESS DETAILS ── */}
                     <div className="bg-white rounded-3xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.04)] border border-[#EBEBEB] flex items-center justify-between mb-6">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center text-orange-500">
                                 <MapPin size={20} />
                             </div>
                             <div>
-                                <div className="font-[800] text-[#1C1C1C] text-[0.9rem]">{order.businessName || "Restaurant"}</div>
+                                <div className="font-[800] text-[#1C1C1C] text-[0.9rem]">{order.businessName || "Business"}</div>
                                 <div className="text-[0.7rem] text-[#696969] font-[500] mt-0.5">{order.businessAddress || "Address not provided"}</div>
                             </div>
                         </div>

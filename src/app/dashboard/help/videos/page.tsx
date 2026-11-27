@@ -44,7 +44,7 @@ export const TUTORIAL_VIDEOS: VideoItem[] = [
   {
     id: "vid-billing-quick",
     youtubeId: "5YRxIC1s240",
-    title: "Restaurant POS Billing Tutorial in Hindi | Quick POS, Fast Billing & Printer Setup",
+    title: "POS Billing Tutorial in Hindi | Quick POS, Fast Billing & Printer Setup",
     hindiTitle: "Quick Billing, Fast Checkout & Thermal Printer Setup Kaise Karein",
     description: "Step-by-step masterclass on handling rapid dine-in and takeaway orders, cart management, customer details, split payments, and instant receipt printing.",
     duration: "03:15",
@@ -68,7 +68,7 @@ export const TUTORIAL_VIDEOS: VideoItem[] = [
   {
     id: "vid-tables",
     youtubeId: "Ryy0pojR-iE",
-    title: "Restaurant Table Management Software Demo | Add Order, Transfer Table, Add Items & Print Bill",
+    title: "Counter & Table Management Software Demo | Add Order, Transfer Table, Add Items & Print Bill",
     hindiTitle: "Table Management, Running Order Transfer & Table Bill Settlement",
     description: "Complete guide on floor plan navigation, taking table orders, adding running KOT items, transferring bills between tables, and final checkout.",
     duration: "05:45",
@@ -80,7 +80,7 @@ export const TUTORIAL_VIDEOS: VideoItem[] = [
   {
     id: "vid-menu",
     youtubeId: "cIpRywhsS-Y",
-    title: "Restaurant POS Item Management Tutorial in Hindi | Edit Price, Category, Variants & Add New Items",
+    title: "POS Item Management Tutorial in Hindi | Edit Price, Category, Variants & Add New Items",
     hindiTitle: "Menu Items, Categories, Add-ons & Price Update Kaise Karein",
     description: "Learn how to organize your food catalog, create item variations (Half/Full), link modifiers, configure food tax/GST, and disable out-of-stock dishes.",
     duration: "03:57",
@@ -126,7 +126,7 @@ export const TUTORIAL_VIDEOS: VideoItem[] = [
   {
     id: "short-bill-hold",
     youtubeId: "6itptYm_OVo",
-    title: "Restaurant POS Software में Bill Hold & Resume कैसे करें? | Customer Details से Final Bill तक",
+    title: "POS Software में Bill Hold & Resume कैसे करें? | Customer Details से Final Bill तक",
     hindiTitle: "Rush Hours me Customer Cart Hold & Resume Karna Seekhein",
     description: "Rush hour ke dauraan cart hold karein, doosre customer ka bill banayein aur pehle wale bill ko bina data loose kiye 1-click me resume karein.",
     duration: "02:03",

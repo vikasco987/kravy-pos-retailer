@@ -12,7 +12,7 @@ import {
 import Link from "next/link";
 
 const GEMINI_PROMPT = `You are an expert menu data extraction engine.
-I will provide a restaurant menu PDF, images, or raw text.
+I will provide a business menu PDF, images, or raw text.
 Your task is to extract EVERY SINGLE menu item and convert it into the EXACT JSON structure specified below.
 
 CRITICAL RULES:
@@ -23,7 +23,7 @@ CRITICAL RULES:
 5. VEG / NON-VEG: Accurately determine if the item is Veg or Non-Veg and set "t" to "Pure Veg", "Non Veg", or "Contains Egg".
 6. DESCRIPTIONS: Extract descriptions. If missing, write a concise, appetizing description.
 7. NO MARKDOWN: Return ONLY valid JSON. Do not wrap in markdown \`\`\`json fences. Directly parseable JSON only.
-8. BUSINESS DETAILS: Extract Restaurant Name, Address, Timings, Phone number, and Email if present.
+8. BUSINESS DETAILS: Extract Business Name, Address, Timings, Phone number, and Email if present.
 
 JSON FORMAT EXPECTED:
 {
@@ -242,7 +242,7 @@ export default function OnboardingCustomPage() {
 
                   <div className="grid grid-cols-1 gap-6">
                     <InputField 
-                      label="Restaurant Name" 
+                      label="Business Name"
                       icon={Building2} 
                       placeholder="e.g. Spice Villa" 
                       value={formData.businessName} 

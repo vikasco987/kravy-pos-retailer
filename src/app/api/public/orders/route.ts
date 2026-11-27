@@ -44,10 +44,10 @@ export async function POST(req: NextRequest) {
         }
         // Fetch business profile for dynamic settings
         const profile = await prisma.businessProfile.findFirst({ where: { userId: clerkUserId }, orderBy: { createdAt: 'asc' } });
-        if (!profile) return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
+        if (!profile) return NextResponse.json({ error: "Business not found" }, { status: 404 });
         // ✅ CHECK ONLINE STATUS & TIMING
         if (profile.isOnline === false) {
-            return NextResponse.json({ error: profile.offlineMessage || "Restaurant is currently offline." }, { status: 403 });
+            return NextResponse.json({ error: profile.offlineMessage || "Business is currently offline." }, { status: 403 });
         }
         if (profile.openingTime && profile.closingTime) {
             const now = new Date();
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
                 isWithinTime = currentMinutes >= openMinutes || currentMinutes <= closeMinutes;
             }
             if (!isWithinTime) {
-                return NextResponse.json({ error: profile.offlineMessage || "Restaurant is currently closed." }, { status: 403 });
+                return NextResponse.json({ error: profile.offlineMessage || "Business is currently closed." }, { status: 403 });
             }
         }
         const isInclusive = profile?.qrMenuPriceInclusive ?? false;

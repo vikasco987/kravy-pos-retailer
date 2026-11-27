@@ -237,7 +237,7 @@ export default function MobileBottomNav({ profile }: any) {
             border: "border-blue-200 dark:border-blue-900/50"
         },
         {
-            label: "Store Expenses",
+            label: "Expenses",
             href: "/dashboard/expenses",
             imageSrc: "/images/quick-actions/expenses.png",
             icon: <IndianRupee size={18} className="text-[#9333EA]" />,

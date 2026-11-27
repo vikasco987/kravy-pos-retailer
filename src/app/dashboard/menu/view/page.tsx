@@ -744,8 +744,8 @@ export default function ViewMenuPage() {
     handleSearchImages(searchImageQuery, nextProvider);
   };
 
-  const GEMINI_PROMPT_TEMPLATE = `You are an expert restaurant menu digitizer and data extraction engine for Kravy POS.
-I will provide a restaurant menu PDF, image, Excel sheet, or raw text.
+  const GEMINI_PROMPT_TEMPLATE = `You are an expert catalog and menu digitizer and data extraction engine for Kravy POS.
+I will provide a product catalog or menu PDF, image, Excel sheet, or raw text.
 Your task is to extract EVERY SINGLE menu item with 100% precision into the EXACT JSON structure specified below.
 
 CRITICAL EXTRACTION RULES:
@@ -787,7 +787,7 @@ Chicken Dum Biryani         ₹90              ₹140
 
 Expected Output JSON:
 {
-  "r": "Restaurant Name",
+  "r": "Business Name",
   "a": "Address",
   "ti": "Timings",
   "ph": "Phone",
@@ -2914,7 +2914,7 @@ Expected Output JSON:
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mb-5 sm:mb-8">
               <div>
                 <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-[var(--kravy-text-primary)] tracking-tight">
-                  Restaurant Menu
+                  Menu & Catalog
                 </h2>
                 <p className="text-[var(--kravy-text-muted)] text-xs sm:text-sm font-medium mt-0.5 sm:mt-1">
                   Manage your products, prices and categories

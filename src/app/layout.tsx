@@ -14,7 +14,7 @@ const inter = Inter({
 
 export const metadata = {
   title: "KravyPOS — Smart Billing System",
-  description: "Modern point-of-sale and billing system for restaurants and retail",
+  description: "Modern point-of-sale and billing system for businesses across retail, service, and food sectors",
   icons: {
     icon: "/favicon.ico",
     apple: "/favicon.ico",          // resolves apple-touch-icon 404

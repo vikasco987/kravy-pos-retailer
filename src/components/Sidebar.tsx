@@ -173,7 +173,7 @@ const navGroups = [
         { label: "Add / Update Stock", href: "/dashboard/inventory/add-stock" },
         { label: "Inventory Reports", href: "/dashboard/inventory/reports" },
       ]},
-      { icon: <IndianRupee size={18} />, label: "Restaurant Expenses", href: "/dashboard/expenses", roles: ["ADMIN", "SELLER", "STAFF"] },
+      { icon: <IndianRupee size={18} />, label: "Expenses", href: "/dashboard/expenses", roles: ["ADMIN", "SELLER", "STAFF"] },
       { icon: <QrCode size={18} />, label: "QR Order Terminal", href: "/dashboard/qr-orders" },
     ]
   },
@@ -1109,7 +1109,7 @@ export default function Sidebar({ profile, isMobile = false, onClose }: { profil
                   } else if (item.href === "/dashboard/tables") {
                     adaptedItem = { ...item, label: `${businessMode.terminology.unitPlural} & QR Manager` };
                   } else if (item.href === "/dashboard/expenses") {
-                    adaptedItem = { ...item, label: businessMode.id === "food" ? "Restaurant Expenses" : "Store Expenses" };
+                    adaptedItem = { ...item, label: "Expenses" };
                   }
                 }
                 return (

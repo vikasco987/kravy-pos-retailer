@@ -61,7 +61,7 @@ export function formatBillText(bill: BillData): string {
       : "";
 
   return `
-🍽️ *${(bill.restaurantName || "RESTAURANT").toUpperCase()}*
+🍽️ *${(bill.restaurantName || "BUSINESS").toUpperCase()}*
 📍 ${bill.restaurantAddress || ""}
 ${bill.gstin ? `GSTIN: ${bill.gstin}` : ""}${bill.fssai ? `\nFSSAI: ${bill.fssai}` : ""}
 ${dline}
@@ -119,7 +119,7 @@ export async function sendWhatsAppBill(bill: BillData): Promise<{
     const customerGreeting = bill.customerName?.trim() || "Customer";
     const paymentStatus = `PAID (${bill.paymentMode || "Cash"})`;
     const formattedTotal = `${bill.grandTotal.toFixed(2)}`;
-    const businessName = (bill.restaurantName || "Kravy Restaurant").slice(0, 60);
+    const businessName = (bill.restaurantName || "Kravy Business").slice(0, 60);
 
     console.log(`🚀 Sending WhatsApp Bill to: ${recipient} (Preferred template: ${bill.templateId || "delivery_confirmation_1"})`);
 
@@ -214,7 +214,7 @@ export async function sendWhatsAppBill(bill: BillData): Promise<{
     // ── ATTEMPT 1: SEND VIA APPROVED TEMPLATE (`delivery_confirmation_1`) WITH "View Bill" (PDF) BUTTON ──
     // Variables:
     // {{1}} = Customer Name (e.g. Vikas)
-    // {{2}} = Restaurant Name (e.g. The Friends Cafe)
+    // {{2}} = Business Name (e.g. The Friends Cafe)
     // {{3}} = Bill Number (e.g. INV/2611/0158)
     // {{4}} = Grand Total (e.g. 102.00)
     // {{5}} = Payment Mode (e.g. Paid (Cash))

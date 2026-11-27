@@ -2554,7 +2554,7 @@ export default function KravyPOS() {
                                 <img src={business.logoUrl} alt="Logo" className="max-h-[20mm] object-contain" style={{ filter: 'contrast(400%) grayscale(100%)' }} />
                             </div>
                         )}
-                        <div className="font-black text-[16px] leading-none uppercase tracking-tight mb-1">{business?.businessName || "KRAVY RESTAURANT"}</div>
+                        <div className="font-black text-[16px] leading-none uppercase tracking-tight mb-1">{business?.businessName || "KRAVY BUSINESS"}</div>
                         {(business?.businessAddress || business?.district) && (
                             <div className="text-[8px] font-black uppercase">
                                 {business?.businessAddress} {business?.district && `| ${business.district}`}

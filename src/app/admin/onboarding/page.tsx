@@ -127,7 +127,7 @@ export default function OnboardingPage() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <InputField 
-                      label="Restaurant Name" 
+                      label="Business Name"
                       icon={Building2} 
                       placeholder="e.g. Spice Villa" 
                       value={formData.businessName} 

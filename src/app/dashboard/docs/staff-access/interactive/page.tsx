@@ -508,7 +508,7 @@ export default function InteractiveStaffGuide() {
                </button>
             </div>
             <p className="mt-24 text-slate-300 text-[10px] font-black uppercase tracking-[0.5em]">
-              Smart POS for Modern Restaurants
+              Smart POS for Modern Businesses
             </p>
          </div>
       </footer>

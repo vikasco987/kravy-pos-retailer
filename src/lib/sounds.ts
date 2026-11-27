@@ -220,7 +220,7 @@ export const kravy = {
         });
     },
 
-    /** 🔔 New Order — restaurant bell */
+    /** 🔔 New Order — business bell */
     orderBell() {
         play(c => {
             const t = c.currentTime;

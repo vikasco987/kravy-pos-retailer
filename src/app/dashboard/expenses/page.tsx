@@ -248,7 +248,7 @@ export default function ExpensesPage() {
                 <div className="space-y-0.5">
                     <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tighter flex items-center gap-2">
                         <IndianRupee className="w-5 h-5 sm:w-6 sm:h-6 text-rose-500 shrink-0" />
-                        <span>Restaurant Expenses</span>
+                        <span>Expenses</span>
                     </h1>
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Track your daily operational costs</p>
                 </div>

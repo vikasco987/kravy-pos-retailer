@@ -15,7 +15,7 @@ export default async function SalesDrilldownReportPage() {
     orderBy: { createdAt: "asc" },
   });
 
-  const businessName = profile?.businessName || "Your Restaurant";
+  const businessName = profile?.businessName || "Your Business";
 
   return (
     <DrilldownClient businessName={businessName} />

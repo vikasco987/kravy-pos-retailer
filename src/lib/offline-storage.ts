@@ -242,7 +242,7 @@ class OfflineStorage {
     }
 
     /**
-     * Enqueue a pending offline restaurant table order / KOT
+     * Enqueue a pending offline business table order / KOT
      */
     async saveOfflineOrder(item: { 
         id: string; 
@@ -281,7 +281,7 @@ class OfflineStorage {
     }
 
     /**
-     * Enqueue a pending offline restaurant add-on KOT (QT2, QT3, etc.)
+     * Enqueue a pending offline business add-on KOT (QT2, QT3, etc.)
      */
     async saveOfflineOrderAddon(item: {
         id: string;

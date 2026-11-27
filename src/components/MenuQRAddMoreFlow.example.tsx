@@ -168,7 +168,7 @@ export function IntegratedAddMoreExample() {
 /**
  * EXAMPLE 4: Using in Kitchen Display System
  * ───────────────────────────────────────────
- * Show the kitchen view to restaurant staff
+ * Show the kitchen view to business staff
  */
 export function KitchenDisplayExample() {
   const [showKitchenView, setShowKitchenView] = useState(false);

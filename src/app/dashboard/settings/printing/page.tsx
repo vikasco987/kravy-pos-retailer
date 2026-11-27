@@ -652,7 +652,7 @@ export default function PrintingSettings() {
                             <h2 className="text-xs sm:text-sm font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-slate-400">Header & Business Info</h2>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-4">
-                            <SettingToggle icon={ImageIcon} label="Business Logo" sKey="showLogo" desc="Your restaurant logo" color="bg-blue-500" />
+                            <SettingToggle icon={ImageIcon} label="Business Logo" sKey="showLogo" desc="Your business logo" color="bg-blue-500" />
                             <SettingToggle icon={Type} label="Tagline" sKey="showTagline" desc="Catchy business slogan" color="bg-indigo-500" />
                             <SettingToggle icon={Phone} label="Contact Info" sKey="showContact" desc="Phone numbers & WhatsApp" color="bg-emerald-500" />
                             <SettingToggle icon={MapPin} label="Address" sKey="showAddress" desc="Full store address" color="bg-rose-500" />
@@ -1201,7 +1201,7 @@ export default function PrintingSettings() {
                                         {[
                                             { id: "balanced", label: "Balanced Standard", desc: "Default layout" },
                                             { id: "compact", label: "Compact POS", desc: "Dense & paper-saving" },
-                                            { id: "bold", label: "Restaurant Bold", desc: "High readability" },
+                                            { id: "bold", label: "High Contrast", desc: "High readability" },
                                             { id: "minimal", label: "Minimal Cafe", desc: "Clean modern design" }
                                         ].map((preset) => (
                                             <button
