@@ -231,7 +231,7 @@ export const A4InvoiceTemplate: React.FC<A4InvoiceProps> = (props) => {
         {/* ================= 2. TAX INVOICE BLUE BAR (Equal 3 parts) ================= */}
         <div className="grid grid-cols-3 border border-[#3b82f6] text-[10px] items-center">
           <div className="py-2 px-3 border-r border-[#3b82f6] font-bold text-black">
-            {bizGSTIN ? (
+            {taxActive && bizGSTIN ? (
               <>GSTIN : <span className="font-mono">{bizGSTIN}</span></>
             ) : (
               <span>{storePhone ? `Ph: ${storePhone}` : "INVOICE"}</span>
@@ -265,20 +265,24 @@ export const A4InvoiceTemplate: React.FC<A4InvoiceProps> = (props) => {
                 <span className="w-16 font-bold text-black shrink-0">Phone</span>
                 <span className="text-slate-700 font-mono">{resolvedCustomerPhone}</span>
               </div>
-              <div className="flex items-center">
-                <span className="w-16 font-bold text-black shrink-0">GSTIN</span>
-                <span className="text-slate-700 font-mono">{resolvedCustomerGST}</span>
-              </div>
-              {resolvedCustomerGST !== "-" && (
+              {taxActive && (
                 <>
                   <div className="flex items-center">
-                    <span className="w-16 font-bold text-black shrink-0">PAN</span>
-                    <span className="text-slate-700 font-mono">{resolvedCustomerPAN}</span>
+                    <span className="w-16 font-bold text-black shrink-0">GSTIN</span>
+                    <span className="text-slate-700 font-mono">{resolvedCustomerGST}</span>
                   </div>
-                  <div className="flex items-center">
-                    <span className="w-16 font-bold text-black shrink-0">Supply</span>
-                    <span className="text-slate-700">{resolvedSupplyState}</span>
-                  </div>
+                  {resolvedCustomerGST !== "-" && (
+                    <>
+                      <div className="flex items-center">
+                        <span className="w-16 font-bold text-black shrink-0">PAN</span>
+                        <span className="text-slate-700 font-mono">{resolvedCustomerPAN}</span>
+                      </div>
+                      <div className="flex items-center">
+                        <span className="w-16 font-bold text-black shrink-0">Supply</span>
+                        <span className="text-slate-700">{resolvedSupplyState}</span>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -316,10 +320,12 @@ export const A4InvoiceTemplate: React.FC<A4InvoiceProps> = (props) => {
               <span className="text-slate-600 font-normal">Payment Mode</span>
               <span className="font-bold text-black uppercase">{paymentMode}</span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-slate-600 font-normal">Supply State</span>
-              <span className="font-bold text-black">{resolvedSupplyState}</span>
-            </div>
+            {taxActive && (
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600 font-normal">Supply State</span>
+                <span className="font-bold text-black">{resolvedSupplyState}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -331,10 +337,10 @@ export const A4InvoiceTemplate: React.FC<A4InvoiceProps> = (props) => {
               <tr className="bg-[#f0f8ff] text-black font-bold text-center border-b border-[#3b82f6]">
                 <th rowSpan={2} className="py-2 px-1 border-r border-[#3b82f6] w-8">Sr.</th>
                 <th rowSpan={2} className="py-2 px-2 border-r border-[#3b82f6] text-left">Name of Product / Service</th>
-                {isGSTInvoice && <th rowSpan={2} className="py-2 px-1 border-r border-[#3b82f6] w-14">HSN</th>}
+                {isGSTInvoice && taxActive && <th rowSpan={2} className="py-2 px-1 border-r border-[#3b82f6] w-14">HSN</th>}
                 <th rowSpan={2} className="py-2 px-1 border-r border-[#3b82f6] w-10">Qty</th>
                 <th rowSpan={2} className="py-2 px-1.5 border-r border-[#3b82f6] w-16 text-right">Rate</th>
-                <th rowSpan={2} className="py-2 px-1.5 border-r border-[#3b82f6] w-18 text-right">Taxable</th>
+                {taxActive && <th rowSpan={2} className="py-2 px-1.5 border-r border-[#3b82f6] w-18 text-right">Taxable</th>}
                 {isGSTInvoice && taxActive && (
                   isSameState ? (
                     <>
@@ -345,7 +351,7 @@ export const A4InvoiceTemplate: React.FC<A4InvoiceProps> = (props) => {
                     <th colSpan={2} className="py-1 px-1 border-r border-[#3b82f6]">IGST</th>
                   )
                 )}
-                <th rowSpan={2} className="py-2 px-2 w-20 text-right">Total</th>
+                <th rowSpan={2} className="py-2 px-2 w-20 text-right">{taxActive ? "Total" : "Amount"}</th>
               </tr>
               {/* Row 2: Sub-headers for % and Amt */}
               {isGSTInvoice && taxActive && (
@@ -409,7 +415,7 @@ export const A4InvoiceTemplate: React.FC<A4InvoiceProps> = (props) => {
                         </span>
                       )}
                     </td>
-                    {isGSTInvoice && (
+                    {isGSTInvoice && taxActive && (
                       <td className="py-2 px-1 border-r border-[#3b82f6]/40 text-center font-mono">
                         {it.hsn || it.hsnCode || "9983"}
                       </td>
@@ -420,9 +426,11 @@ export const A4InvoiceTemplate: React.FC<A4InvoiceProps> = (props) => {
                     <td className="py-2 px-1.5 border-r border-[#3b82f6]/40 text-right font-mono">
                       {rate.toFixed(2)}
                     </td>
-                    <td className="py-2 px-1.5 border-r border-[#3b82f6]/40 text-right font-mono font-semibold">
-                      {lineTaxable.toFixed(2)}
-                    </td>
+                    {taxActive && (
+                      <td className="py-2 px-1.5 border-r border-[#3b82f6]/40 text-right font-mono font-semibold">
+                        {lineTaxable.toFixed(2)}
+                      </td>
+                    )}
                     {isGSTInvoice && taxActive && (
                       isSameState ? (
                         <>
@@ -471,10 +479,10 @@ export const A4InvoiceTemplate: React.FC<A4InvoiceProps> = (props) => {
                 >
                   <td className="border-r border-[#3b82f6]/40"></td>
                   <td className="border-r border-[#3b82f6]/40"></td>
-                  {isGSTInvoice && <td className="border-r border-[#3b82f6]/40"></td>}
+                  {isGSTInvoice && taxActive && <td className="border-r border-[#3b82f6]/40"></td>}
                   <td className="border-r border-[#3b82f6]/40"></td>
                   <td className="border-r border-[#3b82f6]/40"></td>
-                  <td className="border-r border-[#3b82f6]/40"></td>
+                  {taxActive && <td className="border-r border-[#3b82f6]/40"></td>}
                   {isGSTInvoice && taxActive && (
                     isSameState ? (
                       <>
@@ -499,14 +507,16 @@ export const A4InvoiceTemplate: React.FC<A4InvoiceProps> = (props) => {
               <tr className="bg-[#f0f8ff] border-t-2 border-[#3b82f6] font-bold text-black">
                 <td className="py-1.5 px-1 border-r border-[#3b82f6] text-center"></td>
                 <td className="py-1.5 px-2 border-r border-[#3b82f6]">Total</td>
-                {isGSTInvoice && <td className="py-1.5 px-1 border-r border-[#3b82f6]"></td>}
+                {isGSTInvoice && taxActive && <td className="py-1.5 px-1 border-r border-[#3b82f6]"></td>}
                 <td className="py-1.5 px-1 border-r border-[#3b82f6] text-center font-mono">
                   {items.reduce((s, it) => s + Number(it.quantity || it.qty || 1), 0).toFixed(2)}
                 </td>
                 <td className="py-1.5 px-1.5 border-r border-[#3b82f6]"></td>
-                <td className="py-1.5 px-1.5 border-r border-[#3b82f6] text-right font-mono">
-                  {(totalTaxable || subtotal).toFixed(2)}
-                </td>
+                {taxActive && (
+                  <td className="py-1.5 px-1.5 border-r border-[#3b82f6] text-right font-mono">
+                    {(totalTaxable || subtotal).toFixed(2)}
+                  </td>
+                )}
                 {isGSTInvoice && taxActive && (
                   isSameState ? (
                     <>
@@ -551,10 +561,12 @@ export const A4InvoiceTemplate: React.FC<A4InvoiceProps> = (props) => {
 
           {/* Right Column: Line-by-line tax and totals */}
           <div className="col-span-6 divide-y divide-[#3b82f6]/40 text-black">
-            <div className="flex justify-between px-3 py-1 font-bold">
-              <span>Taxable Amount</span>
-              <span className="font-mono">{(totalTaxable || subtotal).toFixed(2)}</span>
-            </div>
+            {taxActive && (
+              <div className="flex justify-between px-3 py-1 font-bold">
+                <span>Taxable Amount</span>
+                <span className="font-mono">{(totalTaxable || subtotal).toFixed(2)}</span>
+              </div>
+            )}
 
             {discountAmt > 0 && (
               <div className="flex justify-between px-3 py-1 font-bold text-rose-600">
@@ -624,9 +636,9 @@ export const A4InvoiceTemplate: React.FC<A4InvoiceProps> = (props) => {
               </div>
             )}
 
-            {/* Total Amount After Tax Highlight Row */}
+            {/* Total Amount After Tax / Grand Total Highlight Row */}
             <div className="bg-[#f0f8ff] flex justify-between px-3 py-2 font-black text-sm text-black border-t-2 border-[#3b82f6]">
-              <span>Total Amount After Tax</span>
+              <span>{taxActive ? "Total Amount After Tax" : "Grand Total"}</span>
               <span className="font-mono">{sym} {roundedGrandTotal.toFixed(2)}</span>
             </div>
 

@@ -98,7 +98,7 @@ export const generateA4InvoicePDF = (bill: any, business: any) => {
   doc.setFontSize(9);
   doc.setTextColor(0, 0, 0);
   const bizGstin = business?.gstNumber || business?.gstin || "";
-  doc.text(bizGstin ? `GSTIN : ${bizGstin}` : (business?.phone ? `Ph : ${business.phone}` : "INVOICE"), 12, barY + 6.5);
+  doc.text(hasTax && bizGstin ? `GSTIN : ${bizGstin}` : (business?.phone ? `Ph : ${business.phone}` : "INVOICE"), 12, barY + 6.5);
   doc.setFontSize(13);
   doc.setTextColor(59, 130, 246);
   doc.text(isGSTInvoice && hasTax ? "TAX INVOICE" : "INVOICE", 10 + boxWidth + boxWidth / 2, barY + 7, { align: "center" });
@@ -137,7 +137,9 @@ export const generateA4InvoicePDF = (bill: any, business: any) => {
   cY = row("M/S", custName, cY);
   cY = row("Address", custAddr, cY);
   cY = row("Phone", custPhone, cY);
-  cY = row("GSTIN", custGstin, cY);
+  if (hasTax) {
+    cY = row("GSTIN", custGstin, cY);
+  }
 
   let rY = detailsY + 10;
   const info = (l: string, v: string, y: number) => {
@@ -168,16 +170,24 @@ export const generateA4InvoicePDF = (bill: any, business: any) => {
     doc.setFontSize(7.5);
     doc.setTextColor(0, 0, 0);
 
-    const colX = [10, 18, 93, 111, 126, 148, 170, pageWidth - 10];
+    const colX = hasTax
+      ? [10, 18, 93, 111, 126, 148, 170, pageWidth - 10]
+      : [10, 18, 122, 142, 170, pageWidth - 10];
     colX.slice(1, -1).forEach(x => doc.line(x, yPos, x, yPos + tableH));
 
     doc.text("Sr.", 14, yPos + 5.5, { align: "center" });
     doc.text("Name of Product / Service", 20, yPos + 5.5);
-    doc.text("HSN", 102, yPos + 5.5, { align: "center" });
-    doc.text("Qty", 118, yPos + 5.5, { align: "center" });
-    doc.text("Rate", 145, yPos + 5.5, { align: "right" });
-    doc.text(isGSTInvoice && hasTax ? "Taxable" : "Amount", 167, yPos + 5.5, { align: "right" });
-    doc.text("Total", pageWidth - 13, yPos + 5.5, { align: "right" });
+    if (hasTax) {
+      doc.text("HSN", 102, yPos + 5.5, { align: "center" });
+      doc.text("Qty", 118, yPos + 5.5, { align: "center" });
+      doc.text("Rate", 145, yPos + 5.5, { align: "right" });
+      doc.text(isGSTInvoice ? "Taxable" : "Amount", 167, yPos + 5.5, { align: "right" });
+      doc.text("Total", pageWidth - 13, yPos + 5.5, { align: "right" });
+    } else {
+      doc.text("Qty", 132, yPos + 5.5, { align: "center" });
+      doc.text("Rate", 167, yPos + 5.5, { align: "right" });
+      doc.text("Amount", pageWidth - 13, yPos + 5.5, { align: "right" });
+    }
     return { nextY: yPos + tableH, colX };
   };
 
@@ -212,10 +222,15 @@ export const generateA4InvoicePDF = (bill: any, business: any) => {
     doc.setFont("helvetica", "bold");
     doc.text(nameLines, 20, rowY + 4.5);
     doc.setFont("helvetica", "normal");
-    doc.text(it.hsn || it.hsnCode || "-", 102, rowY + 4.5, { align: "center" });
-    doc.text(qty.toFixed(2), 118, rowY + 4.5, { align: "center" });
-    doc.text(rate.toFixed(2), 145, rowY + 4.5, { align: "right" });
-    doc.text(itemTotal.toFixed(2), 167, rowY + 4.5, { align: "right" });
+    if (hasTax) {
+      doc.text(it.hsn || it.hsnCode || "-", 102, rowY + 4.5, { align: "center" });
+      doc.text(qty.toFixed(2), 118, rowY + 4.5, { align: "center" });
+      doc.text(rate.toFixed(2), 145, rowY + 4.5, { align: "right" });
+      doc.text(itemTotal.toFixed(2), 167, rowY + 4.5, { align: "right" });
+    } else {
+      doc.text(qty.toFixed(2), 132, rowY + 4.5, { align: "center" });
+      doc.text(rate.toFixed(2), 167, rowY + 4.5, { align: "right" });
+    }
     doc.setFont("helvetica", "bold");
     doc.text(itemTotal.toFixed(2), pageWidth - 13, rowY + 4.5, { align: "right" });
 
@@ -250,9 +265,9 @@ export const generateA4InvoicePDF = (bill: any, business: any) => {
   const roundedTotal = Math.round(rawTotal);
   const roundOff = roundedTotal - rawTotal;
 
-  let summaryRowsCount = 2; // Taxable + Grand Total
+  let summaryRowsCount = hasTax ? 2 : 1; // Taxable (if GST) + Grand Total
   if (discountAmt > 0) summaryRowsCount++;
-  if (totalTax > 0) summaryRowsCount += 3; // CGST, SGST, Total Tax
+  if (hasTax && totalTax > 0) summaryRowsCount += 3; // CGST, SGST, Total Tax
   if (deliveryCharge > 0) summaryRowsCount++;
   if (packagingCharge > 0) summaryRowsCount++;
   if (serviceCharge > 0) summaryRowsCount++;
@@ -286,9 +301,11 @@ export const generateA4InvoicePDF = (bill: any, business: any) => {
     return y + 6;
   };
 
-  sy = sRow("Subtotal / Taxable", Number(bill.subtotal || rawTotal).toFixed(2), sy, true);
+  if (hasTax) {
+    sy = sRow("Subtotal / Taxable", Number(bill.subtotal || rawTotal).toFixed(2), sy, true);
+  }
   if (discountAmt > 0) sy = sRow("Discount", `-${discountAmt.toFixed(2)}`, sy, true);
-  if (totalTax > 0) {
+  if (hasTax && totalTax > 0) {
     sy = sRow("Add : CGST", (totalTax / 2).toFixed(2), sy, false);
     sy = sRow("Add : SGST", (totalTax / 2).toFixed(2), sy, false);
     sy = sRow("Total Tax", totalTax.toFixed(2), sy, true);
@@ -302,7 +319,7 @@ export const generateA4InvoicePDF = (bill: any, business: any) => {
   doc.rect(pageWidth / 2 + 15.2, sy - 4, pageWidth - (pageWidth / 2 + 15) - 10.4, 7, "F");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
-  sy = sRow("Total Amount After Tax", `Rs. ${roundedTotal.toFixed(2)}`, sy + 1, true);
+  sy = sRow(hasTax ? "Total Amount After Tax" : "Grand Total", `Rs. ${roundedTotal.toFixed(2)}`, sy + 1, true);
 
   if (balanceDue > 0) {
     sy = sRow("Amount Paid", `Rs. ${amountPaid.toFixed(2)}`, sy, false);
