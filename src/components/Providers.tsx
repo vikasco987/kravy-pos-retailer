@@ -7,6 +7,7 @@ import ThemeProvider from "@/components/ThemeProvider";
 import { Toaster } from "react-hot-toast";
 import { ConfirmProvider } from "@/components/ConfirmContext";
 import FetchInterceptor from "@/components/FetchInterceptor";
+import { OfflineProvider } from "@/components/OfflineContext";
 
 export default function Providers({
   children,
@@ -16,13 +17,15 @@ export default function Providers({
   return (
     <ThemeProvider>
       <ConfirmProvider>
-        <FetchInterceptor />
-        <SidebarProvider>
-          <SearchProvider>
-            <Toaster position="top-right" />
-            {children}
-          </SearchProvider>
-        </SidebarProvider>
+        <OfflineProvider>
+          <FetchInterceptor />
+          <SidebarProvider>
+            <SearchProvider>
+              <Toaster position="top-right" />
+              {children}
+            </SearchProvider>
+          </SidebarProvider>
+        </OfflineProvider>
       </ConfirmProvider>
     </ThemeProvider>
   );
